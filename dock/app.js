@@ -7,11 +7,13 @@ const BACKUP_VERSION = 1;
 const VIEW_DETAILS = {
   dashboard: "Quickly review today's priorities, budget snapshot, and recent notes.",
   actionBoard: "Organize tasks by energy, urgency, and life context.",
-  waitingFor: "Track the things you are waiting for other people to reply to, send, finish, or confirm.",
+  waitingFor: "Run your GTD capture, context lists, waiting items, projects, reference, and someday lists from one place.",
   budgetPlanner: "Track personal budget items so income, spending, and progress stay visible."
 };
 
 const WAITING_STATUSES = ["Waiting", "Follow Up", "Received", "Done"];
+const GTD_CONTEXT_OPTIONS = ["", "@Mac", "@Phone", "@Home", "@Errands", "@Work"];
+const GTD_EMPTY_CONTEXT_LABEL = "No context yet";
 
 const LEFT_COLUMN_SECTION_IDS = ["deepWork", "easyWork", "top3PrioritiesToday"];
 const QUADRANT_SECTION_IDS = [
@@ -250,6 +252,32 @@ const DEFAULT_WAITING_ITEMS = [
   }
 ];
 
+const DEFAULT_INBOX_ITEMS = [
+  "Capture a loose idea before it turns into background stress."
+];
+
+const DEFAULT_PROJECTS = [
+  {
+    title: "Refresh the weekly reset",
+    note: "Keep the checklist short enough that it actually gets used every Sunday."
+  }
+];
+
+const DEFAULT_SOMEDAY_ITEMS = [
+  {
+    title: "Try a small weekend workshop",
+    note: "Keep the idea visible without committing time to it yet."
+  }
+];
+
+const DEFAULT_REFERENCE_ITEMS = [
+  {
+    title: "Home account notes",
+    link: "",
+    note: "Keep router, utility, or subscription details here when they are reference-only."
+  }
+];
+
 const PRIORITY_ORDER = [
   "top3PrioritiesToday",
   "importantUrgent",
@@ -284,7 +312,8 @@ let appState = loadState();
 let uiState = {
   activeView: DEFAULT_VIEW,
   selectedBudgetCategory: appState.selectedBudgetCategory,
-  budgetEditorId: null
+  budgetEditorId: null,
+  showBudgetCategoryManager: false
 };
 let backupUiState = {
   message: "Export a JSON backup or import one to restore your current data.",
@@ -299,11 +328,37 @@ function createId() {
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function createTask(title, done = false) {
+function normalizeTaskContext(context) {
+  return typeof context === "string" ? context.trim() : "";
+}
+
+function createTask(title, done = false, options = {}) {
   return {
     id: createId(),
     title,
-    done
+    done,
+    context: normalizeTaskContext(options.context),
+    projectId: typeof options.projectId === "string" ? options.projectId : ""
+  };
+}
+
+function normalizeTaskRecord(task) {
+  if (typeof task === "string") {
+    return createTask(task);
+  }
+
+  const title = typeof task?.title === "string" ? task.title.trim() : "";
+
+  if (!title) {
+    return null;
+  }
+
+  return {
+    id: task.id || createId(),
+    title,
+    done: Boolean(task.done),
+    context: normalizeTaskContext(task.context),
+    projectId: typeof task?.projectId === "string" ? task.projectId : ""
   };
 }
 
@@ -343,6 +398,53 @@ function createWaitingItem({ title, person, status = "Waiting", dueDate = "", no
   };
 }
 
+function createInboxItem(title, createdAt = new Date().toISOString()) {
+  return {
+    id: createId(),
+    title,
+    createdAt
+  };
+}
+
+function createProject({ title, note = "", createdAt = new Date().toISOString() }) {
+  return {
+    id: createId(),
+    title,
+    note,
+    createdAt
+  };
+}
+
+function createSomedayItem({ title, note = "", createdAt = new Date().toISOString() }) {
+  return {
+    id: createId(),
+    title,
+    note,
+    createdAt
+  };
+}
+
+function createReferenceItem({ title, link = "", note = "", createdAt = new Date().toISOString() }) {
+  return {
+    id: createId(),
+    title,
+    link,
+    note,
+    createdAt
+  };
+}
+
+function createTrashItem({ title, kind, detail = "", payload = null, discardedAt = new Date().toISOString() }) {
+  return {
+    id: createId(),
+    title,
+    kind,
+    detail,
+    payload,
+    discardedAt
+  };
+}
+
 function buildDefaultState() {
   return {
     activeView: DEFAULT_VIEW,
@@ -362,7 +464,12 @@ function buildDefaultState() {
       items: category.sampleItems.map(item => createBudgetItem(item.title, item.amount, item.checked))
     })),
     notes: DEFAULT_NOTES.map(note => createNote(note)),
-    waitingItems: DEFAULT_WAITING_ITEMS.map(item => createWaitingItem(item))
+    waitingItems: DEFAULT_WAITING_ITEMS.map(item => createWaitingItem(item)),
+    inboxItems: DEFAULT_INBOX_ITEMS.map(item => createInboxItem(item)),
+    projects: DEFAULT_PROJECTS.map(project => createProject(project)),
+    somedayItems: DEFAULT_SOMEDAY_ITEMS.map(item => createSomedayItem(item)),
+    referenceItems: DEFAULT_REFERENCE_ITEMS.map(item => createReferenceItem(item)),
+    trashItems: []
   };
 }
 
@@ -419,7 +526,12 @@ function normalizeState(rawState) {
     actionSections: mergeActionSections(rawState?.actionSections),
     budgetCategories,
     notes: normalizeNotes(rawState?.notes),
-    waitingItems: normalizeWaitingItems(rawState?.waitingItems)
+    waitingItems: normalizeWaitingItems(rawState?.waitingItems),
+    inboxItems: normalizeInboxItems(rawState?.inboxItems),
+    projects: normalizeProjects(rawState?.projects),
+    somedayItems: normalizeSomedayItems(rawState?.somedayItems),
+    referenceItems: normalizeReferenceItems(rawState?.referenceItems),
+    trashItems: normalizeTrashItems(rawState?.trashItems)
   };
 }
 
@@ -437,23 +549,7 @@ function mergeActionSections(storedSections) {
     const useStoredTasks = Array.isArray(existingSection?.tasks) && !shouldClearLegacySampleTasks(existingSection, shouldStripLegacySeedData);
     const tasks = useStoredTasks
       ? existingSection.tasks
-          .map(task => {
-            if (typeof task === "string") {
-              return createTask(task);
-            }
-
-            const title = typeof task?.title === "string" ? task.title.trim() : "";
-
-            if (!title) {
-              return null;
-            }
-
-            return {
-              id: task.id || createId(),
-              title,
-              done: Boolean(task.done)
-            };
-          })
+          .map(task => normalizeTaskRecord(task))
           .filter(Boolean)
       : definition.sampleTasks.map(task => createTask(task));
 
@@ -468,58 +564,53 @@ function mergeActionSections(storedSections) {
   });
 }
 
-function mergeBudgetCategories(storedCategories) {
-  const categoryMap = new Map(
-    Array.isArray(storedCategories)
-      ? storedCategories.filter(category => category && typeof category.id === "string").map(category => [category.id, category])
-      : []
-  );
-  const extraDefinitions = Array.isArray(storedCategories)
-    ? storedCategories
-        .filter(category => {
-          if (!category || typeof category.id !== "string") {
-            return false;
+function normalizeBudgetCategoryRecord(category) {
+  if (!category || typeof category.id !== "string") {
+    return null;
+  }
+
+  const fallbackDefinition = BUDGET_CATEGORY_DEFINITIONS.find(definition => definition.id === category.id);
+  const items = Array.isArray(category.items)
+    ? category.items
+        .map(item => {
+          const title = typeof item?.title === "string" ? item.title.trim() : "";
+          const amount = Number(item?.amount);
+
+          if (!title || Number.isNaN(amount)) {
+            return null;
           }
 
-          return !BUDGET_CATEGORY_DEFINITIONS.some(definition => definition.id === category.id);
+          return {
+            id: item.id || createId(),
+            title,
+            amount,
+            checked: Boolean(item.checked)
+          };
         })
-        .map(category => ({
-          id: category.id,
-          title: typeof category.title === "string" && category.title.trim() ? category.title.trim() : category.id,
-          sampleItems: []
-        }))
-    : [];
+        .filter(Boolean)
+    : fallbackDefinition
+      ? fallbackDefinition.sampleItems.map(item => createBudgetItem(item.title, item.amount, item.checked))
+      : [];
 
-  return [...BUDGET_CATEGORY_DEFINITIONS, ...extraDefinitions].map(definition => {
-    const existingCategory = categoryMap.get(definition.id);
-    const items = Array.isArray(existingCategory?.items)
-      ? existingCategory.items
-          .map(item => {
-            const title = typeof item?.title === "string" ? item.title.trim() : "";
-            const amount = Number(item?.amount);
+  return {
+    id: category.id,
+    title: typeof category.title === "string" && category.title.trim()
+      ? category.title.trim()
+      : fallbackDefinition?.title || category.id,
+    items
+  };
+}
 
-            if (!title || Number.isNaN(amount)) {
-              return null;
-            }
+function mergeBudgetCategories(storedCategories) {
+  if (!Array.isArray(storedCategories)) {
+    return BUDGET_CATEGORY_DEFINITIONS.map(category => ({
+      id: category.id,
+      title: category.title,
+      items: category.sampleItems.map(item => createBudgetItem(item.title, item.amount, item.checked))
+    }));
+  }
 
-            return {
-              id: item.id || createId(),
-              title,
-              amount,
-              checked: Boolean(item.checked)
-            };
-          })
-          .filter(Boolean)
-      : definition.sampleItems.map(item => createBudgetItem(item.title, item.amount, item.checked));
-
-    return {
-      id: definition.id,
-      title: typeof existingCategory?.title === "string" && existingCategory.title.trim()
-        ? existingCategory.title.trim()
-        : definition.title,
-      items
-    };
-  });
+  return storedCategories.map(category => normalizeBudgetCategoryRecord(category)).filter(Boolean);
 }
 
 function shouldClearLegacySampleTasks(section, shouldStripLegacySeedData) {
@@ -625,6 +716,126 @@ function normalizeWaitingItems(waitingItems) {
   return normalized.length > 0 ? normalized : DEFAULT_WAITING_ITEMS.map(item => createWaitingItem(item));
 }
 
+function normalizeInboxItems(inboxItems) {
+  if (!Array.isArray(inboxItems)) {
+    return DEFAULT_INBOX_ITEMS.map(item => createInboxItem(item));
+  }
+
+  const normalized = inboxItems
+    .map(item => {
+      const title = typeof item?.title === "string" ? item.title.trim() : "";
+
+      if (!title) {
+        return null;
+      }
+
+      return {
+        id: item.id || createId(),
+        title,
+        createdAt: normalizeTimestamp(item.createdAt) || new Date().toISOString()
+      };
+    })
+    .filter(Boolean);
+
+  return normalized;
+}
+
+function normalizeProjects(projects) {
+  if (!Array.isArray(projects)) {
+    return DEFAULT_PROJECTS.map(project => createProject(project));
+  }
+
+  return projects
+    .map(project => {
+      const title = typeof project?.title === "string" ? project.title.trim() : "";
+
+      if (!title) {
+        return null;
+      }
+
+      return {
+        id: project.id || createId(),
+        title,
+        note: typeof project?.note === "string" ? project.note.trim() : "",
+        createdAt: normalizeTimestamp(project.createdAt) || new Date().toISOString()
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeSomedayItems(items) {
+  if (!Array.isArray(items)) {
+    return DEFAULT_SOMEDAY_ITEMS.map(item => createSomedayItem(item));
+  }
+
+  return items
+    .map(item => {
+      const title = typeof item?.title === "string" ? item.title.trim() : "";
+
+      if (!title) {
+        return null;
+      }
+
+      return {
+        id: item.id || createId(),
+        title,
+        note: typeof item?.note === "string" ? item.note.trim() : "",
+        createdAt: normalizeTimestamp(item.createdAt) || new Date().toISOString()
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeReferenceItems(items) {
+  if (!Array.isArray(items)) {
+    return DEFAULT_REFERENCE_ITEMS.map(item => createReferenceItem(item));
+  }
+
+  return items
+    .map(item => {
+      const title = typeof item?.title === "string" ? item.title.trim() : "";
+
+      if (!title) {
+        return null;
+      }
+
+      return {
+        id: item.id || createId(),
+        title,
+        link: typeof item?.link === "string" ? item.link.trim() : "",
+        note: typeof item?.note === "string" ? item.note.trim() : "",
+        createdAt: normalizeTimestamp(item.createdAt) || new Date().toISOString()
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeTrashItems(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items
+    .map(item => {
+      const title = typeof item?.title === "string" ? item.title.trim() : "";
+      const kind = typeof item?.kind === "string" ? item.kind.trim() : "";
+
+      if (!title || !kind) {
+        return null;
+      }
+
+      return {
+        id: item.id || createId(),
+        title,
+        kind,
+        detail: typeof item?.detail === "string" ? item.detail.trim() : "",
+        payload: item?.payload ?? null,
+        discardedAt: normalizeTimestamp(item.discardedAt) || new Date().toISOString()
+      };
+    })
+    .filter(Boolean);
+}
+
 function getStateSnapshot(lastSavedAt = appState.lastSavedAt ?? null) {
   return {
     activeView: uiState.activeView,
@@ -633,7 +844,12 @@ function getStateSnapshot(lastSavedAt = appState.lastSavedAt ?? null) {
     actionSections: appState.actionSections,
     budgetCategories: appState.budgetCategories,
     notes: appState.notes,
-    waitingItems: appState.waitingItems
+    waitingItems: appState.waitingItems,
+    inboxItems: appState.inboxItems,
+    projects: appState.projects,
+    somedayItems: appState.somedayItems,
+    referenceItems: appState.referenceItems,
+    trashItems: appState.trashItems
   };
 }
 
@@ -727,12 +943,373 @@ function getSectionById(sectionId) {
   return appState.actionSections.find(section => section.id === sectionId);
 }
 
-function getBudgetCategoryById(categoryId) {
-  return appState.budgetCategories.find(category => category.id === categoryId);
+function getProjectById(projectId) {
+  return appState.projects.find(project => project.id === projectId);
 }
 
-function isDefaultBudgetCategory(categoryId) {
-  return BUDGET_CATEGORY_DEFINITIONS.some(category => category.id === categoryId);
+function getTaskContextLabel(context) {
+  return context || GTD_EMPTY_CONTEXT_LABEL;
+}
+
+function getAvailableContexts() {
+  const contextSet = new Set(GTD_CONTEXT_OPTIONS);
+
+  appState.actionSections.forEach(section => {
+    section.tasks.forEach(task => {
+      if (task.context) {
+        contextSet.add(task.context);
+      }
+    });
+  });
+
+  const orderedBase = GTD_CONTEXT_OPTIONS.filter(context => contextSet.has(context));
+  const customContexts = [...contextSet]
+    .filter(context => !GTD_CONTEXT_OPTIONS.includes(context) && context)
+    .sort((left, right) => left.localeCompare(right));
+
+  return [...orderedBase, ...customContexts];
+}
+
+function getAllActionTaskEntries() {
+  return appState.actionSections.flatMap(section =>
+    section.tasks.map(task => ({
+      section,
+      task
+    }))
+  );
+}
+
+function getOpenActionTaskEntries() {
+  return getAllActionTaskEntries().filter(entry => !entry.task.done);
+}
+
+function findActionTask(taskId) {
+  for (const section of appState.actionSections) {
+    const task = section.tasks.find(entry => entry.id === taskId);
+
+    if (task) {
+      return { section, task };
+    }
+  }
+
+  return null;
+}
+
+function addTrashItem(trashItem) {
+  appState.trashItems.unshift(trashItem);
+  appState.trashItems = appState.trashItems.slice(0, 60);
+}
+
+function addActionTask({ title, sectionId, context = "", projectId = "" }) {
+  const section = getSectionById(sectionId);
+
+  if (!section) {
+    return { error: "Choose a valid Action Board section." };
+  }
+
+  if (section.tasks.length >= getTaskLimit(sectionId)) {
+    return { error: getTaskLimitMessage(sectionId) || "That section is already full." };
+  }
+
+  const task = createTask(title, false, {
+    context,
+    projectId
+  });
+
+  section.tasks.push(task);
+
+  return { section, task };
+}
+
+function moveActionTaskToSection(taskId, nextSectionId) {
+  const taskEntry = findActionTask(taskId);
+  const nextSection = getSectionById(nextSectionId);
+
+  if (!taskEntry || !nextSection) {
+    return { error: "The task could not be moved." };
+  }
+
+  if (taskEntry.section.id === nextSection.id) {
+    return { section: nextSection, task: taskEntry.task };
+  }
+
+  if (nextSection.tasks.length >= getTaskLimit(nextSectionId)) {
+    return { error: getTaskLimitMessage(nextSectionId) || "That section is already full." };
+  }
+
+  taskEntry.section.tasks = taskEntry.section.tasks.filter(task => task.id !== taskId);
+  nextSection.tasks.unshift(taskEntry.task);
+
+  return { section: nextSection, task: taskEntry.task };
+}
+
+function discardActionTask(taskId) {
+  const taskEntry = findActionTask(taskId);
+
+  if (!taskEntry) {
+    return null;
+  }
+
+  taskEntry.section.tasks = taskEntry.section.tasks.filter(task => task.id !== taskId);
+  addTrashItem(
+    createTrashItem({
+      title: taskEntry.task.title,
+      kind: "actionTask",
+      detail: `${taskEntry.section.title} · ${getTaskContextLabel(taskEntry.task.context)}`,
+      payload: {
+        sectionId: taskEntry.section.id,
+        task: taskEntry.task
+      }
+    })
+  );
+
+  return taskEntry.task;
+}
+
+function discardInboxItem(inboxItemId) {
+  const inboxItem = appState.inboxItems.find(item => item.id === inboxItemId);
+
+  if (!inboxItem) {
+    return null;
+  }
+
+  appState.inboxItems = appState.inboxItems.filter(item => item.id !== inboxItemId);
+  addTrashItem(
+    createTrashItem({
+      title: inboxItem.title,
+      kind: "inbox",
+      detail: "Captured from Inbox",
+      payload: { inboxItem }
+    })
+  );
+
+  return inboxItem;
+}
+
+function discardWaitingItem(waitingItemId) {
+  const waitingItem = appState.waitingItems.find(item => item.id === waitingItemId);
+
+  if (!waitingItem) {
+    return null;
+  }
+
+  appState.waitingItems = appState.waitingItems.filter(item => item.id !== waitingItemId);
+  addTrashItem(
+    createTrashItem({
+      title: waitingItem.title,
+      kind: "waiting",
+      detail: waitingItem.person,
+      payload: { waitingItem }
+    })
+  );
+
+  return waitingItem;
+}
+
+function discardProject(projectId) {
+  const project = getProjectById(projectId);
+
+  if (!project) {
+    return null;
+  }
+
+  const linkedTaskIds = [];
+
+  appState.actionSections.forEach(section => {
+    section.tasks.forEach(task => {
+      if (task.projectId === projectId) {
+        linkedTaskIds.push(task.id);
+        task.projectId = "";
+      }
+    });
+  });
+
+  appState.projects = appState.projects.filter(item => item.id !== projectId);
+  addTrashItem(
+    createTrashItem({
+      title: project.title,
+      kind: "project",
+      detail: linkedTaskIds.length === 1 ? "1 related next action" : `${linkedTaskIds.length} related next actions`,
+      payload: {
+        project,
+        linkedTaskIds
+      }
+    })
+  );
+
+  return project;
+}
+
+function discardSomedayItem(itemId) {
+  const somedayItem = appState.somedayItems.find(item => item.id === itemId);
+
+  if (!somedayItem) {
+    return null;
+  }
+
+  appState.somedayItems = appState.somedayItems.filter(item => item.id !== itemId);
+  addTrashItem(
+    createTrashItem({
+      title: somedayItem.title,
+      kind: "someday",
+      detail: "Someday / Maybe",
+      payload: { somedayItem }
+    })
+  );
+
+  return somedayItem;
+}
+
+function discardReferenceItem(itemId) {
+  const referenceItem = appState.referenceItems.find(item => item.id === itemId);
+
+  if (!referenceItem) {
+    return null;
+  }
+
+  appState.referenceItems = appState.referenceItems.filter(item => item.id !== itemId);
+  addTrashItem(
+    createTrashItem({
+      title: referenceItem.title,
+      kind: "reference",
+      detail: "Reference",
+      payload: { referenceItem }
+    })
+  );
+
+  return referenceItem;
+}
+
+function restoreTrashItem(trashItemId) {
+  const trashItem = appState.trashItems.find(item => item.id === trashItemId);
+
+  if (!trashItem) {
+    return false;
+  }
+
+  if (trashItem.kind === "actionTask") {
+    const sectionId = trashItem.payload?.sectionId;
+    const targetSection = getSectionById(sectionId) || getSectionById("memo");
+    const task = normalizeTaskRecord(trashItem.payload?.task);
+
+    if (!targetSection || !task) {
+      return false;
+    }
+
+    if (!targetSection.tasks.some(entry => entry.id === task.id)) {
+      targetSection.tasks.unshift(task);
+    }
+  }
+
+  if (trashItem.kind === "inbox") {
+    const inboxItem = trashItem.payload?.inboxItem;
+
+    if (inboxItem && !appState.inboxItems.some(item => item.id === inboxItem.id)) {
+      appState.inboxItems.unshift({
+        id: inboxItem.id || createId(),
+        title: inboxItem.title,
+        createdAt: normalizeTimestamp(inboxItem.createdAt) || new Date().toISOString()
+      });
+    }
+  }
+
+  if (trashItem.kind === "waiting") {
+    const waitingItem = trashItem.payload?.waitingItem;
+
+    if (waitingItem && !appState.waitingItems.some(item => item.id === waitingItem.id)) {
+      appState.waitingItems.unshift({
+        id: waitingItem.id || createId(),
+        title: waitingItem.title,
+        person: waitingItem.person,
+        status: WAITING_STATUSES.includes(waitingItem.status) ? waitingItem.status : "Waiting",
+        dueDate: typeof waitingItem.dueDate === "string" ? waitingItem.dueDate : "",
+        note: typeof waitingItem.note === "string" ? waitingItem.note : ""
+      });
+    }
+  }
+
+  if (trashItem.kind === "project") {
+    const project = trashItem.payload?.project;
+    const linkedTaskIds = Array.isArray(trashItem.payload?.linkedTaskIds) ? trashItem.payload.linkedTaskIds : [];
+
+    if (project && !appState.projects.some(item => item.id === project.id)) {
+      appState.projects.unshift({
+        id: project.id || createId(),
+        title: project.title,
+        note: typeof project.note === "string" ? project.note : "",
+        createdAt: normalizeTimestamp(project.createdAt) || new Date().toISOString()
+      });
+    }
+
+    linkedTaskIds.forEach(taskId => {
+      const taskEntry = findActionTask(taskId);
+
+      if (taskEntry && !taskEntry.task.projectId) {
+        taskEntry.task.projectId = project.id;
+      }
+    });
+  }
+
+  if (trashItem.kind === "someday") {
+    const somedayItem = trashItem.payload?.somedayItem;
+
+    if (somedayItem && !appState.somedayItems.some(item => item.id === somedayItem.id)) {
+      appState.somedayItems.unshift({
+        id: somedayItem.id || createId(),
+        title: somedayItem.title,
+        note: typeof somedayItem.note === "string" ? somedayItem.note : "",
+        createdAt: normalizeTimestamp(somedayItem.createdAt) || new Date().toISOString()
+      });
+    }
+  }
+
+  if (trashItem.kind === "reference") {
+    const referenceItem = trashItem.payload?.referenceItem;
+
+    if (referenceItem && !appState.referenceItems.some(item => item.id === referenceItem.id)) {
+      appState.referenceItems.unshift({
+        id: referenceItem.id || createId(),
+        title: referenceItem.title,
+        link: typeof referenceItem.link === "string" ? referenceItem.link : "",
+        note: typeof referenceItem.note === "string" ? referenceItem.note : "",
+        createdAt: normalizeTimestamp(referenceItem.createdAt) || new Date().toISOString()
+      });
+    }
+  }
+
+  appState.trashItems = appState.trashItems.filter(item => item.id !== trashItemId);
+  return true;
+}
+
+function getTrashKindLabel(kind) {
+  const labels = {
+    actionTask: "Action task",
+    inbox: "Inbox",
+    waiting: "Waiting For",
+    project: "Project",
+    someday: "Someday / Maybe",
+    reference: "Reference"
+  };
+
+  return labels[kind] || kind;
+}
+
+function getGtdStats() {
+  const openActionTasks = getOpenActionTaskEntries().length;
+
+  return {
+    inbox: appState.inboxItems.length,
+    nextActions: openActionTasks,
+    waiting: appState.waitingItems.filter(item => item.status !== "Done").length,
+    projects: appState.projects.length,
+    someday: appState.somedayItems.length,
+    reference: appState.referenceItems.length,
+    trash: appState.trashItems.length
+  };
+}
+
+function getBudgetCategoryById(categoryId) {
+  return appState.budgetCategories.find(category => category.id === categoryId);
 }
 
 function getBudgetCategoryDeleteTarget(categoryId) {
@@ -747,16 +1324,42 @@ function getBudgetCategoryDeleteTarget(categoryId) {
   return appState.budgetCategories.find(category => category.id !== categoryId) || null;
 }
 
+function getBudgetCategoryDeletionCopy(category) {
+  const deleteTarget = getBudgetCategoryDeleteTarget(category.id);
+
+  if (category.items.length === 0) {
+    return {
+      detail: "This category is empty.",
+      confirmMessage: `Delete \"${category.title}\"?`
+    };
+  }
+
+  const itemLabel = category.items.length === 1 ? "1 item" : `${category.items.length} items`;
+
+  if (deleteTarget) {
+    return {
+      detail: `${itemLabel} will move to ${deleteTarget.title}.`,
+      confirmMessage: `Delete \"${category.title}\"? ${itemLabel} will move to ${deleteTarget.title}.`
+    };
+  }
+
+  return {
+    detail: `${itemLabel} will be permanently deleted because no other category remains.`,
+    confirmMessage: `Delete \"${category.title}\"? ${itemLabel} will be permanently deleted because no other category remains.`
+  };
+}
+
 function deleteBudgetCategory(categoryId) {
   const category = getBudgetCategoryById(categoryId);
 
-  if (!category || isDefaultBudgetCategory(categoryId)) {
+  if (!category) {
     return null;
   }
 
   const moveTarget = getBudgetCategoryDeleteTarget(categoryId);
+  const deletedItemCount = category.items.length;
 
-  if (moveTarget && category.items.length > 0) {
+  if (moveTarget && deletedItemCount > 0) {
     moveTarget.items = [...category.items, ...moveTarget.items];
   }
 
@@ -772,8 +1375,9 @@ function deleteBudgetCategory(categoryId) {
 
   return {
     deletedCategoryTitle: category.title,
-    movedItemCount: category.items.length,
-    moveTargetTitle: moveTarget?.title || "All Budgets"
+    movedItemCount: moveTarget ? deletedItemCount : 0,
+    deletedItemCount: moveTarget ? 0 : deletedItemCount,
+    moveTargetTitle: moveTarget?.title || ""
   };
 }
 
@@ -989,6 +1593,26 @@ function validateBackupShape(candidateState) {
     throw new Error("The backup file is missing valid waiting items.");
   }
 
+  if (candidateState.inboxItems && !Array.isArray(candidateState.inboxItems)) {
+    throw new Error("The backup file includes invalid inbox items.");
+  }
+
+  if (candidateState.projects && !Array.isArray(candidateState.projects)) {
+    throw new Error("The backup file includes invalid projects.");
+  }
+
+  if (candidateState.somedayItems && !Array.isArray(candidateState.somedayItems)) {
+    throw new Error("The backup file includes invalid someday items.");
+  }
+
+  if (candidateState.referenceItems && !Array.isArray(candidateState.referenceItems)) {
+    throw new Error("The backup file includes invalid reference items.");
+  }
+
+  if (candidateState.trashItems && !Array.isArray(candidateState.trashItems)) {
+    throw new Error("The backup file includes invalid trash items.");
+  }
+
   return candidateState;
 }
 
@@ -1023,7 +1647,8 @@ async function importJsonBackup(file) {
   uiState = {
     activeView: importedState.activeView,
     selectedBudgetCategory: importedState.selectedBudgetCategory,
-    budgetEditorId: null
+    budgetEditorId: null,
+    showBudgetCategoryManager: false
   };
   saveState({ touch: false, lastSavedAt: importedState.lastSavedAt });
   renderApp();
@@ -1343,7 +1968,7 @@ function renderActionBoard() {
         deleteButton.textContent = "x";
         deleteButton.setAttribute("aria-label", `Delete ${task.title}`);
         deleteButton.addEventListener("click", () => {
-          section.tasks = section.tasks.filter(entry => entry.id !== task.id);
+          discardActionTask(task.id);
           saveState();
           renderApp();
         });
@@ -1370,7 +1995,18 @@ function renderActionBoard() {
         return;
       }
 
-      section.tasks.push(createTask(titleValue));
+      const result = addActionTask({
+        title: titleValue,
+        sectionId: section.id
+      });
+
+      if (result.error) {
+        limitMessage.textContent = result.error;
+        limitMessage.hidden = false;
+        input.focus();
+        return;
+      }
+
       input.value = "";
       limitMessage.hidden = true;
       saveState();
@@ -1397,10 +2033,14 @@ function renderActionBoard() {
   });
 
   document.getElementById("clearCompletedTasksBtn").addEventListener("click", () => {
-    appState.actionSections = appState.actionSections.map(section => ({
-      ...section,
-      tasks: section.tasks.filter(task => !task.done)
-    }));
+    const completedTaskIds = getAllActionTaskEntries()
+      .filter(entry => entry.task.done)
+      .map(entry => entry.task.id);
+
+    completedTaskIds.forEach(taskId => {
+      discardActionTask(taskId);
+    });
+
     saveState();
     renderApp();
   });
@@ -1418,14 +2058,25 @@ function renderBudgetPlanner() {
   viewRoot.innerHTML = `
     <section class="budget-layout">
       <aside class="budget-sidebar">
-        <div>
-          <h2 class="panel-title">Budget categories</h2>
-          <p class="panel-subtitle">Choose a category on the left and manage its items on the right.</p>
+        <div class="budget-sidebar__header">
+          <div>
+            <h2 class="panel-title">Budget categories</h2>
+            <p class="panel-subtitle">Choose a category on the left and manage its items on the right.</p>
+          </div>
+          <button
+            type="button"
+            class="ghost-btn budget-manage-btn"
+            id="toggleBudgetCategoryManagerBtn"
+            aria-expanded="${uiState.showBudgetCategoryManager ? "true" : "false"}"
+            aria-controls="budgetCategoryManager"
+          >
+            ${uiState.showBudgetCategoryManager ? "Close manager" : "Manage categories"}
+          </button>
         </div>
 
         <form class="budget-category-form" id="budgetCategoryForm">
           <div class="field">
-            <label for="budgetCategoryNameInput">Create custom category</label>
+            <label for="budgetCategoryNameInput">Create category</label>
             <input
               id="budgetCategoryNameInput"
               type="text"
@@ -1436,11 +2087,25 @@ function renderBudgetPlanner() {
           </div>
           <button type="submit" class="secondary-btn">Create category</button>
           <p class="budget-category-form__message" id="budgetCategoryFormMessage">
-            Custom categories are saved with your backup. If you delete one later, its items move to Monthly Budget.
+            Categories are saved with your backup. If you delete one later, its items move to another remaining category when possible.
           </p>
         </form>
 
         <ul class="sidebar-list" id="budgetCategoryList"></ul>
+
+        ${uiState.showBudgetCategoryManager ? `
+          <section class="budget-category-manager" id="budgetCategoryManager" aria-labelledby="budgetCategoryManagerTitle">
+            <div class="budget-category-manager__header">
+              <div>
+                <h3 class="budget-category-manager__title" id="budgetCategoryManagerTitle">Manage categories</h3>
+                <p class="budget-category-manager__subtitle">Delete categories here without cluttering the main list. Budget totals, visible items, and saved data update immediately.</p>
+              </div>
+              <button type="button" class="tiny-btn" id="closeBudgetCategoryManagerBtn">Done</button>
+            </div>
+
+            <ul class="budget-category-manager__list" id="budgetCategoryManagerList"></ul>
+          </section>
+        ` : ""}
       </aside>
 
       <div class="budget-main">
@@ -1488,6 +2153,7 @@ function renderBudgetPlanner() {
   `;
 
   renderBudgetSidebar();
+  renderBudgetCategoryManager();
   populateBudgetForm(editorTarget);
   renderBudgetList(visibleEntries);
 
@@ -1496,6 +2162,19 @@ function renderBudgetPlanner() {
   const budgetCategoryForm = document.getElementById("budgetCategoryForm");
   const budgetCategoryNameInput = document.getElementById("budgetCategoryNameInput");
   const budgetCategoryFormMessage = document.getElementById("budgetCategoryFormMessage");
+  const toggleBudgetCategoryManagerButton = document.getElementById("toggleBudgetCategoryManagerBtn");
+
+  toggleBudgetCategoryManagerButton.addEventListener("click", () => {
+    uiState.showBudgetCategoryManager = !uiState.showBudgetCategoryManager;
+    renderApp();
+  });
+
+  if (uiState.showBudgetCategoryManager) {
+    document.getElementById("closeBudgetCategoryManagerBtn").addEventListener("click", () => {
+      uiState.showBudgetCategoryManager = false;
+      renderApp();
+    });
+  }
 
   budgetCategoryForm.addEventListener("submit", event => {
     event.preventDefault();
@@ -1527,7 +2206,7 @@ function renderBudgetPlanner() {
   });
 
   budgetCategoryNameInput.addEventListener("input", () => {
-    budgetCategoryFormMessage.textContent = "Custom categories are saved with your backup. If you delete one later, its items move to Monthly Budget.";
+    budgetCategoryFormMessage.textContent = "Categories are saved with your backup. If you delete one later, its items move to another remaining category when possible.";
     budgetCategoryFormMessage.dataset.tone = "info";
   });
 
@@ -1576,145 +2255,1018 @@ function renderBudgetPlanner() {
   }
 }
 
+function populateSelectOptions(select, options, selectedValue = "") {
+  select.innerHTML = "";
+
+  options.forEach(optionData => {
+    const option = document.createElement("option");
+    option.value = optionData.value;
+    option.textContent = optionData.label;
+    select.appendChild(option);
+  });
+
+  const hasSelectedValue = options.some(optionData => optionData.value === selectedValue);
+  select.value = hasSelectedValue ? selectedValue : options[0]?.value || "";
+}
+
+function getReferenceHref(link) {
+  if (!link) {
+    return "";
+  }
+
+  return /^[a-z][a-z\d+\-.]*:/i.test(link) ? link : `https://${link}`;
+}
+
 function renderWaitingFor() {
   const waitingStats = getWaitingStats();
+  const gtdStats = getGtdStats();
+  const actionSectionOptions = ACTION_SECTION_DEFINITIONS.map(section => ({
+    value: section.id,
+    label: section.title
+  }));
+  const projectOptions = [
+    { value: "", label: "No project" },
+    ...appState.projects.map(project => ({
+      value: project.id,
+      label: project.title
+    }))
+  ];
+  const contextOptions = getAvailableContexts().map(context => ({
+    value: context,
+    label: getTaskContextLabel(context)
+  }));
 
   viewRoot.innerHTML = `
-    <section class="view-panel">
+    <section class="view-panel gtd-view">
       <div class="view-panel__top">
         <div>
-          <h2 class="panel-title">Waiting For</h2>
-          <p class="panel-subtitle">Track the things you are waiting for other people to reply to, send, finish, or confirm.</p>
+          <h2 class="panel-title">GTD Organizer</h2>
+          <p class="panel-subtitle">Capture first, clarify next, and keep next actions synced with the Action Board.</p>
         </div>
 
         <div class="view-actions">
           <div class="inline-stats">
+            <span class="inline-stat">Inbox ${gtdStats.inbox}</span>
+            <span class="inline-stat">Next actions ${gtdStats.nextActions}</span>
             <span class="inline-stat">Waiting ${waitingStats.Waiting}</span>
-            <span class="inline-stat">Follow Up ${waitingStats["Follow Up"]}</span>
-            <span class="inline-stat">Received ${waitingStats.Received}</span>
-            <span class="inline-stat">Done ${waitingStats.Done}</span>
+            <span class="inline-stat">Projects ${gtdStats.projects}</span>
+            <span class="inline-stat">Someday ${gtdStats.someday}</span>
+            <span class="inline-stat">Trash ${gtdStats.trash}</span>
           </div>
         </div>
       </div>
 
-      <div class="waiting-layout">
-        <aside class="waiting-form-panel">
-          <h3 class="panel-title">Add waiting item</h3>
-          <p class="panel-subtitle">Keep dependent-on-others items separate so they do not get mixed into your own action list.</p>
+      <div class="gtd-grid">
+        <article class="gtd-section gtd-section--inbox">
+          <div class="gtd-section__header">
+            <div>
+              <h3 class="panel-title">Inbox</h3>
+              <p class="panel-subtitle">Capture loose thoughts quickly, then clarify them into the right GTD place.</p>
+            </div>
+            <span class="pill">${appState.inboxItems.length}</span>
+          </div>
 
-          <form class="waiting-form" id="waitingForm">
+          <form class="gtd-form" id="gtdInboxForm">
+            <div class="field gtd-form__field--wide">
+              <label for="gtdInboxInput">Quick capture</label>
+              <input id="gtdInboxInput" type="text" maxlength="140" placeholder="Write the thought down before it drifts away" required />
+            </div>
+            <button type="submit" class="primary-btn">Capture</button>
+          </form>
+
+          <ul class="gtd-list" id="gtdInboxList"></ul>
+        </article>
+
+        <article class="gtd-section gtd-section--contexts">
+          <div class="gtd-section__header">
+            <div>
+              <h3 class="panel-title">@Context Tasks</h3>
+              <p class="panel-subtitle">These are your actionable next steps. They use the same task data as the Action Board.</p>
+            </div>
+            <span class="pill">${getAllActionTaskEntries().length}</span>
+          </div>
+
+          <form class="gtd-form gtd-form--task" id="contextTaskForm">
+            <div class="field gtd-form__field--wide">
+              <label for="contextTaskTitleInput">Next action</label>
+              <input id="contextTaskTitleInput" type="text" maxlength="120" placeholder="For example: call the supplier, draft the outline, pick up detergent" required />
+            </div>
             <div class="field">
+              <label for="contextTaskSectionSelect">Action Board section</label>
+              <select id="contextTaskSectionSelect"></select>
+            </div>
+            <div class="field">
+              <label for="contextTaskContextSelect">Context</label>
+              <select id="contextTaskContextSelect"></select>
+            </div>
+            <div class="field">
+              <label for="contextTaskProjectSelect">Project</label>
+              <select id="contextTaskProjectSelect"></select>
+            </div>
+            <button type="submit" class="primary-btn">Add next action</button>
+          </form>
+
+          <div class="gtd-context-groups" id="gtdContextGroups"></div>
+        </article>
+
+        <article class="gtd-section">
+          <div class="gtd-section__header">
+            <div>
+              <h3 class="panel-title">Waiting For</h3>
+              <p class="panel-subtitle">Track anything that depends on someone else replying, sending, finishing, or confirming.</p>
+            </div>
+            <span class="pill">${appState.waitingItems.length}</span>
+          </div>
+
+          <form class="gtd-form" id="waitingForm">
+            <div class="field gtd-form__field--wide">
               <label for="waitingTitleInput">Title</label>
               <input id="waitingTitleInput" type="text" maxlength="120" placeholder="For example: signed contract, missing file, shipment update" required />
             </div>
-
             <div class="field">
               <label for="waitingPersonInput">Person / organization</label>
-              <input id="waitingPersonInput" type="text" maxlength="120" placeholder="For example: client, coworker, school, store" required />
+              <input id="waitingPersonInput" type="text" maxlength="120" placeholder="Who owns the next move?" required />
             </div>
-
             <div class="field">
               <label for="waitingStatusSelect">Status</label>
               <select id="waitingStatusSelect"></select>
             </div>
-
             <div class="field">
-              <label for="waitingDateInput">Due date / follow-up date</label>
+              <label for="waitingDateInput">Follow-up date</label>
               <input id="waitingDateInput" type="date" />
             </div>
-
-            <div class="field">
+            <div class="field gtd-form__field--wide">
               <label for="waitingNoteInput">Note</label>
-              <textarea id="waitingNoteInput" rows="4" maxlength="240" placeholder="Add context, a promised date, or the next reminder"></textarea>
+              <textarea id="waitingNoteInput" rows="3" maxlength="240" placeholder="Add a promise, a reminder, or extra context"></textarea>
             </div>
-
             <button type="submit" class="primary-btn">Add waiting item</button>
           </form>
-        </aside>
 
-        <div class="waiting-list-panel">
-          <h3 class="panel-title">Waiting list</h3>
-          <p class="panel-subtitle">Review all current dependent-on-others items by status and date.</p>
           <ul class="waiting-list" id="waitingList"></ul>
-        </div>
+        </article>
+
+        <article class="gtd-section">
+          <div class="gtd-section__header">
+            <div>
+              <h3 class="panel-title">Projects</h3>
+              <p class="panel-subtitle">Keep outcomes that need more than one action together with notes and linked next actions.</p>
+            </div>
+            <span class="pill">${appState.projects.length}</span>
+          </div>
+
+          <form class="gtd-form" id="gtdProjectForm">
+            <div class="field">
+              <label for="gtdProjectTitleInput">Project title</label>
+              <input id="gtdProjectTitleInput" type="text" maxlength="120" placeholder="For example: refresh portfolio homepage" required />
+            </div>
+            <div class="field gtd-form__field--wide">
+              <label for="gtdProjectNoteInput">Project note</label>
+              <textarea id="gtdProjectNoteInput" rows="3" maxlength="280" placeholder="Keep a short outcome note or planning detail here"></textarea>
+            </div>
+            <button type="submit" class="primary-btn">Add project</button>
+          </form>
+
+          <ul class="gtd-list" id="gtdProjectList"></ul>
+        </article>
+
+        <article class="gtd-section">
+          <div class="gtd-section__header">
+            <div>
+              <h3 class="panel-title">Someday / Maybe</h3>
+              <p class="panel-subtitle">Keep future ideas here without turning them into current commitments.</p>
+            </div>
+            <span class="pill">${appState.somedayItems.length}</span>
+          </div>
+
+          <form class="gtd-form" id="gtdSomedayForm">
+            <div class="field">
+              <label for="gtdSomedayTitleInput">Idea</label>
+              <input id="gtdSomedayTitleInput" type="text" maxlength="120" placeholder="For example: start a balcony herb box" required />
+            </div>
+            <div class="field gtd-form__field--wide">
+              <label for="gtdSomedayNoteInput">Note</label>
+              <textarea id="gtdSomedayNoteInput" rows="3" maxlength="280" placeholder="Add a reason to keep it around for later"></textarea>
+            </div>
+            <button type="submit" class="primary-btn">Add someday item</button>
+          </form>
+
+          <ul class="gtd-list" id="gtdSomedayList"></ul>
+        </article>
+
+        <article class="gtd-section">
+          <div class="gtd-section__header">
+            <div>
+              <h3 class="panel-title">Reference</h3>
+              <p class="panel-subtitle">Store non-actionable notes, links, and information that should not clutter task lists.</p>
+            </div>
+            <span class="pill">${appState.referenceItems.length}</span>
+          </div>
+
+          <form class="gtd-form" id="gtdReferenceForm">
+            <div class="field">
+              <label for="gtdReferenceTitleInput">Title</label>
+              <input id="gtdReferenceTitleInput" type="text" maxlength="120" placeholder="For example: vendor portal, Wi-Fi instructions" required />
+            </div>
+            <div class="field">
+              <label for="gtdReferenceLinkInput">Link</label>
+              <input id="gtdReferenceLinkInput" type="text" maxlength="240" placeholder="Optional URL or plain text link" />
+            </div>
+            <div class="field gtd-form__field--wide">
+              <label for="gtdReferenceNoteInput">Reference note</label>
+              <textarea id="gtdReferenceNoteInput" rows="3" maxlength="280" placeholder="Store reference-only details here"></textarea>
+            </div>
+            <button type="submit" class="primary-btn">Add reference</button>
+          </form>
+
+          <ul class="gtd-list" id="gtdReferenceList"></ul>
+        </article>
+
+        <article class="gtd-section gtd-section--trash">
+          <div class="gtd-section__header">
+            <div>
+              <h3 class="panel-title">Trash</h3>
+              <p class="panel-subtitle">Keep discarded items here temporarily so they can be restored before permanent deletion.</p>
+            </div>
+            <button type="button" class="secondary-btn" id="emptyTrashBtn">Empty trash</button>
+          </div>
+
+          <ul class="gtd-list" id="gtdTrashList"></ul>
+        </article>
       </div>
     </section>
   `;
 
-  const statusSelect = document.getElementById("waitingStatusSelect");
-  WAITING_STATUSES.forEach(status => {
-    const option = document.createElement("option");
-    option.value = status;
-    option.textContent = getStatusLabel(status);
-    statusSelect.appendChild(option);
-  });
+  populateSelectOptions(document.getElementById("contextTaskSectionSelect"), actionSectionOptions, "memo");
+  populateSelectOptions(document.getElementById("contextTaskContextSelect"), contextOptions, "");
+  populateSelectOptions(document.getElementById("contextTaskProjectSelect"), projectOptions, "");
+  populateSelectOptions(
+    document.getElementById("waitingStatusSelect"),
+    WAITING_STATUSES.map(status => ({
+      value: status,
+      label: getStatusLabel(status)
+    })),
+    "Waiting"
+  );
 
+  const inboxList = document.getElementById("gtdInboxList");
+  const contextGroups = document.getElementById("gtdContextGroups");
   const waitingList = document.getElementById("waitingList");
-  const sortedItems = [...appState.waitingItems].sort((left, right) => {
-    if (!left.dueDate && !right.dueDate) {
-      return 0;
+  const projectList = document.getElementById("gtdProjectList");
+  const somedayList = document.getElementById("gtdSomedayList");
+  const referenceList = document.getElementById("gtdReferenceList");
+  const trashList = document.getElementById("gtdTrashList");
+
+  const renderInboxList = () => {
+    inboxList.innerHTML = "";
+
+    if (appState.inboxItems.length === 0) {
+      inboxList.appendChild(createEmptyState("Inbox is clear. Capture something here when it lands in your head."));
+      return;
     }
 
-    if (!left.dueDate) {
-      return 1;
+    [...appState.inboxItems]
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .forEach(item => {
+        const row = document.createElement("li");
+        row.className = "gtd-item";
+
+        const top = document.createElement("div");
+        top.className = "gtd-item__top";
+
+        const title = document.createElement("strong");
+        title.textContent = item.title;
+
+        const meta = document.createElement("span");
+        meta.className = "gtd-item__meta";
+        meta.textContent = `Captured ${formatShortDate(item.createdAt)}`;
+
+        top.appendChild(title);
+        top.appendChild(meta);
+
+        const controls = document.createElement("div");
+        controls.className = "gtd-item__controls";
+
+        const sectionSelect = document.createElement("select");
+        populateSelectOptions(sectionSelect, actionSectionOptions, "memo");
+
+        const contextSelect = document.createElement("select");
+        populateSelectOptions(contextSelect, contextOptions, "");
+
+        const clarifyButton = document.createElement("button");
+        clarifyButton.type = "button";
+        clarifyButton.className = "tiny-btn";
+        clarifyButton.textContent = "To task";
+        clarifyButton.addEventListener("click", () => {
+          const result = addActionTask({
+            title: item.title,
+            sectionId: sectionSelect.value,
+            context: contextSelect.value
+          });
+
+          if (result.error) {
+            alert(result.error);
+            return;
+          }
+
+          appState.inboxItems = appState.inboxItems.filter(entry => entry.id !== item.id);
+          saveState();
+          renderApp();
+        });
+
+        const projectButton = document.createElement("button");
+        projectButton.type = "button";
+        projectButton.className = "tiny-btn";
+        projectButton.textContent = "Project";
+        projectButton.addEventListener("click", () => {
+          appState.projects.unshift(createProject({ title: item.title }));
+          appState.inboxItems = appState.inboxItems.filter(entry => entry.id !== item.id);
+          saveState();
+          renderApp();
+        });
+
+        const somedayButton = document.createElement("button");
+        somedayButton.type = "button";
+        somedayButton.className = "tiny-btn";
+        somedayButton.textContent = "Someday";
+        somedayButton.addEventListener("click", () => {
+          appState.somedayItems.unshift(createSomedayItem({ title: item.title }));
+          appState.inboxItems = appState.inboxItems.filter(entry => entry.id !== item.id);
+          saveState();
+          renderApp();
+        });
+
+        const referenceButton = document.createElement("button");
+        referenceButton.type = "button";
+        referenceButton.className = "tiny-btn";
+        referenceButton.textContent = "Reference";
+        referenceButton.addEventListener("click", () => {
+          appState.referenceItems.unshift(createReferenceItem({ title: item.title }));
+          appState.inboxItems = appState.inboxItems.filter(entry => entry.id !== item.id);
+          saveState();
+          renderApp();
+        });
+
+        const trashButton = document.createElement("button");
+        trashButton.type = "button";
+        trashButton.className = "tiny-btn is-danger";
+        trashButton.textContent = "Trash";
+        trashButton.addEventListener("click", () => {
+          discardInboxItem(item.id);
+          saveState();
+          renderApp();
+        });
+
+        controls.appendChild(sectionSelect);
+        controls.appendChild(contextSelect);
+        controls.appendChild(clarifyButton);
+        controls.appendChild(projectButton);
+        controls.appendChild(somedayButton);
+        controls.appendChild(referenceButton);
+        controls.appendChild(trashButton);
+
+        row.appendChild(top);
+        row.appendChild(controls);
+        inboxList.appendChild(row);
+      });
+  };
+
+  const renderContextGroups = () => {
+    contextGroups.innerHTML = "";
+
+    const entries = getAllActionTaskEntries().sort((left, right) => {
+      if (left.task.done !== right.task.done) {
+        return Number(left.task.done) - Number(right.task.done);
+      }
+
+      return left.task.title.localeCompare(right.task.title);
+    });
+
+    if (entries.length === 0) {
+      contextGroups.appendChild(createEmptyState("There are no actionable tasks yet. Add one here or clarify an inbox item into a task."));
+      return;
     }
 
-    if (!right.dueDate) {
-      return -1;
+    getAvailableContexts().forEach(contextValue => {
+      const groupEntries = entries.filter(entry => entry.task.context === contextValue);
+
+      if (groupEntries.length === 0) {
+        return;
+      }
+
+      const group = document.createElement("section");
+      group.className = "gtd-context-group";
+
+      const groupHeader = document.createElement("div");
+      groupHeader.className = "gtd-context-group__header";
+
+      const groupTitle = document.createElement("h4");
+      groupTitle.className = "gtd-context-group__title";
+      groupTitle.textContent = getTaskContextLabel(contextValue);
+
+      const groupMeta = document.createElement("span");
+      groupMeta.className = "gtd-item__meta";
+      groupMeta.textContent = groupEntries.length === 1 ? "1 task" : `${groupEntries.length} tasks`;
+
+      groupHeader.appendChild(groupTitle);
+      groupHeader.appendChild(groupMeta);
+
+      const list = document.createElement("ul");
+      list.className = "gtd-list";
+
+      groupEntries.forEach(({ section, task }) => {
+        const row = document.createElement("li");
+        row.className = `gtd-item gtd-task-row ${task.done ? "is-done" : ""}`;
+
+        const main = document.createElement("label");
+        main.className = "gtd-task-row__main";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = task.done;
+        checkbox.addEventListener("change", () => {
+          task.done = checkbox.checked;
+          saveState();
+          renderApp();
+        });
+
+        const copy = document.createElement("span");
+        copy.className = "gtd-task-row__copy";
+
+        const title = document.createElement("strong");
+        title.className = "gtd-task-row__title";
+        title.textContent = task.title;
+
+        const meta = document.createElement("span");
+        meta.className = "gtd-item__meta";
+        const project = getProjectById(task.projectId);
+        meta.textContent = project ? `${section.title} · ${project.title}` : section.title;
+
+        copy.appendChild(title);
+        copy.appendChild(meta);
+        main.appendChild(checkbox);
+        main.appendChild(copy);
+
+        const controls = document.createElement("div");
+        controls.className = "gtd-item__controls";
+
+        const sectionSelect = document.createElement("select");
+        populateSelectOptions(sectionSelect, actionSectionOptions, section.id);
+        sectionSelect.addEventListener("change", () => {
+          const result = moveActionTaskToSection(task.id, sectionSelect.value);
+
+          if (result.error) {
+            alert(result.error);
+          }
+
+          saveState();
+          renderApp();
+        });
+
+        const contextSelect = document.createElement("select");
+        populateSelectOptions(contextSelect, contextOptions, task.context);
+        contextSelect.addEventListener("change", () => {
+          task.context = contextSelect.value;
+          saveState();
+          renderApp();
+        });
+
+        const projectSelect = document.createElement("select");
+        populateSelectOptions(projectSelect, projectOptions, getProjectById(task.projectId) ? task.projectId : "");
+        projectSelect.addEventListener("change", () => {
+          task.projectId = projectSelect.value;
+          saveState();
+          renderApp();
+        });
+
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.className = "tiny-btn";
+        editButton.textContent = "Edit";
+        editButton.addEventListener("click", () => {
+          const nextTitle = prompt("Edit task title", task.title);
+
+          if (typeof nextTitle !== "string") {
+            return;
+          }
+
+          const trimmed = nextTitle.trim();
+
+          if (!trimmed) {
+            return;
+          }
+
+          task.title = trimmed;
+          saveState();
+          renderApp();
+        });
+
+        const trashButton = document.createElement("button");
+        trashButton.type = "button";
+        trashButton.className = "tiny-btn is-danger";
+        trashButton.textContent = "Trash";
+        trashButton.addEventListener("click", () => {
+          discardActionTask(task.id);
+          saveState();
+          renderApp();
+        });
+
+        controls.appendChild(sectionSelect);
+        controls.appendChild(contextSelect);
+        controls.appendChild(projectSelect);
+        controls.appendChild(editButton);
+        controls.appendChild(trashButton);
+
+        row.appendChild(main);
+        row.appendChild(controls);
+        list.appendChild(row);
+      });
+
+      group.appendChild(groupHeader);
+      group.appendChild(list);
+      contextGroups.appendChild(group);
+    });
+  };
+
+  const renderWaitingList = () => {
+    waitingList.innerHTML = "";
+
+    const sortedItems = [...appState.waitingItems].sort((left, right) => {
+      if (!left.dueDate && !right.dueDate) {
+        return 0;
+      }
+
+      if (!left.dueDate) {
+        return 1;
+      }
+
+      if (!right.dueDate) {
+        return -1;
+      }
+
+      return left.dueDate.localeCompare(right.dueDate);
+    });
+
+    if (sortedItems.length === 0) {
+      waitingList.appendChild(createEmptyState("There are no waiting items right now. Add something that depends on someone else."));
+      return;
     }
 
-    return left.dueDate.localeCompare(right.dueDate);
-  });
-
-  if (sortedItems.length === 0) {
-    waitingList.appendChild(createEmptyState("There are no waiting items right now. Add something that depends on someone else."));
-  } else {
     sortedItems.forEach(item => {
       const row = document.createElement("li");
       row.className = `waiting-item waiting-item--${item.status.replace(/\s+/g, "-").toLowerCase()}`;
-      row.innerHTML = `
-        <div class="waiting-item__main">
-          <div class="waiting-item__top">
-            <strong>${item.title}</strong>
-            <span class="waiting-status-pill">${getStatusLabel(item.status)}</span>
-          </div>
-          <p class="waiting-item__person">${item.person}</p>
-          <p class="waiting-item__meta">Follow-up date: ${formatWaitingDate(item.dueDate)}</p>
-          <p class="waiting-item__note">${item.note || "No note yet"}</p>
-        </div>
 
-        <div class="waiting-item__side">
-          <label class="field waiting-status-field">
-            <span>Status</span>
-            <select data-waiting-status="${item.id}"></select>
-          </label>
-          <button type="button" class="tiny-btn is-danger" data-delete-waiting="${item.id}">Delete</button>
-        </div>
-      `;
+      const main = document.createElement("div");
+      main.className = "waiting-item__main";
 
-      waitingList.appendChild(row);
+      const top = document.createElement("div");
+      top.className = "waiting-item__top";
 
-      const statusControl = row.querySelector(`[data-waiting-status="${item.id}"]`);
-      WAITING_STATUSES.forEach(status => {
-        const option = document.createElement("option");
-        option.value = status;
-        option.textContent = getStatusLabel(status);
-        statusControl.appendChild(option);
-      });
-      statusControl.value = item.status;
+      const title = document.createElement("strong");
+      title.textContent = item.title;
+
+      const pill = document.createElement("span");
+      pill.className = "waiting-status-pill";
+      pill.textContent = getStatusLabel(item.status);
+
+      top.appendChild(title);
+      top.appendChild(pill);
+
+      const person = document.createElement("p");
+      person.className = "waiting-item__person";
+      person.textContent = item.person;
+
+      const meta = document.createElement("p");
+      meta.className = "waiting-item__meta";
+      meta.textContent = `Follow-up date: ${formatWaitingDate(item.dueDate)}`;
+
+      const note = document.createElement("p");
+      note.className = "waiting-item__note";
+      note.textContent = item.note || "No note yet";
+
+      main.appendChild(top);
+      main.appendChild(person);
+      main.appendChild(meta);
+      main.appendChild(note);
+
+      const side = document.createElement("div");
+      side.className = "waiting-item__side";
+
+      const statusField = document.createElement("label");
+      statusField.className = "field waiting-status-field";
+
+      const statusLabel = document.createElement("span");
+      statusLabel.textContent = "Status";
+
+      const statusControl = document.createElement("select");
+      populateSelectOptions(
+        statusControl,
+        WAITING_STATUSES.map(status => ({
+          value: status,
+          label: getStatusLabel(status)
+        })),
+        item.status
+      );
       statusControl.addEventListener("change", () => {
         item.status = statusControl.value;
         saveState();
         renderApp();
       });
 
-      row.querySelector(`[data-delete-waiting="${item.id}"]`).addEventListener("click", () => {
-        appState.waitingItems = appState.waitingItems.filter(entry => entry.id !== item.id);
+      statusField.appendChild(statusLabel);
+      statusField.appendChild(statusControl);
+
+      const trashButton = document.createElement("button");
+      trashButton.type = "button";
+      trashButton.className = "tiny-btn is-danger";
+      trashButton.textContent = "Trash";
+      trashButton.addEventListener("click", () => {
+        discardWaitingItem(item.id);
         saveState();
         renderApp();
       });
+
+      side.appendChild(statusField);
+      side.appendChild(trashButton);
+
+      row.appendChild(main);
+      row.appendChild(side);
+      waitingList.appendChild(row);
     });
-  }
+  };
+
+  const renderProjectList = () => {
+    projectList.innerHTML = "";
+
+    if (appState.projects.length === 0) {
+      projectList.appendChild(createEmptyState("Projects will appear here when you want to track an outcome that needs more than one step."));
+      return;
+    }
+
+    appState.projects.forEach(project => {
+      const relatedTasks = getAllActionTaskEntries().filter(entry => entry.task.projectId === project.id);
+      const row = document.createElement("li");
+      row.className = "gtd-item";
+
+      const top = document.createElement("div");
+      top.className = "gtd-item__top";
+
+      const title = document.createElement("strong");
+      title.textContent = project.title;
+
+      const meta = document.createElement("span");
+      meta.className = "gtd-item__meta";
+      meta.textContent = relatedTasks.length === 1 ? "1 linked next action" : `${relatedTasks.length} linked next actions`;
+
+      top.appendChild(title);
+      top.appendChild(meta);
+
+      row.appendChild(top);
+
+      if (project.note) {
+        const note = document.createElement("p");
+        note.className = "gtd-item__note";
+        note.textContent = project.note;
+        row.appendChild(note);
+      }
+
+      if (relatedTasks.length > 0) {
+        const relatedList = document.createElement("ul");
+        relatedList.className = "gtd-linked-list";
+
+        relatedTasks.forEach(({ section, task }) => {
+          const item = document.createElement("li");
+          item.textContent = `${task.title} · ${section.title} · ${getTaskContextLabel(task.context)}`;
+          relatedList.appendChild(item);
+        });
+
+        row.appendChild(relatedList);
+      }
+
+      const controls = document.createElement("div");
+      controls.className = "gtd-item__controls";
+
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "tiny-btn";
+      editButton.textContent = "Edit";
+      editButton.addEventListener("click", () => {
+        const nextTitle = prompt("Edit project title", project.title);
+
+        if (typeof nextTitle !== "string") {
+          return;
+        }
+
+        const trimmedTitle = nextTitle.trim();
+
+        if (!trimmedTitle) {
+          return;
+        }
+
+        const nextNote = prompt("Edit project note", project.note || "");
+
+        project.title = trimmedTitle;
+        project.note = typeof nextNote === "string" ? nextNote.trim() : project.note;
+        saveState();
+        renderApp();
+      });
+
+      const trashButton = document.createElement("button");
+      trashButton.type = "button";
+      trashButton.className = "tiny-btn is-danger";
+      trashButton.textContent = "Trash";
+      trashButton.addEventListener("click", () => {
+        discardProject(project.id);
+        saveState();
+        renderApp();
+      });
+
+      controls.appendChild(editButton);
+      controls.appendChild(trashButton);
+      row.appendChild(controls);
+      projectList.appendChild(row);
+    });
+  };
+
+  const renderSomedayList = () => {
+    somedayList.innerHTML = "";
+
+    if (appState.somedayItems.length === 0) {
+      somedayList.appendChild(createEmptyState("Keep low-commitment ideas here so they stay visible without becoming current work."));
+      return;
+    }
+
+    appState.somedayItems.forEach(item => {
+      const row = document.createElement("li");
+      row.className = "gtd-item";
+
+      const top = document.createElement("div");
+      top.className = "gtd-item__top";
+
+      const title = document.createElement("strong");
+      title.textContent = item.title;
+
+      const meta = document.createElement("span");
+      meta.className = "gtd-item__meta";
+      meta.textContent = `Saved ${formatShortDate(item.createdAt)}`;
+
+      top.appendChild(title);
+      top.appendChild(meta);
+      row.appendChild(top);
+
+      if (item.note) {
+        const note = document.createElement("p");
+        note.className = "gtd-item__note";
+        note.textContent = item.note;
+        row.appendChild(note);
+      }
+
+      const controls = document.createElement("div");
+      controls.className = "gtd-item__controls";
+
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "tiny-btn";
+      editButton.textContent = "Edit";
+      editButton.addEventListener("click", () => {
+        const nextTitle = prompt("Edit someday / maybe title", item.title);
+
+        if (typeof nextTitle !== "string") {
+          return;
+        }
+
+        const trimmedTitle = nextTitle.trim();
+
+        if (!trimmedTitle) {
+          return;
+        }
+
+        const nextNote = prompt("Edit someday / maybe note", item.note || "");
+
+        item.title = trimmedTitle;
+        item.note = typeof nextNote === "string" ? nextNote.trim() : item.note;
+        saveState();
+        renderApp();
+      });
+
+      const trashButton = document.createElement("button");
+      trashButton.type = "button";
+      trashButton.className = "tiny-btn is-danger";
+      trashButton.textContent = "Trash";
+      trashButton.addEventListener("click", () => {
+        discardSomedayItem(item.id);
+        saveState();
+        renderApp();
+      });
+
+      controls.appendChild(editButton);
+      controls.appendChild(trashButton);
+      row.appendChild(controls);
+      somedayList.appendChild(row);
+    });
+  };
+
+  const renderReferenceList = () => {
+    referenceList.innerHTML = "";
+
+    if (appState.referenceItems.length === 0) {
+      referenceList.appendChild(createEmptyState("Reference is for information only. Add notes or links that should stay out of your task system."));
+      return;
+    }
+
+    appState.referenceItems.forEach(item => {
+      const row = document.createElement("li");
+      row.className = "gtd-item";
+
+      const top = document.createElement("div");
+      top.className = "gtd-item__top";
+
+      const title = document.createElement("strong");
+      title.textContent = item.title;
+
+      const meta = document.createElement("span");
+      meta.className = "gtd-item__meta";
+      meta.textContent = item.link || "Reference note";
+
+      top.appendChild(title);
+      top.appendChild(meta);
+      row.appendChild(top);
+
+      if (item.note) {
+        const note = document.createElement("p");
+        note.className = "gtd-item__note";
+        note.textContent = item.note;
+        row.appendChild(note);
+      }
+
+      if (item.link) {
+        const link = document.createElement("a");
+        link.className = "gtd-reference-link";
+        link.href = getReferenceHref(item.link);
+        link.target = "_blank";
+        link.rel = "noreferrer noopener";
+        link.textContent = item.link;
+        row.appendChild(link);
+      }
+
+      const controls = document.createElement("div");
+      controls.className = "gtd-item__controls";
+
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "tiny-btn";
+      editButton.textContent = "Edit";
+      editButton.addEventListener("click", () => {
+        const nextTitle = prompt("Edit reference title", item.title);
+
+        if (typeof nextTitle !== "string") {
+          return;
+        }
+
+        const trimmedTitle = nextTitle.trim();
+
+        if (!trimmedTitle) {
+          return;
+        }
+
+        const nextLink = prompt("Edit reference link", item.link || "");
+        const nextNote = prompt("Edit reference note", item.note || "");
+
+        item.title = trimmedTitle;
+        item.link = typeof nextLink === "string" ? nextLink.trim() : item.link;
+        item.note = typeof nextNote === "string" ? nextNote.trim() : item.note;
+        saveState();
+        renderApp();
+      });
+
+      const trashButton = document.createElement("button");
+      trashButton.type = "button";
+      trashButton.className = "tiny-btn is-danger";
+      trashButton.textContent = "Trash";
+      trashButton.addEventListener("click", () => {
+        discardReferenceItem(item.id);
+        saveState();
+        renderApp();
+      });
+
+      controls.appendChild(editButton);
+      controls.appendChild(trashButton);
+      row.appendChild(controls);
+      referenceList.appendChild(row);
+    });
+  };
+
+  const renderTrashList = () => {
+    trashList.innerHTML = "";
+
+    if (appState.trashItems.length === 0) {
+      trashList.appendChild(createEmptyState("Trash is empty. Discarded GTD items and deleted action tasks can sit here temporarily before final cleanup."));
+      return;
+    }
+
+    [...appState.trashItems]
+      .sort((left, right) => new Date(right.discardedAt) - new Date(left.discardedAt))
+      .forEach(item => {
+        const row = document.createElement("li");
+        row.className = "gtd-item";
+
+        const top = document.createElement("div");
+        top.className = "gtd-item__top";
+
+        const title = document.createElement("strong");
+        title.textContent = item.title;
+
+        const meta = document.createElement("span");
+        meta.className = "gtd-item__meta";
+        meta.textContent = `${getTrashKindLabel(item.kind)}${item.detail ? ` · ${item.detail}` : ""}`;
+
+        top.appendChild(title);
+        top.appendChild(meta);
+        row.appendChild(top);
+
+        const note = document.createElement("p");
+        note.className = "gtd-item__note";
+        note.textContent = `Discarded ${formatShortDate(item.discardedAt)}`;
+        row.appendChild(note);
+
+        const controls = document.createElement("div");
+        controls.className = "gtd-item__controls";
+
+        const restoreButton = document.createElement("button");
+        restoreButton.type = "button";
+        restoreButton.className = "tiny-btn";
+        restoreButton.textContent = "Restore";
+        restoreButton.addEventListener("click", () => {
+          restoreTrashItem(item.id);
+          saveState();
+          renderApp();
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "tiny-btn is-danger";
+        deleteButton.textContent = "Delete forever";
+        deleteButton.addEventListener("click", () => {
+          appState.trashItems = appState.trashItems.filter(entry => entry.id !== item.id);
+          saveState();
+          renderApp();
+        });
+
+        controls.appendChild(restoreButton);
+        controls.appendChild(deleteButton);
+        row.appendChild(controls);
+        trashList.appendChild(row);
+      });
+  };
+
+  renderInboxList();
+  renderContextGroups();
+  renderWaitingList();
+  renderProjectList();
+  renderSomedayList();
+  renderReferenceList();
+  renderTrashList();
+
+  document.getElementById("gtdInboxForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const input = document.getElementById("gtdInboxInput");
+    const title = input.value.trim();
+
+    if (!title) {
+      return;
+    }
+
+    appState.inboxItems.unshift(createInboxItem(title));
+    input.value = "";
+    saveState();
+    renderApp();
+  });
+
+  document.getElementById("contextTaskForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    const titleInput = document.getElementById("contextTaskTitleInput");
+    const title = titleInput.value.trim();
+
+    if (!title) {
+      return;
+    }
+
+    const result = addActionTask({
+      title,
+      sectionId: document.getElementById("contextTaskSectionSelect").value,
+      context: document.getElementById("contextTaskContextSelect").value,
+      projectId: document.getElementById("contextTaskProjectSelect").value
+    });
+
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+
+    event.target.reset();
+    saveState();
+    renderApp();
+  });
 
   document.getElementById("waitingForm").addEventListener("submit", event => {
     event.preventDefault();
@@ -1746,6 +3298,90 @@ function renderWaitingFor() {
     saveState();
     renderApp();
   });
+
+  document.getElementById("gtdProjectForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const titleInput = document.getElementById("gtdProjectTitleInput");
+    const noteInput = document.getElementById("gtdProjectNoteInput");
+    const title = titleInput.value.trim();
+
+    if (!title) {
+      return;
+    }
+
+    appState.projects.unshift(
+      createProject({
+        title,
+        note: noteInput.value.trim()
+      })
+    );
+
+    event.target.reset();
+    saveState();
+    renderApp();
+  });
+
+  document.getElementById("gtdSomedayForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const titleInput = document.getElementById("gtdSomedayTitleInput");
+    const noteInput = document.getElementById("gtdSomedayNoteInput");
+    const title = titleInput.value.trim();
+
+    if (!title) {
+      return;
+    }
+
+    appState.somedayItems.unshift(
+      createSomedayItem({
+        title,
+        note: noteInput.value.trim()
+      })
+    );
+
+    event.target.reset();
+    saveState();
+    renderApp();
+  });
+
+  document.getElementById("gtdReferenceForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const titleInput = document.getElementById("gtdReferenceTitleInput");
+    const linkInput = document.getElementById("gtdReferenceLinkInput");
+    const noteInput = document.getElementById("gtdReferenceNoteInput");
+    const title = titleInput.value.trim();
+
+    if (!title) {
+      return;
+    }
+
+    appState.referenceItems.unshift(
+      createReferenceItem({
+        title,
+        link: linkInput.value.trim(),
+        note: noteInput.value.trim()
+      })
+    );
+
+    event.target.reset();
+    saveState();
+    renderApp();
+  });
+
+  document.getElementById("emptyTrashBtn").addEventListener("click", () => {
+    if (appState.trashItems.length === 0) {
+      return;
+    }
+
+    const confirmed = confirm("Delete every item in Trash permanently?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    appState.trashItems = [];
+    saveState();
+    renderApp();
+  });
 }
 
 function renderBudgetSidebar() {
@@ -1762,8 +3398,7 @@ function renderBudgetSidebar() {
       id: category.id,
       title: category.title,
       count: category.items.length,
-      total: category.items.reduce((sum, item) => sum + item.amount, 0),
-      isCustom: !isDefaultBudgetCategory(category.id)
+      total: category.items.reduce((sum, item) => sum + item.amount, 0)
     }))
   ];
 
@@ -1783,40 +3418,91 @@ function renderBudgetSidebar() {
     });
     item.appendChild(button);
 
-    if (category.isCustom) {
-      const deleteButton = document.createElement("button");
+    list.appendChild(item);
+  });
+}
 
-      deleteButton.type = "button";
-      deleteButton.className = "tiny-btn is-danger sidebar-delete-btn";
-      deleteButton.textContent = "Delete";
-      deleteButton.setAttribute("aria-label", `Delete ${category.title}`);
-      deleteButton.addEventListener("click", () => {
-        const confirmed = confirm(
-          `Are you sure you want to delete \"${category.title}\"? Its budget items will be moved to Monthly Budget.`
-        );
+function renderBudgetCategoryManager() {
+  const list = document.getElementById("budgetCategoryManagerList");
 
-        if (!confirmed) {
-          return;
-        }
+  if (!list) {
+    return;
+  }
 
-        const deletionResult = deleteBudgetCategory(category.id);
+  if (appState.budgetCategories.length === 0) {
+    list.appendChild(createEmptyState("No categories yet. Create one above to start organizing your budget."));
+    return;
+  }
 
-        if (!deletionResult) {
-          return;
-        }
+  appState.budgetCategories.forEach(category => {
+    const item = document.createElement("li");
+    const copy = document.createElement("div");
+    const title = document.createElement("strong");
+    const meta = document.createElement("p");
+    const actions = document.createElement("div");
+    const deleteButton = document.createElement("button");
+    const deletionCopy = getBudgetCategoryDeletionCopy(category);
+    const total = category.items.reduce((sum, entry) => sum + entry.amount, 0);
+    const itemLabel = category.items.length === 1 ? "1 item" : `${category.items.length} items`;
 
-        saveState();
-        renderApp();
-      });
-      item.appendChild(deleteButton);
-    }
+    item.className = "budget-category-manager__item";
+    copy.className = "budget-category-manager__copy";
+    title.textContent = category.title;
+    meta.className = "budget-category-manager__meta";
+    meta.textContent = `${itemLabel} · ${formatCurrency(total)} · ${deletionCopy.detail}`;
 
+    actions.className = "budget-category-manager__actions";
+    deleteButton.type = "button";
+    deleteButton.className = "tiny-btn is-danger";
+    deleteButton.textContent = "Delete";
+    deleteButton.setAttribute("aria-label", `Delete ${category.title}`);
+    deleteButton.addEventListener("click", () => {
+      const confirmed = confirm(deletionCopy.confirmMessage);
+
+      if (!confirmed) {
+        return;
+      }
+
+      const deletionResult = deleteBudgetCategory(category.id);
+
+      if (!deletionResult) {
+        return;
+      }
+
+      saveState();
+      renderApp();
+    });
+
+    copy.append(title, meta);
+    actions.appendChild(deleteButton);
+    item.append(copy, actions);
     list.appendChild(item);
   });
 }
 
 function populateBudgetForm(editorTarget) {
   const categorySelect = document.getElementById("budgetCategorySelect");
+  const titleInput = document.getElementById("budgetTitleInput");
+  const amountInput = document.getElementById("budgetAmountInput");
+  const submitButton = document.querySelector("#budgetForm button[type='submit']");
+
+  if (appState.budgetCategories.length === 0) {
+    const option = document.createElement("option");
+
+    option.value = "";
+    option.textContent = "Create a category first";
+    categorySelect.appendChild(option);
+    categorySelect.disabled = true;
+    titleInput.disabled = true;
+    amountInput.disabled = true;
+    submitButton.disabled = true;
+    return;
+  }
+
+  titleInput.disabled = false;
+  amountInput.disabled = false;
+  submitButton.disabled = false;
+  categorySelect.disabled = false;
 
   appState.budgetCategories.forEach(category => {
     const option = document.createElement("option");
@@ -1825,7 +3511,8 @@ function populateBudgetForm(editorTarget) {
     categorySelect.appendChild(option);
   });
 
-  const preferredCategory = editorTarget?.category.id || (uiState.selectedBudgetCategory === "all" ? DEFAULT_BUDGET_CATEGORY_ID : uiState.selectedBudgetCategory);
+  const fallbackCategoryId = getBudgetCategoryById(DEFAULT_BUDGET_CATEGORY_ID)?.id || appState.budgetCategories[0]?.id || "";
+  const preferredCategory = editorTarget?.category.id || (uiState.selectedBudgetCategory === "all" ? fallbackCategoryId : uiState.selectedBudgetCategory);
   categorySelect.value = preferredCategory;
 
   if (uiState.selectedBudgetCategory !== "all") {
@@ -1843,7 +3530,11 @@ function renderBudgetList(entries) {
   const budgetList = document.getElementById("budgetList");
 
   if (entries.length === 0) {
-    budgetList.appendChild(createEmptyState("This category is empty. Add a budget item to get started."));
+    budgetList.appendChild(createEmptyState(
+      appState.budgetCategories.length === 0
+        ? "Create a budget category to start adding items."
+        : "This category is empty. Add a budget item to get started."
+    ));
     return;
   }
 
@@ -1894,7 +3585,10 @@ function renderBudgetList(entries) {
 }
 
 function createEmptyState(message) {
-  return document.createDocumentFragment();
+  const item = document.createElement("li");
+  item.className = "empty-state";
+  item.textContent = message;
+  return item;
 }
 
 viewNav.addEventListener("click", event => {
@@ -1918,7 +3612,8 @@ resetDataButton.addEventListener("click", () => {
   uiState = {
     activeView: appState.activeView,
     selectedBudgetCategory: appState.selectedBudgetCategory,
-    budgetEditorId: null
+    budgetEditorId: null,
+    showBudgetCategoryManager: false
   };
   saveState();
   renderApp();
