@@ -848,6 +848,12 @@ h1 {
   margin-top: 18px;
 }
 
+.sidebar-list__item {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
 .sidebar-btn {
   width: 100%;
   display: flex;
@@ -869,6 +875,13 @@ h1 {
 .sidebar-btn span {
   color: var(--muted);
   font-size: 0.84rem;
+}
+
+.sidebar-delete-btn {
+  flex: 0 0 auto;
+  align-self: center;
+  padding-inline: 14px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .budget-main {
@@ -1125,5 +1138,13 @@ h1 {
 
   .sidebar-btn {
     padding-block: 12px;
+  }
+
+  .sidebar-list__item {
+    flex-direction: column;
+  }
+
+  .sidebar-delete-btn {
+    width: 100%;
   }
 }

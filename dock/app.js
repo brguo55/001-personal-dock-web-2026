@@ -731,6 +731,52 @@ function getBudgetCategoryById(categoryId) {
   return appState.budgetCategories.find(category => category.id === categoryId);
 }
 
+function isDefaultBudgetCategory(categoryId) {
+  return BUDGET_CATEGORY_DEFINITIONS.some(category => category.id === categoryId);
+}
+
+function getBudgetCategoryDeleteTarget(categoryId) {
+  if (categoryId !== DEFAULT_BUDGET_CATEGORY_ID) {
+    const defaultCategory = getBudgetCategoryById(DEFAULT_BUDGET_CATEGORY_ID);
+
+    if (defaultCategory) {
+      return defaultCategory;
+    }
+  }
+
+  return appState.budgetCategories.find(category => category.id !== categoryId) || null;
+}
+
+function deleteBudgetCategory(categoryId) {
+  const category = getBudgetCategoryById(categoryId);
+
+  if (!category || isDefaultBudgetCategory(categoryId)) {
+    return null;
+  }
+
+  const moveTarget = getBudgetCategoryDeleteTarget(categoryId);
+
+  if (moveTarget && category.items.length > 0) {
+    moveTarget.items = [...category.items, ...moveTarget.items];
+  }
+
+  if (category.items.some(item => item.id === uiState.budgetEditorId)) {
+    uiState.budgetEditorId = null;
+  }
+
+  appState.budgetCategories = appState.budgetCategories.filter(entry => entry.id !== categoryId);
+
+  if (uiState.selectedBudgetCategory === categoryId) {
+    uiState.selectedBudgetCategory = moveTarget ? moveTarget.id : "all";
+  }
+
+  return {
+    deletedCategoryTitle: category.title,
+    movedItemCount: category.items.length,
+    moveTargetTitle: moveTarget?.title || "All Budgets"
+  };
+}
+
 function findBudgetItem(itemId) {
   for (const category of appState.budgetCategories) {
     const item = category.items.find(entry => entry.id === itemId);
@@ -1390,7 +1436,7 @@ function renderBudgetPlanner() {
           </div>
           <button type="submit" class="secondary-btn">Create category</button>
           <p class="budget-category-form__message" id="budgetCategoryFormMessage">
-            Custom categories are saved, exported, and restored with your backup.
+            Custom categories are saved with your backup. If you delete one later, its items move to Monthly Budget.
           </p>
         </form>
 
@@ -1481,7 +1527,7 @@ function renderBudgetPlanner() {
   });
 
   budgetCategoryNameInput.addEventListener("input", () => {
-    budgetCategoryFormMessage.textContent = "Custom categories are saved, exported, and restored with your backup.";
+    budgetCategoryFormMessage.textContent = "Custom categories are saved with your backup. If you delete one later, its items move to Monthly Budget.";
     budgetCategoryFormMessage.dataset.tone = "info";
   });
 
@@ -1716,13 +1762,16 @@ function renderBudgetSidebar() {
       id: category.id,
       title: category.title,
       count: category.items.length,
-      total: category.items.reduce((sum, item) => sum + item.amount, 0)
+      total: category.items.reduce((sum, item) => sum + item.amount, 0),
+      isCustom: !isDefaultBudgetCategory(category.id)
     }))
   ];
 
   items.forEach(category => {
     const item = document.createElement("li");
     const button = document.createElement("button");
+
+    item.className = "sidebar-list__item";
     button.type = "button";
     button.className = `sidebar-btn ${category.id === uiState.selectedBudgetCategory ? "is-active" : ""}`;
     button.innerHTML = `
@@ -1733,6 +1782,35 @@ function renderBudgetSidebar() {
       setBudgetCategory(category.id);
     });
     item.appendChild(button);
+
+    if (category.isCustom) {
+      const deleteButton = document.createElement("button");
+
+      deleteButton.type = "button";
+      deleteButton.className = "tiny-btn is-danger sidebar-delete-btn";
+      deleteButton.textContent = "Delete";
+      deleteButton.setAttribute("aria-label", `Delete ${category.title}`);
+      deleteButton.addEventListener("click", () => {
+        const confirmed = confirm(
+          `Are you sure you want to delete \"${category.title}\"? Its budget items will be moved to Monthly Budget.`
+        );
+
+        if (!confirmed) {
+          return;
+        }
+
+        const deletionResult = deleteBudgetCategory(category.id);
+
+        if (!deletionResult) {
+          return;
+        }
+
+        saveState();
+        renderApp();
+      });
+      item.appendChild(deleteButton);
+    }
+
     list.appendChild(item);
   });
 }
