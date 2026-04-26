@@ -1,6 +1,8 @@
 const STORAGE_KEY = "northstar-planner-v1";
 const LEGACY_ACTION_STORAGE_KEY = "actionboard-v1";
 const DEFAULT_VIEW = "actionBoard";
+const BACKUP_FORMAT = "personaldock-backup";
+const BACKUP_VERSION = 1;
 
 const VIEW_DETAILS = {
   dashboard: "Quickly review today's priorities, budget snapshot, and recent notes.",
@@ -11,6 +13,35 @@ const VIEW_DETAILS = {
 
 const WAITING_STATUSES = ["Waiting", "Follow Up", "Received", "Done"];
 
+const LEFT_COLUMN_SECTION_IDS = ["deepWork", "easyWork", "top3PrioritiesToday"];
+const QUADRANT_SECTION_IDS = [
+  "importantUrgent",
+  "importantNotUrgent",
+  "notImportantUrgent",
+  "notImportantNotUrgent"
+];
+const TASK_LIMITS = {
+  top3PrioritiesToday: 3
+};
+const TASK_LIMIT_MESSAGES = {
+  top3PrioritiesToday: "You can only keep 3 top priorities."
+};
+const LEGACY_ACTION_SAMPLE_TASKS = {
+  deepWork: ["Outline the project", "Focus on one lesson", "Clean up a core workflow"],
+  easyWork: ["Tidy the desktop", "Back up computer files", "Do and fold the laundry"],
+  importantUrgent: ["Finish today's must-deliver item"],
+  importantNotUrgent: ["Move the long-term learning plan forward", "Maintain the weekly exercise habit"],
+  notImportantUrgent: ["Reply to urgent but low-value messages"],
+  notImportantNotUrgent: ["Casual browsing", "Catch up on social feeds"],
+  mealPlan: ["Breakfast: oats and eggs", "Lunch: rice, vegetables, and protein", "Dinner: keep it light"],
+  life: ["Restock daily essentials", "Refresh one room"],
+  exercise: ["Walk for 20 minutes", "Stretch before dinner"],
+  eveningNight: ["Take a shower", "Write tomorrow's top three", "Keep phone time short before bed"],
+  extraLearning: ["Practice JavaScript", "Study SwiftUI basics", "Improve how you use AI tools"],
+  weirdIdeas: ["Sketch a small life-system app idea"],
+  memo: ["Drop quick reminders here"]
+};
+
 const ACTION_SECTION_DEFINITIONS = [
   {
     id: "deepWork",
@@ -18,7 +49,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "DI",
     accent: "#dce8fa",
     size: "featured",
-    sampleTasks: ["Outline the project", "Focus on one lesson", "Clean up a core workflow"]
+    sampleTasks: []
   },
   {
     id: "easyWork",
@@ -26,7 +57,15 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "EZ",
     accent: "#e3f0d7",
     size: "featured",
-    sampleTasks: ["Tidy the desktop", "Back up computer files", "Do and fold the laundry"]
+    sampleTasks: []
+  },
+  {
+    id: "top3PrioritiesToday",
+    title: "Top 3 Priorities Today",
+    emoji: "T3",
+    accent: "#f3e3c8",
+    size: "",
+    sampleTasks: []
   },
   {
     id: "importantUrgent",
@@ -34,7 +73,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "!!",
     accent: "#f6ddd0",
     size: "",
-    sampleTasks: ["Finish today's must-deliver item"]
+    sampleTasks: []
   },
   {
     id: "importantNotUrgent",
@@ -42,7 +81,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "++",
     accent: "#dfedd4",
     size: "",
-    sampleTasks: ["Move the long-term learning plan forward", "Maintain the weekly exercise habit"]
+    sampleTasks: []
   },
   {
     id: "notImportantUrgent",
@@ -50,7 +89,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "->",
     accent: "#f8edc2",
     size: "",
-    sampleTasks: ["Reply to urgent but low-value messages"]
+    sampleTasks: []
   },
   {
     id: "notImportantNotUrgent",
@@ -58,7 +97,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "--",
     accent: "#efdce7",
     size: "",
-    sampleTasks: ["Casual browsing", "Catch up on social feeds"]
+    sampleTasks: []
   },
   {
     id: "mealPlan",
@@ -66,7 +105,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "MP",
     accent: "#f5dec7",
     size: "tall",
-    sampleTasks: ["Breakfast: oats and eggs", "Lunch: rice, vegetables, and protein", "Dinner: keep it light"]
+    sampleTasks: []
   },
   {
     id: "life",
@@ -74,7 +113,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "LF",
     accent: "#ddeaf4",
     size: "",
-    sampleTasks: ["Restock daily essentials", "Refresh one room"]
+    sampleTasks: []
   },
   {
     id: "exercise",
@@ -82,7 +121,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "EX",
     accent: "#dfe9fb",
     size: "",
-    sampleTasks: ["Walk for 20 minutes", "Stretch before dinner"]
+    sampleTasks: []
   },
   {
     id: "eveningNight",
@@ -90,7 +129,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "PM",
     accent: "#f4e6a8",
     size: "tall",
-    sampleTasks: ["Take a shower", "Write tomorrow's top three", "Keep phone time short before bed"]
+    sampleTasks: []
   },
   {
     id: "extraLearning",
@@ -98,7 +137,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "XL",
     accent: "#f7ecc6",
     size: "",
-    sampleTasks: ["Practice JavaScript", "Study SwiftUI basics", "Improve how you use AI tools"]
+    sampleTasks: []
   },
   {
     id: "weirdIdeas",
@@ -106,7 +145,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "WI",
     accent: "#f2d9de",
     size: "",
-    sampleTasks: ["Sketch a small life-system app idea"]
+    sampleTasks: []
   },
   {
     id: "memo",
@@ -114,7 +153,7 @@ const ACTION_SECTION_DEFINITIONS = [
     emoji: "MM",
     accent: "#dfedd7",
     size: "",
-    sampleTasks: ["Drop quick reminders here"]
+    sampleTasks: []
   }
 ];
 
@@ -179,6 +218,8 @@ const BUDGET_CATEGORY_DEFINITIONS = [
   }
 ];
 
+const DEFAULT_BUDGET_CATEGORY_ID = "monthlyBudget";
+
 const DEFAULT_NOTES = [
   "Keep the day small enough that you still have energy left at the end.",
   "Protect deep work time before opening your messages.",
@@ -210,6 +251,7 @@ const DEFAULT_WAITING_ITEMS = [
 ];
 
 const PRIORITY_ORDER = [
+  "top3PrioritiesToday",
   "importantUrgent",
   "deepWork",
   "importantNotUrgent",
@@ -230,6 +272,11 @@ const actionTemplate = document.getElementById("actionSectionTemplate");
 const budgetItemTemplate = document.getElementById("budgetItemTemplate");
 const viewNav = document.getElementById("viewNav");
 const resetDataButton = document.getElementById("resetDataBtn");
+const exportJsonButton = document.getElementById("exportJsonBtn");
+const importJsonButton = document.getElementById("importJsonBtn");
+const importJsonInput = document.getElementById("importJsonInput");
+const backupStatus = document.getElementById("backupStatus");
+const lastSavedStamp = document.getElementById("lastSavedStamp");
 const viewDescription = document.getElementById("viewDescription");
 const todayStamp = document.getElementById("todayStamp");
 
@@ -238,6 +285,10 @@ let uiState = {
   activeView: DEFAULT_VIEW,
   selectedBudgetCategory: appState.selectedBudgetCategory,
   budgetEditorId: null
+};
+let backupUiState = {
+  message: "Export a JSON backup or import one to restore your current data.",
+  tone: "info"
 };
 
 function createId() {
@@ -265,6 +316,14 @@ function createBudgetItem(title, amount, checked = false) {
   };
 }
 
+function createBudgetCategory(title) {
+  return {
+    id: createBudgetCategoryId(title),
+    title,
+    items: []
+  };
+}
+
 function createNote(text, createdAt = new Date().toISOString()) {
   return {
     id: createId(),
@@ -288,6 +347,7 @@ function buildDefaultState() {
   return {
     activeView: DEFAULT_VIEW,
     selectedBudgetCategory: "all",
+    lastSavedAt: null,
     actionSections: ACTION_SECTION_DEFINITIONS.map(section => ({
       id: section.id,
       title: section.title,
@@ -345,22 +405,27 @@ function buildStateFromLegacy(legacySections) {
 
 function normalizeState(rawState) {
   const defaultState = buildDefaultState();
+  const budgetCategories = mergeBudgetCategories(rawState?.budgetCategories);
+  const budgetCategoryIds = getBudgetCategoryIds(budgetCategories);
   const activeView = VIEW_DETAILS[rawState?.activeView] ? rawState.activeView : defaultState.activeView;
-  const selectedBudgetCategory = getBudgetCategoryIds().includes(rawState?.selectedBudgetCategory)
+  const selectedBudgetCategory = budgetCategoryIds.includes(rawState?.selectedBudgetCategory)
     ? rawState.selectedBudgetCategory
     : defaultState.selectedBudgetCategory;
 
   return {
     activeView,
     selectedBudgetCategory,
+    lastSavedAt: normalizeTimestamp(rawState?.lastSavedAt),
     actionSections: mergeActionSections(rawState?.actionSections),
-    budgetCategories: mergeBudgetCategories(rawState?.budgetCategories),
+    budgetCategories,
     notes: normalizeNotes(rawState?.notes),
     waitingItems: normalizeWaitingItems(rawState?.waitingItems)
   };
 }
 
 function mergeActionSections(storedSections) {
+  const shouldStripLegacySeedData =
+    Array.isArray(storedSections) && !storedSections.some(section => section?.id === "top3PrioritiesToday");
   const sectionMap = new Map(
     Array.isArray(storedSections)
       ? storedSections.filter(section => section && typeof section.id === "string").map(section => [section.id, section])
@@ -369,7 +434,8 @@ function mergeActionSections(storedSections) {
 
   return ACTION_SECTION_DEFINITIONS.map(definition => {
     const existingSection = sectionMap.get(definition.id);
-    const tasks = Array.isArray(existingSection?.tasks)
+    const useStoredTasks = Array.isArray(existingSection?.tasks) && !shouldClearLegacySampleTasks(existingSection, shouldStripLegacySeedData);
+    const tasks = useStoredTasks
       ? existingSection.tasks
           .map(task => {
             if (typeof task === "string") {
@@ -408,8 +474,23 @@ function mergeBudgetCategories(storedCategories) {
       ? storedCategories.filter(category => category && typeof category.id === "string").map(category => [category.id, category])
       : []
   );
+  const extraDefinitions = Array.isArray(storedCategories)
+    ? storedCategories
+        .filter(category => {
+          if (!category || typeof category.id !== "string") {
+            return false;
+          }
 
-  return BUDGET_CATEGORY_DEFINITIONS.map(definition => {
+          return !BUDGET_CATEGORY_DEFINITIONS.some(definition => definition.id === category.id);
+        })
+        .map(category => ({
+          id: category.id,
+          title: typeof category.title === "string" && category.title.trim() ? category.title.trim() : category.id,
+          sampleItems: []
+        }))
+    : [];
+
+  return [...BUDGET_CATEGORY_DEFINITIONS, ...extraDefinitions].map(definition => {
     const existingCategory = categoryMap.get(definition.id);
     const items = Array.isArray(existingCategory?.items)
       ? existingCategory.items
@@ -433,10 +514,60 @@ function mergeBudgetCategories(storedCategories) {
 
     return {
       id: definition.id,
-      title: definition.title,
+      title: typeof existingCategory?.title === "string" && existingCategory.title.trim()
+        ? existingCategory.title.trim()
+        : definition.title,
       items
     };
   });
+}
+
+function shouldClearLegacySampleTasks(section, shouldStripLegacySeedData) {
+  if (!shouldStripLegacySeedData) {
+    return false;
+  }
+
+  const legacyTasks = LEGACY_ACTION_SAMPLE_TASKS[section?.id];
+
+  if (!legacyTasks || !Array.isArray(section?.tasks)) {
+    return false;
+  }
+
+  const normalizedTitles = section.tasks
+    .map(task => {
+      if (typeof task === "string") {
+        return task.trim();
+      }
+
+      return typeof task?.title === "string" ? task.title.trim() : "";
+    })
+    .filter(Boolean);
+
+  if (normalizedTitles.length !== legacyTasks.length) {
+    return false;
+  }
+
+  const hasCompletedTasks = section.tasks.some(task => typeof task === "object" && Boolean(task?.done));
+
+  return !hasCompletedTasks && normalizedTitles.every((title, index) => title === legacyTasks[index]);
+}
+
+function getTaskLimit(sectionId) {
+  return TASK_LIMITS[sectionId] ?? Infinity;
+}
+
+function getTaskLimitMessage(sectionId) {
+  return TASK_LIMIT_MESSAGES[sectionId] || "";
+}
+
+function normalizeTimestamp(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const parsedTime = Date.parse(value);
+
+  return Number.isNaN(parsedTime) ? null : new Date(parsedTime).toISOString();
 }
 
 function normalizeNotes(notes) {
@@ -494,18 +625,55 @@ function normalizeWaitingItems(waitingItems) {
   return normalized.length > 0 ? normalized : DEFAULT_WAITING_ITEMS.map(item => createWaitingItem(item));
 }
 
-function saveState() {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      activeView: uiState.activeView,
-      selectedBudgetCategory: uiState.selectedBudgetCategory,
-      actionSections: appState.actionSections,
-      budgetCategories: appState.budgetCategories,
-      notes: appState.notes,
-      waitingItems: appState.waitingItems
-    })
-  );
+function getStateSnapshot(lastSavedAt = appState.lastSavedAt ?? null) {
+  return {
+    activeView: uiState.activeView,
+    selectedBudgetCategory: uiState.selectedBudgetCategory,
+    lastSavedAt,
+    actionSections: appState.actionSections,
+    budgetCategories: appState.budgetCategories,
+    notes: appState.notes,
+    waitingItems: appState.waitingItems
+  };
+}
+
+function slugifyBudgetCategoryId(title) {
+  const normalized = title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || "custom-budget";
+}
+
+function createBudgetCategoryId(title) {
+  const baseId = slugifyBudgetCategoryId(title);
+  let nextId = baseId;
+  let suffix = 2;
+
+  while (appState.budgetCategories.some(category => category.id === nextId)) {
+    nextId = `${baseId}-${suffix}`;
+    suffix += 1;
+  }
+
+  return nextId;
+}
+
+function hasBudgetCategoryTitle(title) {
+  const normalizedTitle = title.trim().toLowerCase();
+
+  return appState.budgetCategories.some(category => category.title.trim().toLowerCase() === normalizedTitle);
+}
+
+function saveState(options = {}) {
+  const lastSavedAt = options.touch === false
+    ? normalizeTimestamp(options.lastSavedAt) || appState.lastSavedAt || null
+    : new Date().toISOString();
+
+  appState.lastSavedAt = lastSavedAt;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(getStateSnapshot(lastSavedAt)));
+  updateStorageBackupPanel();
 }
 
 function getWaitingStats() {
@@ -545,8 +713,14 @@ function formatWaitingDate(value) {
   }).format(new Date(`${value}T00:00:00`));
 }
 
-function getBudgetCategoryIds() {
-  return ["all", ...BUDGET_CATEGORY_DEFINITIONS.map(category => category.id)];
+function getBudgetCategoryIds(categories = null) {
+  const sourceCategories = Array.isArray(categories)
+    ? categories
+    : Array.isArray(appState?.budgetCategories)
+      ? appState.budgetCategories
+      : BUDGET_CATEGORY_DEFINITIONS;
+
+  return ["all", ...sourceCategories.filter(category => typeof category?.id === "string").map(category => category.id)];
 }
 
 function getSectionById(sectionId) {
@@ -689,6 +863,127 @@ function formatShortDate(dateValue) {
   }).format(new Date(dateValue));
 }
 
+function formatBackupFileDate(dateValue = new Date()) {
+  const year = dateValue.getFullYear();
+  const month = String(dateValue.getMonth() + 1).padStart(2, "0");
+  const day = String(dateValue.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function setBackupStatus(message, tone = "info") {
+  backupUiState = { message, tone };
+  updateStorageBackupPanel();
+}
+
+function updateStorageBackupPanel() {
+  if (!backupStatus || !lastSavedStamp) {
+    return;
+  }
+
+  lastSavedStamp.textContent = appState.lastSavedAt
+    ? `Last saved ${formatShortDate(appState.lastSavedAt)}`
+    : "No local save timestamp yet";
+  backupStatus.textContent = backupUiState.message;
+  backupStatus.dataset.tone = backupUiState.tone;
+}
+
+function buildBackupPayload() {
+  return {
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    lastSavedAt: appState.lastSavedAt || null,
+    data: getStateSnapshot(appState.lastSavedAt || null)
+  };
+}
+
+function downloadJsonBackup() {
+  const payload = JSON.stringify(buildBackupPayload(), null, 2);
+  const fileName = `personaldock-backup-${formatBackupFileDate()}.json`;
+  const blob = new Blob([payload], { type: "application/json" });
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = downloadUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(downloadUrl);
+  setBackupStatus(`Exported ${fileName}.`, "success");
+}
+
+function validateBackupShape(candidateState) {
+  if (!candidateState || typeof candidateState !== "object" || Array.isArray(candidateState)) {
+    throw new Error("The selected file does not contain a valid PersonalDock backup.");
+  }
+
+  if (candidateState.activeView && !VIEW_DETAILS[candidateState.activeView]) {
+    throw new Error("The backup file includes an invalid active view.");
+  }
+
+  if (candidateState.selectedBudgetCategory && typeof candidateState.selectedBudgetCategory !== "string") {
+    throw new Error("The backup file includes an invalid selected budget category.");
+  }
+
+  if (!Array.isArray(candidateState.actionSections) || candidateState.actionSections.some(section => typeof section?.id !== "string")) {
+    throw new Error("The backup file is missing valid action board sections.");
+  }
+
+  if (!Array.isArray(candidateState.budgetCategories) || candidateState.budgetCategories.some(category => typeof category?.id !== "string")) {
+    throw new Error("The backup file is missing valid budget categories.");
+  }
+
+  if (!Array.isArray(candidateState.notes) || candidateState.notes.some(note => typeof note !== "object" || note === null)) {
+    throw new Error("The backup file is missing valid notes.");
+  }
+
+  if (!Array.isArray(candidateState.waitingItems) || candidateState.waitingItems.some(item => typeof item !== "object" || item === null)) {
+    throw new Error("The backup file is missing valid waiting items.");
+  }
+
+  return candidateState;
+}
+
+function extractBackupState(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("The selected file does not contain a valid PersonalDock backup.");
+  }
+
+  const candidateState = payload.format === BACKUP_FORMAT ? payload.data : payload;
+  const validatedState = validateBackupShape(candidateState);
+
+  return {
+    ...validatedState,
+    lastSavedAt: validatedState.lastSavedAt || payload.lastSavedAt || null
+  };
+}
+
+async function importJsonBackup(file) {
+  if (!file) {
+    return;
+  }
+
+  if (!file.name.toLowerCase().endsWith(".json")) {
+    throw new Error("Please choose a .json backup file.");
+  }
+
+  const fileText = await file.text();
+  const parsed = JSON.parse(fileText);
+  const importedState = normalizeState(extractBackupState(parsed));
+
+  appState = importedState;
+  uiState = {
+    activeView: importedState.activeView,
+    selectedBudgetCategory: importedState.selectedBudgetCategory,
+    budgetEditorId: null
+  };
+  saveState({ touch: false, lastSavedAt: importedState.lastSavedAt });
+  renderApp();
+  setBackupStatus(`Imported ${file.name}. Current saved data was replaced.`, "success");
+}
+
 function setActiveView(view) {
   if (!VIEW_DETAILS[view]) {
     return;
@@ -710,6 +1005,7 @@ function setBudgetCategory(categoryId) {
 function renderApp() {
   todayStamp.textContent = formatDateLabel(new Date());
   viewDescription.textContent = VIEW_DETAILS[uiState.activeView];
+  updateStorageBackupPanel();
 
   Array.from(viewNav.querySelectorAll(".nav-btn")).forEach(button => {
     button.classList.toggle("is-active", button.dataset.view === uiState.activeView);
@@ -891,26 +1187,10 @@ function renderDashboard() {
 
 function renderActionBoard() {
   const actionStats = getActionStats();
-  const leftColumnSections = appState.actionSections.filter(section =>
-    ["deepWork", "easyWork"].includes(section.id)
-  );
-  const quadrantSections = appState.actionSections.filter(section =>
-    [
-      "importantUrgent",
-      "importantNotUrgent",
-      "notImportantUrgent",
-      "notImportantNotUrgent"
-    ].includes(section.id)
-  );
+  const leftColumnSections = appState.actionSections.filter(section => LEFT_COLUMN_SECTION_IDS.includes(section.id));
+  const quadrantSections = appState.actionSections.filter(section => QUADRANT_SECTION_IDS.includes(section.id));
   const secondarySections = appState.actionSections.filter(section =>
-    ![
-      "deepWork",
-      "easyWork",
-      "importantUrgent",
-      "importantNotUrgent",
-      "notImportantUrgent",
-      "notImportantNotUrgent"
-    ].includes(section.id)
+    ![...LEFT_COLUMN_SECTION_IDS, ...QUADRANT_SECTION_IDS].includes(section.id)
   );
 
   viewRoot.innerHTML = `
@@ -966,6 +1246,12 @@ function renderActionBoard() {
     const taskList = sectionFragment.querySelector(".task-list");
     const form = sectionFragment.querySelector(".section-form");
     const input = sectionFragment.querySelector("input");
+    const taskLimit = getTaskLimit(section.id);
+    const limitMessage = document.createElement("p");
+
+    limitMessage.className = "section-form__message";
+    limitMessage.hidden = true;
+    form.insertAdjacentElement("afterend", limitMessage);
 
     card.style.setProperty("--section-accent", section.accent);
 
@@ -1031,10 +1317,24 @@ function renderActionBoard() {
         return;
       }
 
+      if (section.tasks.length >= taskLimit) {
+        limitMessage.textContent = getTaskLimitMessage(section.id);
+        limitMessage.hidden = false;
+        input.focus();
+        return;
+      }
+
       section.tasks.push(createTask(titleValue));
       input.value = "";
+      limitMessage.hidden = true;
       saveState();
       renderApp();
+    });
+
+    input.addEventListener("input", () => {
+      if (!limitMessage.hidden) {
+        limitMessage.hidden = true;
+      }
     });
 
     if (leftColumnSections.some(item => item.id === section.id)) {
@@ -1076,6 +1376,23 @@ function renderBudgetPlanner() {
           <h2 class="panel-title">Budget categories</h2>
           <p class="panel-subtitle">Choose a category on the left and manage its items on the right.</p>
         </div>
+
+        <form class="budget-category-form" id="budgetCategoryForm">
+          <div class="field">
+            <label for="budgetCategoryNameInput">Create custom category</label>
+            <input
+              id="budgetCategoryNameInput"
+              type="text"
+              maxlength="60"
+              placeholder="For example: Gifts, Home Studio, Side Project"
+              required
+            />
+          </div>
+          <button type="submit" class="secondary-btn">Create category</button>
+          <p class="budget-category-form__message" id="budgetCategoryFormMessage">
+            Custom categories are saved, exported, and restored with your backup.
+          </p>
+        </form>
 
         <ul class="sidebar-list" id="budgetCategoryList"></ul>
       </aside>
@@ -1130,6 +1447,43 @@ function renderBudgetPlanner() {
 
   const budgetForm = document.getElementById("budgetForm");
   const categorySelect = document.getElementById("budgetCategorySelect");
+  const budgetCategoryForm = document.getElementById("budgetCategoryForm");
+  const budgetCategoryNameInput = document.getElementById("budgetCategoryNameInput");
+  const budgetCategoryFormMessage = document.getElementById("budgetCategoryFormMessage");
+
+  budgetCategoryForm.addEventListener("submit", event => {
+    event.preventDefault();
+
+    const categoryTitle = budgetCategoryNameInput.value.trim();
+
+    if (!categoryTitle) {
+      budgetCategoryFormMessage.textContent = "Enter a category name to create it.";
+      budgetCategoryFormMessage.dataset.tone = "error";
+      return;
+    }
+
+    if (hasBudgetCategoryTitle(categoryTitle)) {
+      budgetCategoryFormMessage.textContent = "That budget category already exists.";
+      budgetCategoryFormMessage.dataset.tone = "error";
+      return;
+    }
+
+    const newCategory = createBudgetCategory(categoryTitle);
+
+    appState.budgetCategories.push(newCategory);
+    uiState.selectedBudgetCategory = newCategory.id;
+    uiState.budgetEditorId = null;
+    budgetCategoryNameInput.value = "";
+    budgetCategoryFormMessage.textContent = `${newCategory.title} created.`;
+    budgetCategoryFormMessage.dataset.tone = "success";
+    saveState();
+    renderApp();
+  });
+
+  budgetCategoryNameInput.addEventListener("input", () => {
+    budgetCategoryFormMessage.textContent = "Custom categories are saved, exported, and restored with your backup.";
+    budgetCategoryFormMessage.dataset.tone = "info";
+  });
 
   budgetForm.addEventListener("submit", event => {
     event.preventDefault();
@@ -1386,14 +1740,14 @@ function renderBudgetSidebar() {
 function populateBudgetForm(editorTarget) {
   const categorySelect = document.getElementById("budgetCategorySelect");
 
-  BUDGET_CATEGORY_DEFINITIONS.forEach(category => {
+  appState.budgetCategories.forEach(category => {
     const option = document.createElement("option");
     option.value = category.id;
     option.textContent = category.title;
     categorySelect.appendChild(option);
   });
 
-  const preferredCategory = editorTarget?.category.id || (uiState.selectedBudgetCategory === "all" ? "monthlyBudget" : uiState.selectedBudgetCategory);
+  const preferredCategory = editorTarget?.category.id || (uiState.selectedBudgetCategory === "all" ? DEFAULT_BUDGET_CATEGORY_ID : uiState.selectedBudgetCategory);
   categorySelect.value = preferredCategory;
 
   if (uiState.selectedBudgetCategory !== "all") {
@@ -1462,10 +1816,7 @@ function renderBudgetList(entries) {
 }
 
 function createEmptyState(message) {
-  const empty = document.createElement("li");
-  empty.className = "empty-state";
-  empty.textContent = message;
-  return empty;
+  return document.createDocumentFragment();
 }
 
 viewNav.addEventListener("click", event => {
@@ -1493,6 +1844,37 @@ resetDataButton.addEventListener("click", () => {
   };
   saveState();
   renderApp();
+});
+
+exportJsonButton.addEventListener("click", () => {
+  downloadJsonBackup();
+});
+
+importJsonButton.addEventListener("click", () => {
+  importJsonInput.click();
+});
+
+importJsonInput.addEventListener("change", async event => {
+  const [file] = event.target.files || [];
+
+  if (!file) {
+    return;
+  }
+
+  const confirmed = confirm("Importing a backup will replace your current saved data. Continue?");
+
+  if (!confirmed) {
+    event.target.value = "";
+    return;
+  }
+
+  try {
+    await importJsonBackup(file);
+  } catch (error) {
+    setBackupStatus(error instanceof Error ? error.message : "The backup could not be imported.", "error");
+  } finally {
+    event.target.value = "";
+  }
 });
 
 renderApp();
