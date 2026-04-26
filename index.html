@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PersonalDock</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand-panel">
+        <p class="eyebrow">Personal productivity and budget planning</p>
+        <div class="brand-row">
+          <div>
+            <h1>PersonalDock</h1>
+            <p class="subtitle" id="viewDescription">
+              A calm place to organize your day, tasks, and budget.
+            </p>
+          </div>
+          <p class="today-stamp" id="todayStamp"></p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <nav class="view-nav" id="viewNav" aria-label="Primary navigation">
+          <button type="button" class="nav-btn" data-view="dashboard">Dashboard</button>
+          <button type="button" class="nav-btn" data-view="actionBoard">Action Board</button>
+          <button type="button" class="nav-btn" data-view="waitingFor">Waiting For</button>
+          <button type="button" class="nav-btn" data-view="budgetPlanner">Budget Planner</button>
+        </nav>
+
+        <button type="button" id="resetDataBtn" class="ghost-btn">Reset sample data</button>
+      </div>
+    </header>
+
+    <main id="viewRoot" class="view-root"></main>
+  </div>
+
+  <template id="actionSectionTemplate">
+    <article class="section-card">
+      <div class="section-card__header">
+        <div class="section-card__title-wrap">
+          <span class="section-card__emoji"></span>
+          <div>
+            <h3 class="section-card__title"></h3>
+            <p class="section-card__meta"></p>
+          </div>
+        </div>
+        <span class="section-card__count"></span>
+      </div>
+
+      <ul class="task-list"></ul>
+
+      <form class="section-form">
+        <input type="text" placeholder="Add a task" maxlength="120" />
+        <button type="submit">Add</button>
+      </form>
+    </article>
+  </template>
+
+  <template id="budgetItemTemplate">
+    <li class="budget-item">
+      <label class="budget-item__main">
+        <input type="checkbox" class="budget-item__check" />
+        <span class="budget-item__copy">
+          <strong class="budget-item__title"></strong>
+          <span class="budget-item__meta"></span>
+        </span>
+      </label>
+
+      <div class="budget-item__side">
+        <span class="budget-item__amount"></span>
+        <div class="budget-item__actions">
+          <button type="button" class="tiny-btn edit-item-btn">Edit</button>
+          <button type="button" class="tiny-btn delete-item-btn">Delete</button>
+        </div>
+      </div>
+    </li>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
