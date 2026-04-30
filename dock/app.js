@@ -888,7 +888,18 @@ function saveState(options = {}) {
     : new Date().toISOString();
 
   appState.lastSavedAt = lastSavedAt;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(getStateSnapshot(lastSavedAt)));
+
+  const snapshot = getStateSnapshot(lastSavedAt);
+
+  // Always keep localStorage in sync so the app also works in a plain browser.
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+
+  // When running as a desktop app, also persist to disk via the Python API.
+  // Data is saved to ~/Library/Application Support/MyGTD/data.json
+  if (window.pywebview) {
+    window.pywebview.api.save_data(snapshot);
+  }
+
   updateStorageBackupPanel();
 }
 
@@ -3651,3 +3662,23 @@ importJsonInput.addEventListener("change", async event => {
 });
 
 renderApp();
+
+// ── Desktop app integration (pywebview) ──────────────────────────────────────
+// When running via app.py, pywebview fires 'pywebviewready' once its JS bridge
+// is ready. We then load the saved data from disk and re-render the app.
+// This overrides the localStorage snapshot with the persistent file-based one.
+// Data file location: ~/Library/Application Support/MyGTD/data.json
+window.addEventListener("pywebviewready", () => {
+  window.pywebview.api.load_data().then(data => {
+    if (data && typeof data === "object") {
+      appState = normalizeState(data);
+      uiState = {
+        activeView: data.activeView || DEFAULT_VIEW,
+        selectedBudgetCategory: data.selectedBudgetCategory || null,
+        budgetEditorId: null,
+        showBudgetCategoryManager: false
+      };
+      renderApp();
+    }
+  });
+});
