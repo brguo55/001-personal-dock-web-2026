@@ -9,7 +9,8 @@ const VIEW_DETAILS = {
   actionBoard: "Organize tasks by energy, urgency, and life context.",
   waitingFor: "Run your GTD capture, context lists, waiting items, projects, reference, and someday lists from one place.",
   budgetPlanner: "Track personal budget items so income, spending, and progress stay visible.",
-  promise: "Record commitments and promises you have made to other people."
+  promise: "Record commitments and promises you have made to other people.",
+  calendar: "View and manage your schedule in a monthly calendar."
 };
 
 const WAITING_STATUSES = ["Waiting", "Follow Up", "Received", "Done"];
@@ -314,7 +315,9 @@ let uiState = {
   activeView: DEFAULT_VIEW,
   selectedBudgetCategory: appState.selectedBudgetCategory,
   budgetEditorId: null,
-  showBudgetCategoryManager: false
+  showBudgetCategoryManager: false,
+  calendarYear: new Date().getFullYear(),
+  calendarMonth: new Date().getMonth()
 };
 let backupUiState = {
   message: "Export a JSON backup or import one to restore your current data.",
@@ -439,6 +442,30 @@ function createPromise({ text, to = "", dueDate = "" }) {
   return { id: createId(), text, to, dueDate, done: false, createdAt: new Date().toISOString() };
 }
 
+function createCalendarEvent({ title, date, time = "", endTime = "", color = "pink", note = "" }) {
+  return { id: createId(), title, date, time, endTime, color, note, createdAt: new Date().toISOString() };
+}
+
+function normalizeCalendarEvents(events) {
+  if (!Array.isArray(events)) return [];
+  return events.map(e => {
+    const title = typeof e?.title === "string" ? e.title.trim() : "";
+    if (!title) return null;
+    const date = typeof e?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : "";
+    if (!date) return null;
+    return {
+      id: e.id || createId(),
+      title,
+      date,
+      time: typeof e?.time === "string" ? e.time : "",
+      endTime: typeof e?.endTime === "string" ? e.endTime : "",
+      color: typeof e?.color === "string" ? e.color : "pink",
+      note: typeof e?.note === "string" ? e.note.trim() : "",
+      createdAt: normalizeTimestamp(e.createdAt) || new Date().toISOString()
+    };
+  }).filter(Boolean);
+}
+
 function normalizePromises(promises) {
   if (!Array.isArray(promises)) return [];
   return promises.map(p => {
@@ -491,7 +518,8 @@ function buildDefaultState() {
     somedayItems: DEFAULT_SOMEDAY_ITEMS.map(item => createSomedayItem(item)),
     referenceItems: DEFAULT_REFERENCE_ITEMS.map(item => createReferenceItem(item)),
     trashItems: [],
-    promises: []
+    promises: [],
+    calendarEvents: []
   };
 }
 
@@ -554,7 +582,8 @@ function normalizeState(rawState) {
     somedayItems: normalizeSomedayItems(rawState?.somedayItems),
     referenceItems: normalizeReferenceItems(rawState?.referenceItems),
     trashItems: normalizeTrashItems(rawState?.trashItems),
-    promises: normalizePromises(rawState?.promises)
+    promises: normalizePromises(rawState?.promises),
+    calendarEvents: normalizeCalendarEvents(rawState?.calendarEvents)
   };
 }
 
@@ -873,7 +902,8 @@ function getStateSnapshot(lastSavedAt = appState.lastSavedAt ?? null) {
     somedayItems: appState.somedayItems,
     referenceItems: appState.referenceItems,
     trashItems: appState.trashItems,
-    promises: appState.promises
+    promises: appState.promises,
+    calendarEvents: appState.calendarEvents
   };
 }
 
@@ -1652,6 +1682,10 @@ function validateBackupShape(candidateState) {
     throw new Error("The backup file includes invalid promise items.");
   }
 
+  if (candidateState.calendarEvents && !Array.isArray(candidateState.calendarEvents)) {
+    throw new Error("The backup file includes invalid calendar events.");
+  }
+
   return candidateState;
 }
 
@@ -1687,7 +1721,9 @@ async function importJsonBackup(file) {
     activeView: importedState.activeView,
     selectedBudgetCategory: importedState.selectedBudgetCategory,
     budgetEditorId: null,
-    showBudgetCategoryManager: false
+    showBudgetCategoryManager: false,
+    calendarYear: new Date().getFullYear(),
+    calendarMonth: new Date().getMonth()
   };
   saveState({ touch: false, lastSavedAt: importedState.lastSavedAt });
   renderApp();
@@ -1740,6 +1776,11 @@ function renderApp() {
 
   if (uiState.activeView === "promise") {
     renderPromise();
+    return;
+  }
+
+  if (uiState.activeView === "calendar") {
+    renderCalendar();
     return;
   }
 
@@ -2210,6 +2251,222 @@ function renderPromise() {
     if (!text) return;
     appState.promises.unshift(createPromise({ text, to: toInput.value.trim(), dueDate: dateInput.value }));
     event.target.reset();
+    saveState();
+    renderApp();
+  });
+}
+
+function renderCalendar() {
+  const year  = uiState.calendarYear;
+  const month = uiState.calendarMonth;
+
+  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const DAY_ABBRS   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const COLOR_OPTIONS = ["pink","rose","green","purple","blue"];
+
+  const today = new Date();
+  const todayStr = toISODateString(today);
+
+  function toISODateString(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+
+  function eventsForDate(dateStr) {
+    return appState.calendarEvents.filter(e => e.date === dateStr);
+  }
+
+  function buildGridDays() {
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevMonthDays = new Date(year, month, 0).getDate();
+    const days = [];
+    for (let i = firstDay - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1, prevMonthDays - i);
+      days.push({ date: toISODateString(d), isOtherMonth: true, dayNum: prevMonthDays - i });
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      days.push({ date: dateStr, isOtherMonth: false, dayNum: d });
+    }
+    const remaining = 42 - days.length;
+    for (let d = 1; d <= remaining; d++) {
+      const dateObj = new Date(year, month + 1, d);
+      days.push({ date: toISODateString(dateObj), isOtherMonth: true, dayNum: d });
+    }
+    return days;
+  }
+
+  function pillsHtml(dateStr) {
+    const events = eventsForDate(dateStr);
+    if (!events.length) return "";
+    const show = events.slice(0, 2);
+    const rest = events.length - show.length;
+    let html = show.map(e =>
+      `<span class="calendar-event-pill calendar-event-pill--${e.color}" title="${e.title}">${e.title}</span>`
+    ).join("");
+    if (rest > 0) html += `<span class="calendar-event-pill calendar-event-pill--more">+${rest} more</span>`;
+    return html;
+  }
+
+  const gridDays = buildGridDays();
+
+  const gridHtml = gridDays.map(({ date, isOtherMonth, dayNum }) => {
+    const isToday   = date === todayStr;
+    const cls = ["calendar-day", isOtherMonth ? "is-other-month" : "", isToday ? "is-today" : ""].filter(Boolean).join(" ");
+    return `<div class="${cls}" data-date="${date}">
+      <span class="calendar-day__num">${dayNum}</span>
+      ${pillsHtml(date)}
+    </div>`;
+  }).join("");
+
+  const upcomingEvents = appState.calendarEvents
+    .filter(e => e.date >= todayStr)
+    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+    .slice(0, 20);
+
+  const upcomingHtml = upcomingEvents.length === 0
+    ? `<li><div class="empty-state">No upcoming events. Add one using the form above.</div></li>`
+    : upcomingEvents.map(e => {
+        const dotStyle = `background:${e.color === "pink" ? "var(--pink)" : e.color === "rose" ? "var(--danger)" : e.color === "green" ? "var(--success)" : e.color === "purple" ? "#7840b4" : "#1e64dc"};`;
+        const meta = [e.date, e.time].filter(Boolean).join(" · ");
+        return `<li class="calendar-event-item" data-id="${e.id}">
+          <span class="calendar-event-item__dot" style="${dotStyle}"></span>
+          <div class="calendar-event-item__copy">
+            <span class="calendar-event-item__title">${e.title}</span>
+            ${meta ? `<span class="calendar-event-item__meta">${meta}</span>` : ""}
+          </div>
+          <div class="calendar-event-item__actions">
+            <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete event">✕</button>
+          </div>
+        </li>`;
+      }).join("");
+
+  const colorSwatches = COLOR_OPTIONS.map(c =>
+    `<button type="button" class="color-swatch color-swatch--${c}" data-color="${c}" title="${c}"></button>`
+  ).join("");
+
+  viewRoot.innerHTML = `
+    <div class="calendar-layout">
+      <div class="calendar-panel">
+        <div class="calendar-nav">
+          <button class="calendar-nav__btn" id="cal-prev">&#8249;</button>
+          <span class="calendar-nav__title">${MONTH_NAMES[month]} ${year}</span>
+          <button class="calendar-nav__btn" id="cal-next">&#8250;</button>
+        </div>
+        <div class="calendar-weekdays">
+          ${DAY_ABBRS.map(d => `<span>${d}</span>`).join("")}
+        </div>
+        <div class="calendar-grid" id="cal-grid">
+          ${gridHtml}
+        </div>
+      </div>
+
+      <div class="calendar-sidebar-panel">
+        <form class="calendar-add-form" id="cal-add-form" novalidate>
+          <div class="calendar-add-form__title">Add Event</div>
+          <div class="field">
+            <label for="cal-title">Title</label>
+            <input id="cal-title" name="title" type="text" placeholder="Event title" required maxlength="120">
+          </div>
+          <div class="field">
+            <label for="cal-date">Date</label>
+            <input id="cal-date" name="date" type="date" required value="${todayStr}">
+          </div>
+          <div class="field">
+            <label for="cal-time">Time (optional)</label>
+            <input id="cal-time" name="time" type="time">
+          </div>
+          <div class="field">
+            <label for="cal-note">Note (optional)</label>
+            <input id="cal-note" name="note" type="text" placeholder="Details…" maxlength="300">
+          </div>
+          <div class="calendar-color-row">
+            <label>Color</label>
+            ${colorSwatches}
+            <input type="hidden" name="color" id="cal-color" value="pink">
+          </div>
+          <div class="section-form__message" id="cal-form-msg" style="display:none"></div>
+          <button type="submit" class="primary-btn">Add Event</button>
+        </form>
+
+        <div class="calendar-event-list-section">
+          <div class="calendar-event-list-section__heading">Upcoming Events</div>
+          <ul class="calendar-event-list" id="cal-upcoming">
+            ${upcomingHtml}
+          </ul>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // month navigation
+  document.getElementById("cal-prev").addEventListener("click", () => {
+    let m = uiState.calendarMonth - 1;
+    let y = uiState.calendarYear;
+    if (m < 0) { m = 11; y -= 1; }
+    uiState.calendarYear = y;
+    uiState.calendarMonth = m;
+    renderApp();
+  });
+
+  document.getElementById("cal-next").addEventListener("click", () => {
+    let m = uiState.calendarMonth + 1;
+    let y = uiState.calendarYear;
+    if (m > 11) { m = 0; y += 1; }
+    uiState.calendarYear = y;
+    uiState.calendarMonth = m;
+    renderApp();
+  });
+
+  // color swatches
+  const calColorInput = document.getElementById("cal-color");
+  document.querySelectorAll(".color-swatch").forEach(btn => {
+    if (btn.dataset.color === "pink") btn.classList.add("is-selected");
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".color-swatch").forEach(b => b.classList.remove("is-selected"));
+      btn.classList.add("is-selected");
+      calColorInput.value = btn.dataset.color;
+    });
+  });
+
+  // add event form
+  document.getElementById("cal-add-form").addEventListener("submit", e => {
+    e.preventDefault();
+    const form = e.target;
+    const title = form.title.value.trim();
+    const date  = form.date.value;
+    const time  = form.time.value || "";
+    const note  = form.note.value.trim();
+    const color = form.color.value || "pink";
+    const msg   = document.getElementById("cal-form-msg");
+
+    if (!title) {
+      msg.textContent = "Please enter a title.";
+      msg.style.display = "";
+      return;
+    }
+    if (!date) {
+      msg.textContent = "Please pick a date.";
+      msg.style.display = "";
+      return;
+    }
+    msg.style.display = "none";
+
+    const [eYear, eMonth] = date.split("-").map(Number);
+    uiState.calendarYear  = eYear;
+    uiState.calendarMonth = eMonth - 1;
+
+    appState.calendarEvents.push(createCalendarEvent({ title, date, time, note, color }));
+    saveState();
+    renderApp();
+  });
+
+  // delete event
+  document.getElementById("cal-upcoming").addEventListener("click", e => {
+    const btn = e.target.closest(".cal-del-btn");
+    if (!btn) return;
+    const id = btn.dataset.id;
+    appState.calendarEvents = appState.calendarEvents.filter(ev => ev.id !== id);
     saveState();
     renderApp();
   });
