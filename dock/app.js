@@ -317,7 +317,9 @@ let uiState = {
   budgetEditorId: null,
   showBudgetCategoryManager: false,
   calendarYear: new Date().getFullYear(),
-  calendarMonth: new Date().getMonth()
+  calendarMonth: new Date().getMonth(),
+  calendarWeekStart: null,  // ISO date string for Sunday of displayed week; null = use today's week
+  calendarViewMode: "week"  // "week" | "day"
 };
 let backupUiState = {
   message: "Export a JSON backup or import one to restore your current data.",
@@ -2258,89 +2260,126 @@ function renderPromise() {
 
 function renderCalendar() {
   const now = new Date();
-  if (typeof uiState.calendarYear  !== "number") uiState.calendarYear  = now.getFullYear();
-  if (typeof uiState.calendarMonth !== "number") uiState.calendarMonth = now.getMonth();
 
-  const year  = uiState.calendarYear;
-  const month = uiState.calendarMonth;
-
-  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  const DAY_ABBRS   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  const COLOR_OPTIONS = ["green","rose","purple","blue","teal"];
-
-  const today = new Date();
-  const todayStr = toISODateString(today);
-
+  // ── helpers ────────────────────────────────────────────────────────────────
   function toISODateString(d) {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   }
 
+  function sundayOfWeek(d) {
+    const copy = new Date(d);
+    copy.setDate(copy.getDate() - copy.getDay());
+    return toISODateString(copy);
+  }
+
+  // ── initialise uiState ────────────────────────────────────────────────────
+  if (!uiState.calendarWeekStart) uiState.calendarWeekStart = sundayOfWeek(now);
+  if (typeof uiState.calendarYear  !== "number") uiState.calendarYear  = now.getFullYear();
+  if (typeof uiState.calendarMonth !== "number") uiState.calendarMonth = now.getMonth();
+  if (!uiState.calendarViewMode) uiState.calendarViewMode = "week";
+
+  const viewMode = uiState.calendarViewMode;  // "week" | "day"
+  const todayStr = toISODateString(now);
+
+  // ── constants ─────────────────────────────────────────────────────────────
+  const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const DAY_FULL    = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const COLOR_OPTIONS = ["green","rose","purple","blue","teal"];
+
+  // ── compute displayed days ────────────────────────────────────────────────
+  function getDisplayDays() {
+    const start = new Date(uiState.calendarWeekStart + "T12:00:00");
+    if (viewMode === "day") {
+      return [uiState.calendarWeekStart]; // reuse weekStart as "selectedDay" in day mode
+    }
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      return toISODateString(d);
+    });
+  }
+
+  function formatRangeTitle(days) {
+    if (viewMode === "day") {
+      const d = new Date(days[0] + "T12:00:00");
+      return `${DAY_FULL[d.getDay()]}, ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+    }
+    const s = new Date(days[0] + "T12:00:00");
+    const e = new Date(days[6] + "T12:00:00");
+    if (s.getFullYear() !== e.getFullYear())
+      return `${MONTH_NAMES[s.getMonth()]} ${s.getDate()}, ${s.getFullYear()} – ${MONTH_NAMES[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+    if (s.getMonth() !== e.getMonth())
+      return `${MONTH_NAMES[s.getMonth()]} ${s.getDate()} – ${MONTH_NAMES[e.getMonth()]} ${e.getDate()}, ${s.getFullYear()}`;
+    return `${MONTH_NAMES[s.getMonth()]} ${s.getDate()} – ${e.getDate()}, ${s.getFullYear()}`;
+  }
+
   function eventsForDate(dateStr) {
-    return appState.calendarEvents.filter(e => e.date === dateStr);
+    return appState.calendarEvents
+      .filter(e => e.date === dateStr)
+      .sort((a, b) => (a.time || "99:99") < (b.time || "99:99") ? -1 : 1);
   }
 
-  function buildGridDays() {
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const prevMonthDays = new Date(year, month, 0).getDate();
-    const days = [];
-    for (let i = firstDay - 1; i >= 0; i--) {
-      const d = new Date(year, month - 1, prevMonthDays - i);
-      days.push({ date: toISODateString(d), isOtherMonth: true, dayNum: prevMonthDays - i });
-    }
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-      days.push({ date: dateStr, isOtherMonth: false, dayNum: d });
-    }
-    const remaining = 42 - days.length;
-    for (let d = 1; d <= remaining; d++) {
-      const dateObj = new Date(year, month + 1, d);
-      days.push({ date: toISODateString(dateObj), isOtherMonth: true, dayNum: d });
-    }
-    return days;
+  function dotColor(color) {
+    return color === "green" || color === "pink" ? "var(--green)"
+         : color === "rose"   ? "var(--danger)"
+         : color === "purple" ? "#7840b4"
+         : color === "blue"   ? "#1e64dc"
+         : color === "teal"   ? "#009898"
+         : "var(--green)";
   }
 
-  function pillsHtml(dateStr) {
-    const events = eventsForDate(dateStr);
-    if (!events.length) return "";
-    const show = events.slice(0, 2);
-    const rest = events.length - show.length;
-    let html = show.map(e =>
-      `<span class="calendar-event-pill calendar-event-pill--${e.color}" title="${e.title}">${e.title}</span>`
-    ).join("");
-    if (rest > 0) html += `<span class="calendar-event-pill calendar-event-pill--more">+${rest} more</span>`;
-    return html;
+  function eventCardHtml(e) {
+    const timePart = e.time ? `<span class="cal-week-event__time">${e.time}</span>` : "";
+    const notePart = e.note ? `<span class="cal-week-event__note">${e.note}</span>` : "";
+    return `<div class="cal-week-event cal-week-event--${e.color}">
+      <div class="cal-week-event__top">
+        <span class="cal-week-event__title">${e.title}</span>
+        <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
+      </div>
+      ${timePart}${notePart}
+    </div>`;
   }
 
-  const gridDays = buildGridDays();
+  // ── build grid HTML ───────────────────────────────────────────────────────
+  const displayDays = getDisplayDays();
+  const rangeTitle  = formatRangeTitle(displayDays);
 
-  const gridHtml = gridDays.map(({ date, isOtherMonth, dayNum }) => {
-    const isToday   = date === todayStr;
-    const cls = ["calendar-day", isOtherMonth ? "is-other-month" : "", isToday ? "is-today" : ""].filter(Boolean).join(" ");
-    return `<div class="${cls}" data-date="${date}">
-      <span class="calendar-day__num">${dayNum}</span>
-      ${pillsHtml(date)}
+  const gridHtml = displayDays.map(dateStr => {
+    const d = new Date(dateStr + "T12:00:00");
+    const isToday = dateStr === todayStr;
+    const events  = eventsForDate(dateStr);
+    const eventsHtml = events.length
+      ? events.map(eventCardHtml).join("")
+      : `<div class="cal-week-day__empty">No events</div>`;
+
+    return `<div class="cal-week-day${isToday ? " is-today" : ""}">
+      <div class="cal-week-day__header">
+        <span class="cal-week-day__name">${viewMode === "day" ? DAY_FULL[d.getDay()] : DAY_SHORT[d.getDay()]}</span>
+        <span class="cal-week-day__num${isToday ? " is-today-num" : ""}">${d.getDate()}</span>
+      </div>
+      <div class="cal-week-day__events">${eventsHtml}</div>
     </div>`;
   }).join("");
 
+  // ── upcoming events sidebar ───────────────────────────────────────────────
   const upcomingEvents = appState.calendarEvents
     .filter(e => e.date >= todayStr)
-    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
-    .slice(0, 20);
+    .sort((a, b) => a.date !== b.date ? (a.date < b.date ? -1 : 1) : (a.time || "99:99") < (b.time || "99:99") ? -1 : 1)
+    .slice(0, 15);
 
   const upcomingHtml = upcomingEvents.length === 0
-    ? `<li><div class="empty-state">No upcoming events. Add one using the form above.</div></li>`
+    ? `<li><div class="empty-state">No upcoming events.</div></li>`
     : upcomingEvents.map(e => {
-        const dotStyle = `background:${e.color === "green" || e.color === "pink" ? "var(--green)" : e.color === "rose" ? "var(--danger)" : e.color === "purple" ? "#7840b4" : e.color === "blue" ? "#1e64dc" : e.color === "teal" ? "#009898" : "var(--green)"};`;
         const meta = [e.date, e.time].filter(Boolean).join(" · ");
-        return `<li class="calendar-event-item" data-id="${e.id}">
-          <span class="calendar-event-item__dot" style="${dotStyle}"></span>
+        return `<li class="calendar-event-item">
+          <span class="calendar-event-item__dot" style="background:${dotColor(e.color)}"></span>
           <div class="calendar-event-item__copy">
             <span class="calendar-event-item__title">${e.title}</span>
             ${meta ? `<span class="calendar-event-item__meta">${meta}</span>` : ""}
           </div>
           <div class="calendar-event-item__actions">
-            <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete event">✕</button>
+            <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
           </div>
         </li>`;
       }).join("");
@@ -2349,18 +2388,26 @@ function renderCalendar() {
     `<button type="button" class="color-swatch color-swatch--${c}" data-color="${c}" title="${c}"></button>`
   ).join("");
 
+  const viewToggleHtml = `
+    <div class="cal-view-toggle">
+      <button type="button" class="cal-toggle-btn${viewMode === "week" ? " is-active" : ""}" data-mode="week">Week</button>
+      <button type="button" class="cal-toggle-btn${viewMode === "day"  ? " is-active" : ""}" data-mode="day">Day</button>
+    </div>`;
+
+  // ── render ────────────────────────────────────────────────────────────────
   viewRoot.innerHTML = `
     <div class="calendar-layout">
       <div class="calendar-panel">
         <div class="calendar-nav">
-          <button class="calendar-nav__btn" id="cal-prev">&#8249;</button>
-          <span class="calendar-nav__title">${MONTH_NAMES[month]} ${year}</span>
-          <button class="calendar-nav__btn" id="cal-next">&#8250;</button>
+          <div class="calendar-nav__left">
+            <button class="calendar-nav__btn" id="cal-prev">&#8249;</button>
+            <button class="calendar-nav__btn cal-today-btn" id="cal-today">Today</button>
+            <button class="calendar-nav__btn" id="cal-next">&#8250;</button>
+          </div>
+          <span class="calendar-nav__title">${rangeTitle}</span>
+          ${viewToggleHtml}
         </div>
-        <div class="calendar-weekdays">
-          ${DAY_ABBRS.map(d => `<span>${d}</span>`).join("")}
-        </div>
-        <div class="calendar-grid" id="cal-grid">
+        <div class="cal-week-grid cal-week-grid--${viewMode}" id="cal-week-grid">
           ${gridHtml}
         </div>
       </div>
@@ -2403,26 +2450,46 @@ function renderCalendar() {
     </div>
   `;
 
-  // month navigation
+  // ── navigation ────────────────────────────────────────────────────────────
+  const step = viewMode === "day" ? 1 : 7;
+
   document.getElementById("cal-prev").addEventListener("click", () => {
-    let m = uiState.calendarMonth - 1;
-    let y = uiState.calendarYear;
-    if (m < 0) { m = 11; y -= 1; }
-    uiState.calendarYear = y;
-    uiState.calendarMonth = m;
+    const d = new Date(uiState.calendarWeekStart + "T12:00:00");
+    d.setDate(d.getDate() - step);
+    uiState.calendarWeekStart = toISODateString(d);
     renderApp();
   });
 
   document.getElementById("cal-next").addEventListener("click", () => {
-    let m = uiState.calendarMonth + 1;
-    let y = uiState.calendarYear;
-    if (m > 11) { m = 0; y += 1; }
-    uiState.calendarYear = y;
-    uiState.calendarMonth = m;
+    const d = new Date(uiState.calendarWeekStart + "T12:00:00");
+    d.setDate(d.getDate() + step);
+    uiState.calendarWeekStart = toISODateString(d);
     renderApp();
   });
 
-  // color swatches
+  document.getElementById("cal-today").addEventListener("click", () => {
+    uiState.calendarWeekStart = viewMode === "day" ? todayStr : sundayOfWeek(now);
+    renderApp();
+  });
+
+  // ── view mode toggle ──────────────────────────────────────────────────────
+  document.querySelectorAll(".cal-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.mode;
+      if (mode === uiState.calendarViewMode) return;
+      if (mode === "day") {
+        // switch to day: show today, or first day of current week if today not in week
+        uiState.calendarWeekStart = todayStr;
+      } else {
+        // switch to week: jump to week containing current day
+        uiState.calendarWeekStart = sundayOfWeek(new Date(uiState.calendarWeekStart + "T12:00:00"));
+      }
+      uiState.calendarViewMode = mode;
+      renderApp();
+    });
+  });
+
+  // ── color swatches ────────────────────────────────────────────────────────
   const calColorInput = document.getElementById("cal-color");
   document.querySelectorAll(".color-swatch").forEach(btn => {
     if (btn.dataset.color === "green") btn.classList.add("is-selected");
@@ -2433,44 +2500,46 @@ function renderCalendar() {
     });
   });
 
-  // add event form
+  // ── add event form ────────────────────────────────────────────────────────
   document.getElementById("cal-add-form").addEventListener("submit", e => {
     e.preventDefault();
-    const form = e.target;
+    const form  = e.target;
     const title = form.title.value.trim();
     const date  = form.date.value;
     const time  = form.time.value || "";
     const note  = form.note.value.trim();
-    const color = form.color.value || "pink";
+    const color = form.color.value || "green";
     const msg   = document.getElementById("cal-form-msg");
 
-    if (!title) {
-      msg.textContent = "Please enter a title.";
-      msg.style.display = "";
-      return;
-    }
-    if (!date) {
-      msg.textContent = "Please pick a date.";
-      msg.style.display = "";
-      return;
-    }
+    if (!title) { msg.textContent = "Please enter a title."; msg.style.display = ""; return; }
+    if (!date)  { msg.textContent = "Please pick a date.";   msg.style.display = ""; return; }
     msg.style.display = "none";
 
-    const [eYear, eMonth] = date.split("-").map(Number);
-    uiState.calendarYear  = eYear;
-    uiState.calendarMonth = eMonth - 1;
+    // navigate to the week/day containing the new event
+    if (viewMode === "day") {
+      uiState.calendarWeekStart = date;
+    } else {
+      uiState.calendarWeekStart = sundayOfWeek(new Date(date + "T12:00:00"));
+    }
 
     appState.calendarEvents.push(createCalendarEvent({ title, date, time, note, color }));
     saveState();
     renderApp();
   });
 
-  // delete event
+  // ── delete event (grid + upcoming list) ──────────────────────────────────
+  document.getElementById("cal-week-grid").addEventListener("click", e => {
+    const btn = e.target.closest(".cal-del-btn");
+    if (!btn) return;
+    appState.calendarEvents = appState.calendarEvents.filter(ev => ev.id !== btn.dataset.id);
+    saveState();
+    renderApp();
+  });
+
   document.getElementById("cal-upcoming").addEventListener("click", e => {
     const btn = e.target.closest(".cal-del-btn");
     if (!btn) return;
-    const id = btn.dataset.id;
-    appState.calendarEvents = appState.calendarEvents.filter(ev => ev.id !== id);
+    appState.calendarEvents = appState.calendarEvents.filter(ev => ev.id !== btn.dataset.id);
     saveState();
     renderApp();
   });
@@ -2500,7 +2569,7 @@ function renderBudgetPlanner() {
             aria-expanded="${uiState.showBudgetCategoryManager ? "true" : "false"}"
             aria-controls="budgetCategoryManager"
           >
-            ${uiState.showBudgetCategoryManager ? "Close manager" : "Manage categories"}
+            ${uiState.showBudgetCategoryManager ? "Close manager" : "Manage"}
           </button>
         </div>
 
