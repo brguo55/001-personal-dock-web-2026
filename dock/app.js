@@ -2047,7 +2047,7 @@ function renderActionBoard() {
 
         const titleNode = document.createElement("span");
         titleNode.className = "task-title";
-        titleNode.textContent = task.title;
+        titleNode.innerHTML = renderInlineMarkdown(task.title);
 
         const deleteButton = document.createElement("button");
         deleteButton.type = "button";
@@ -4088,6 +4088,28 @@ function createEmptyState(message) {
   item.className = "empty-state";
   item.textContent = message;
   return item;
+}
+
+/**
+ * Converts a limited subset of Markdown inline syntax to safe HTML.
+ * Supported: **bold**, *italic*  (no nested tags, no raw HTML pass-through).
+ * All other text is HTML-escaped to prevent XSS.
+ */
+function renderInlineMarkdown(text) {
+  // Escape HTML special chars first so user input can never inject markup.
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+  // Bold: **text** (must come before italic so ** isn't mis-parsed as *)
+  const withBold = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+  // Italic: *text*  (single asterisk, not already consumed by bold)
+  const withItalic = withBold.replace(/\*([^*\n]+?)\*/g, "<em>$1</em>");
+
+  return withItalic;
 }
 
 viewNav.addEventListener("click", event => {
