@@ -51,7 +51,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "deepWork",
     title: "Deep Work",
     emoji: "DI",
-    accent: "#dce8fa",
+    accent: "#d6ede6",  /* cool sage-teal — focus / deep concentration */
     size: "featured",
     sampleTasks: []
   },
@@ -59,7 +59,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "easyWork",
     title: "Easy Tasks",
     emoji: "EZ",
-    accent: "#e3f0d7",
+    accent: "#ddf8d2",  /* bright lime pastel — light energy */
     size: "featured",
     sampleTasks: []
   },
@@ -67,7 +67,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "top3PrioritiesToday",
     title: "Top 3 Priorities Today",
     emoji: "T3",
-    accent: "#f3e3c8",
+    accent: "#d8f5e4",  /* clean mint — daily clarity */
     size: "",
     sampleTasks: []
   },
@@ -75,7 +75,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "importantUrgent",
     title: "Important & Urgent",
     emoji: "!!",
-    accent: "#f6ddd0",
+    accent: "#c8eed8",  /* saturated emerald — high alert */
     size: "",
     sampleTasks: []
   },
@@ -83,7 +83,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "importantNotUrgent",
     title: "Important but Not Urgent",
     emoji: "++",
-    accent: "#dfedd4",
+    accent: "#d2f0e0",  /* growth emerald — plan ahead */
     size: "",
     sampleTasks: []
   },
@@ -91,7 +91,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "notImportantUrgent",
     title: "Not Important but Urgent",
     emoji: "->",
-    accent: "#f8edc2",
+    accent: "#e4f8ec",  /* soft neutral mint — delegate */
     size: "",
     sampleTasks: []
   },
@@ -99,7 +99,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "notImportantNotUrgent",
     title: "Not Important and Not Urgent",
     emoji: "--",
-    accent: "#efdce7",
+    accent: "#eef8f2",  /* barely-there green — low priority */
     size: "",
     sampleTasks: []
   },
@@ -107,7 +107,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "mealPlan",
     title: "Meal Plan",
     emoji: "MP",
-    accent: "#f5dec7",
+    accent: "#dcf5e8",  /* fresh spring green — nourishment */
     size: "tall",
     sampleTasks: []
   },
@@ -115,7 +115,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "life",
     title: "Life",
     emoji: "LF",
-    accent: "#ddeaf4",
+    accent: "#d0ede4",  /* warm sage — life balance */
     size: "",
     sampleTasks: []
   },
@@ -123,7 +123,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "exercise",
     title: "Exercise",
     emoji: "EX",
-    accent: "#dfe9fb",
+    accent: "#c4f0cc",  /* vivid lime — peak energy */
     size: "",
     sampleTasks: []
   },
@@ -131,7 +131,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "eveningNight",
     title: "Evening / Night",
     emoji: "PM",
-    accent: "#f4e6a8",
+    accent: "#e2f5eb",  /* calm dusk green — wind down */
     size: "tall",
     sampleTasks: []
   },
@@ -139,7 +139,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "extraLearning",
     title: "Extra Learning",
     emoji: "XL",
-    accent: "#f7ecc6",
+    accent: "#d6ece2",  /* knowledge sage — study */
     size: "",
     sampleTasks: []
   },
@@ -147,7 +147,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "weirdIdeas",
     title: "Weird Ideas",
     emoji: "WI",
-    accent: "#f2d9de",
+    accent: "#c8f0d8",  /* bright idea-lime — creative */
     size: "",
     sampleTasks: []
   },
@@ -155,7 +155,7 @@ const ACTION_SECTION_DEFINITIONS = [
     id: "memo",
     title: "Memo",
     emoji: "MM",
-    accent: "#dfedd7",
+    accent: "#e6f8ef",  /* lightest mint — reference */
     size: "",
     sampleTasks: []
   }
@@ -442,7 +442,7 @@ function createPromise({ text, to = "", dueDate = "" }) {
   return { id: createId(), text, to, dueDate, done: false, createdAt: new Date().toISOString() };
 }
 
-function createCalendarEvent({ title, date, time = "", endTime = "", color = "pink", note = "" }) {
+function createCalendarEvent({ title, date, time = "", endTime = "", color = "green", note = "" }) {
   return { id: createId(), title, date, time, endTime, color, note, createdAt: new Date().toISOString() };
 }
 
@@ -2257,12 +2257,16 @@ function renderPromise() {
 }
 
 function renderCalendar() {
+  const now = new Date();
+  if (typeof uiState.calendarYear  !== "number") uiState.calendarYear  = now.getFullYear();
+  if (typeof uiState.calendarMonth !== "number") uiState.calendarMonth = now.getMonth();
+
   const year  = uiState.calendarYear;
   const month = uiState.calendarMonth;
 
   const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const DAY_ABBRS   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  const COLOR_OPTIONS = ["pink","rose","green","purple","blue"];
+  const COLOR_OPTIONS = ["green","rose","purple","blue","teal"];
 
   const today = new Date();
   const todayStr = toISODateString(today);
@@ -2327,7 +2331,7 @@ function renderCalendar() {
   const upcomingHtml = upcomingEvents.length === 0
     ? `<li><div class="empty-state">No upcoming events. Add one using the form above.</div></li>`
     : upcomingEvents.map(e => {
-        const dotStyle = `background:${e.color === "pink" ? "var(--pink)" : e.color === "rose" ? "var(--danger)" : e.color === "green" ? "var(--success)" : e.color === "purple" ? "#7840b4" : "#1e64dc"};`;
+        const dotStyle = `background:${e.color === "green" || e.color === "pink" ? "var(--green)" : e.color === "rose" ? "var(--danger)" : e.color === "purple" ? "#7840b4" : e.color === "blue" ? "#1e64dc" : e.color === "teal" ? "#009898" : "var(--green)"};`;
         const meta = [e.date, e.time].filter(Boolean).join(" · ");
         return `<li class="calendar-event-item" data-id="${e.id}">
           <span class="calendar-event-item__dot" style="${dotStyle}"></span>
@@ -2383,7 +2387,7 @@ function renderCalendar() {
           <div class="calendar-color-row">
             <label>Color</label>
             ${colorSwatches}
-            <input type="hidden" name="color" id="cal-color" value="pink">
+            <input type="hidden" name="color" id="cal-color" value="green">
           </div>
           <div class="section-form__message" id="cal-form-msg" style="display:none"></div>
           <button type="submit" class="primary-btn">Add Event</button>
@@ -2421,7 +2425,7 @@ function renderCalendar() {
   // color swatches
   const calColorInput = document.getElementById("cal-color");
   document.querySelectorAll(".color-swatch").forEach(btn => {
-    if (btn.dataset.color === "pink") btn.classList.add("is-selected");
+    if (btn.dataset.color === "green") btn.classList.add("is-selected");
     btn.addEventListener("click", () => {
       document.querySelectorAll(".color-swatch").forEach(b => b.classList.remove("is-selected"));
       btn.classList.add("is-selected");
