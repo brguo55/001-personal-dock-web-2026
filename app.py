@@ -10,9 +10,11 @@ Requires pywebview:
 
 To build a macOS .app bundle:
     pip install pyinstaller
-    pyinstaller --windowed --name dock --add-data "dock:dock" \
+    python make_icns.py          # generates icon.icns from icon.svg (run once)
+    pyinstaller --windowed --name PersonalDock --add-data "dock:dock" \
+        --icon=icon.icns \
         --hidden-import "webview.platforms.cocoa" app.py
-    # Output: dist/dock.app  (double-click to open)
+    # Output: dist/PersonalDock.app  (double-click to open)
 
 User data is saved at:
     ~/Library/Application Support/dock/data.json
