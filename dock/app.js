@@ -8,7 +8,8 @@ const VIEW_DETAILS = {
   dashboard: "Quickly review today's priorities, budget snapshot, and recent notes.",
   actionBoard: "Organize tasks by energy, urgency, and life context.",
   waitingFor: "Run your GTD capture, context lists, waiting items, projects, reference, and someday lists from one place.",
-  budgetPlanner: "Track personal budget items so income, spending, and progress stay visible."
+  budgetPlanner: "Track personal budget items so income, spending, and progress stay visible.",
+  promise: "Record commitments and promises you have made to other people."
 };
 
 const WAITING_STATUSES = ["Waiting", "Follow Up", "Received", "Done"];
@@ -434,6 +435,26 @@ function createReferenceItem({ title, link = "", note = "", createdAt = new Date
   };
 }
 
+function createPromise({ text, to = "", dueDate = "" }) {
+  return { id: createId(), text, to, dueDate, done: false, createdAt: new Date().toISOString() };
+}
+
+function normalizePromises(promises) {
+  if (!Array.isArray(promises)) return [];
+  return promises.map(p => {
+    const text = typeof p?.text === "string" ? p.text.trim() : "";
+    if (!text) return null;
+    return {
+      id: p.id || createId(),
+      text,
+      to: typeof p?.to === "string" ? p.to.trim() : "",
+      dueDate: typeof p?.dueDate === "string" ? p.dueDate : "",
+      done: Boolean(p.done),
+      createdAt: normalizeTimestamp(p.createdAt) || new Date().toISOString()
+    };
+  }).filter(Boolean);
+}
+
 function createTrashItem({ title, kind, detail = "", payload = null, discardedAt = new Date().toISOString() }) {
   return {
     id: createId(),
@@ -469,7 +490,8 @@ function buildDefaultState() {
     projects: DEFAULT_PROJECTS.map(project => createProject(project)),
     somedayItems: DEFAULT_SOMEDAY_ITEMS.map(item => createSomedayItem(item)),
     referenceItems: DEFAULT_REFERENCE_ITEMS.map(item => createReferenceItem(item)),
-    trashItems: []
+    trashItems: [],
+    promises: []
   };
 }
 
@@ -531,7 +553,8 @@ function normalizeState(rawState) {
     projects: normalizeProjects(rawState?.projects),
     somedayItems: normalizeSomedayItems(rawState?.somedayItems),
     referenceItems: normalizeReferenceItems(rawState?.referenceItems),
-    trashItems: normalizeTrashItems(rawState?.trashItems)
+    trashItems: normalizeTrashItems(rawState?.trashItems),
+    promises: normalizePromises(rawState?.promises)
   };
 }
 
@@ -849,7 +872,8 @@ function getStateSnapshot(lastSavedAt = appState.lastSavedAt ?? null) {
     projects: appState.projects,
     somedayItems: appState.somedayItems,
     referenceItems: appState.referenceItems,
-    trashItems: appState.trashItems
+    trashItems: appState.trashItems,
+    promises: appState.promises
   };
 }
 
@@ -1624,6 +1648,10 @@ function validateBackupShape(candidateState) {
     throw new Error("The backup file includes invalid trash items.");
   }
 
+  if (candidateState.promises && !Array.isArray(candidateState.promises)) {
+    throw new Error("The backup file includes invalid promise items.");
+  }
+
   return candidateState;
 }
 
@@ -1707,6 +1735,11 @@ function renderApp() {
 
   if (uiState.activeView === "waitingFor") {
     renderWaitingFor();
+    return;
+  }
+
+  if (uiState.activeView === "promise") {
+    renderPromise();
     return;
   }
 
@@ -2052,6 +2085,131 @@ function renderActionBoard() {
       discardActionTask(taskId);
     });
 
+    saveState();
+    renderApp();
+  });
+}
+
+function renderPromise() {
+  const promises = appState.promises;
+  const openCount = promises.filter(p => !p.done).length;
+  viewRoot.innerHTML = `
+    <section class="view-panel">
+      <div class="view-panel__top">
+        <div>
+          <h2 class="panel-title">Promise</h2>
+          <p class="panel-subtitle">Commitments and promises you have made to other people.</p>
+        </div>
+        <div class="inline-stats">
+          <span class="inline-stat">${openCount} open</span>
+          <span class="inline-stat">${promises.length} total</span>
+        </div>
+      </div>
+      <form class="gtd-form" id="promiseForm">
+        <div class="field gtd-form__field--wide">
+          <label for="promiseTextInput">Promise</label>
+          <input id="promiseTextInput" type="text" maxlength="200" placeholder="What did you promise?" required />
+        </div>
+        <div class="field">
+          <label for="promiseToInput">To whom</label>
+          <input id="promiseToInput" type="text" maxlength="80" placeholder="Person's name" />
+        </div>
+        <div class="field">
+          <label for="promiseDateInput">Due date</label>
+          <input id="promiseDateInput" type="date" />
+        </div>
+        <button type="submit" class="primary-btn" style="align-self:end">Add promise</button>
+      </form>
+      <ul class="promise-list" id="promiseList"></ul>
+    </section>
+  `;
+
+  const promiseList = document.getElementById("promiseList");
+
+  function renderPromiseList() {
+    promiseList.innerHTML = "";
+
+    if (promises.length === 0) {
+      promiseList.appendChild(createEmptyState("No promises recorded yet. Add something you have committed to doing for someone."));
+      return;
+    }
+
+    const sortedPromises = [...promises].sort((a, b) => {
+      if (a.done !== b.done) return Number(a.done) - Number(b.done);
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return a.dueDate.localeCompare(b.dueDate);
+    });
+
+    sortedPromises.forEach(promise => {
+      const item = document.createElement("li");
+      item.className = `promise-item ${promise.done ? "is-done" : ""}`;
+
+      const main = document.createElement("label");
+      main.className = "promise-item__main";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "promise-item__check";
+      checkbox.checked = promise.done;
+      checkbox.addEventListener("change", () => {
+        promise.done = checkbox.checked;
+        saveState();
+        renderApp();
+      });
+
+      const copy = document.createElement("div");
+      copy.className = "promise-item__copy";
+
+      const text = document.createElement("strong");
+      text.className = "promise-item__text";
+      text.textContent = promise.text;
+
+      const meta = document.createElement("span");
+      meta.className = "promise-item__meta";
+      const parts = [];
+      if (promise.to) parts.push(`To: ${promise.to}`);
+      if (promise.dueDate) parts.push(`Due: ${formatWaitingDate(promise.dueDate)}`);
+      parts.push(`Added ${formatShortDate(promise.createdAt)}`);
+      meta.textContent = parts.join(" · ");
+
+      copy.appendChild(text);
+      copy.appendChild(meta);
+      main.appendChild(checkbox);
+      main.appendChild(copy);
+
+      const actions = document.createElement("div");
+      actions.className = "promise-item__actions";
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "tiny-btn is-danger";
+      deleteButton.textContent = "Delete";
+      deleteButton.addEventListener("click", () => {
+        appState.promises = appState.promises.filter(p => p.id !== promise.id);
+        saveState();
+        renderApp();
+      });
+
+      actions.appendChild(deleteButton);
+      item.appendChild(main);
+      item.appendChild(actions);
+      promiseList.appendChild(item);
+    });
+  }
+
+  renderPromiseList();
+
+  document.getElementById("promiseForm").addEventListener("submit", event => {
+    event.preventDefault();
+    const textInput = document.getElementById("promiseTextInput");
+    const toInput = document.getElementById("promiseToInput");
+    const dateInput = document.getElementById("promiseDateInput");
+    const text = textInput.value.trim();
+    if (!text) return;
+    appState.promises.unshift(createPromise({ text, to: toInput.value.trim(), dueDate: dateInput.value }));
+    event.target.reset();
     saveState();
     renderApp();
   });

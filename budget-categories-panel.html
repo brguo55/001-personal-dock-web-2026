@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Budget Categories Panel</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --bg-wash: rgba(255, 255, 255, 0.62);
+      --surface: rgba(255, 252, 246, 0.88);
+      --surface-strong: #fffdf8;
+      --surface-muted: #f4ede2;
+      --line-soft: rgba(93, 81, 68, 0.14);
+      --text: #2e2923;
+      --muted: #7c746a;
+      --accent: #d8e8c8;
+      --shadow-lg: 0 24px 70px rgba(79, 64, 48, 0.13);
+      --shadow-sm: 0 12px 28px rgba(79, 64, 48, 0.09);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 48px 24px;
+      background:
+        radial-gradient(circle at top left, rgba(255, 248, 213, 0.95) 0, transparent 28%),
+        radial-gradient(circle at 85% 18%, rgba(215, 234, 248, 0.95) 0, transparent 24%),
+        radial-gradient(circle at bottom right, rgba(225, 240, 226, 0.9) 0, transparent 30%),
+        linear-gradient(180deg, #f9f5ee 0%, #f2ebe0 100%);
+      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", "Trebuchet MS", "Helvetica Neue", sans-serif;
+    }
+
+    button, input { font: inherit; color: inherit; }
+    button { border: 0; cursor: pointer; }
+    h2, h3, p { margin: 0; }
+
+    /* ── Panel shell ─────────────────────────────────────── */
+    .budget-sidebar {
+      width: 320px;
+      padding: 22px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(246, 239, 229, 0.9));
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(16px);
+      overflow: hidden;
+    }
+
+    /* ── Header row ──────────────────────────────────────── */
+    .budget-sidebar__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-title {
+      font-size: 1.55rem;
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
+
+    .panel-subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.94rem;
+      line-height: 1.55;
+    }
+
+    /* ── "Manage categories" button ─────────────────────── */
+    .budget-manage-btn {
+      flex: 0 0 auto;
+      padding: 11px 16px;
+      background: rgba(255, 255, 255, 0.68);
+      border: 1px solid var(--line-soft);
+      border-radius: 999px;
+      box-shadow: var(--shadow-sm);
+      font-size: 0.93rem;
+      white-space: nowrap;
+      transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+    }
+
+    .budget-manage-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    /* ── Create category card ────────────────────────────── */
+    .budget-category-form {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.52);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .field input {
+      width: 100%;
+      min-width: 0;
+      padding: 13px 14px;
+      border: 1px solid rgba(93, 81, 68, 0.18);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.9);
+      outline: none;
+      font-size: 0.95rem;
+    }
+
+    .field input:focus {
+      border-color: rgba(93, 81, 68, 0.34);
+      box-shadow: 0 0 0 4px rgba(216, 232, 200, 0.32);
+    }
+
+    .create-btn {
+      justify-self: start;
+      padding: 11px 18px;
+      background: rgba(255, 255, 255, 0.68);
+      border: 1px solid var(--line-soft);
+      border-radius: 999px;
+      box-shadow: var(--shadow-sm);
+      font-size: 0.93rem;
+      font-weight: 600;
+      transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .create-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .form-hint {
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+    }
+
+    /* ── Sidebar list ────────────────────────────────────── */
+    .sidebar-list {
+      list-style: none;
+      margin: 18px 0 0;
+      padding: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .sidebar-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 13px 14px;
+      background: linear-gradient(135deg, rgba(216, 232, 200, 0.8), rgba(255, 245, 220, 0.82));
+      border: 1px solid rgba(93, 81, 68, 0.18);
+      border-radius: 18px;
+      text-align: left;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.16s ease;
+    }
+
+    .sidebar-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .sidebar-btn strong {
+      font-size: 0.98rem;
+    }
+
+    .sidebar-btn span {
+      color: var(--muted);
+      font-size: 0.84rem;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+  <aside class="budget-sidebar">
+
+    <div class="budget-sidebar__header">
+      <div>
+        <h2 class="panel-title">Budget<br>categories</h2>
+        <p class="panel-subtitle">Choose a category on the left and manage its items on the right.</p>
+      </div>
+      <button type="button" class="budget-manage-btn">Manage categories</button>
+    </div>
+
+    <form class="budget-category-form" onsubmit="return false;">
+      <div class="field">
+        <label for="catNameInput">Create category</label>
+        <input
+          id="catNameInput"
+          type="text"
+          maxlength="60"
+          placeholder="For example: Gifts, Home Studio, Side Project"
+        />
+      </div>
+      <button type="submit" class="create-btn">Create category</button>
+      <p class="form-hint">
+        Categories are saved with your backup. If you delete one later, its items move to another remaining category when possible.
+      </p>
+    </form>
+
+    <ul class="sidebar-list">
+      <li>
+        <button type="button" class="sidebar-btn">
+          <strong>All Budgets</strong>
+          <span>0 items · $0</span>
+        </button>
+      </li>
+    </ul>
+
+  </aside>
+
+</body>
+</html>
