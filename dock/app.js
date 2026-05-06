@@ -3006,10 +3006,10 @@ function renderBudgetPlanner() {
     <section class="budget-layout">
       <aside class="budget-sidebar">
         <div class="budget-sidebar__header">
-          <p class="eyebrow" style="margin:0">Categories</p>
+          <span class="budget-sidebar__heading">Categories</span>
           <button
             type="button"
-            class="tiny-btn budget-manage-btn"
+            class="budget-manage-link"
             id="toggleBudgetCategoryManagerBtn"
             aria-expanded="${uiState.showBudgetCategoryManager ? "true" : "false"}"
             aria-controls="budgetCategoryManager"
@@ -3027,9 +3027,9 @@ function renderBudgetPlanner() {
               placeholder="New category name\u2026"
               required
             />
-            <button type="submit" class="budget-cat-create-btn">Create</button>
+            <button type="submit" class="budget-cat-create-btn">Add</button>
           </div>
-          <button type="button" class="budget-cat-more-btn" id="budgetCatMoreBtn">+ Add details</button>
+          <button type="button" class="budget-cat-more-btn" id="budgetCatMoreBtn">Details</button>
           <div class="budget-cat-details" id="budgetCatDetails" hidden>
             <div class="budget-cat-details__group">
               <label class="budget-cat-details__label" for="budgetCatNoteInput">Note</label>
@@ -3174,7 +3174,6 @@ function renderBudgetPlanner() {
     budgetCatMoreBtn.addEventListener("click", () => {
       const opening = budgetCatDetails.hidden;
       budgetCatDetails.hidden = !opening;
-      budgetCatMoreBtn.textContent = opening ? "\u2212 Hide details" : "+ Add details";
       budgetCatMoreBtn.classList.toggle("is-open", opening);
       if (opening) document.getElementById("budgetCatNoteInput")?.focus();
     });
