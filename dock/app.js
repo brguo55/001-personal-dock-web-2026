@@ -2571,6 +2571,8 @@ function renderActionBoard() {
 function renderPromise() {
   const promises = appState.promises;
   const openCount = promises.filter(p => !p.done).length;
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
   viewRoot.innerHTML = `
     <section class="view-panel">
       <div class="view-panel__top">
@@ -2594,7 +2596,7 @@ function renderPromise() {
         </div>
         <div class="field">
           <label for="promiseDateInput">Promise Date</label>
-          <input id="promiseDateInput" type="date" />
+          <input id="promiseDateInput" type="date" value="${todayIso}" />
         </div>
         <div class="field">
           <label for="promiseDueDateInput">Due Date <span style="font-weight:400;color:var(--muted);">(optional)</span></label>
