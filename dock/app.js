@@ -2750,39 +2750,97 @@ function renderCalendar() {
     return endTime ? `${formatTime(startTime)} – ${formatTime(endTime)}` : formatTime(startTime);
   }
 
-  function eventCardHtml(e) {
-    const timeRange = formatTimeRange(e.time, e.endTime);
-    const timePart = timeRange ? `<span class="cal-week-event__time">${timeRange}</span>` : "";
-    const notePart = e.note ? `<span class="cal-week-event__note">${e.note}</span>` : "";
-    const recurTitle = e.recurrence === "weekly" ? "Repeats weekly" : e.recurrence === "monthly" ? "Repeats monthly" : "";
-    const recurBadge = recurTitle ? `<span class="cal-recur-badge" title="${recurTitle}">↻</span>` : "";
-    return `<div class="cal-week-event cal-week-event--${e.color}">
-      <div class="cal-week-event__top">
-        <span class="cal-week-event__title">${e.title}${recurBadge}</span>
-        <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
-      </div>
-      ${timePart}${notePart}
-    </div>`;
+  // ── time-grid constants & helpers ─────────────────────────────────────────
+  const HOUR_PX  = 60;
+  const TG_HOURS = [23, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+
+  function timeToOffset(t) {
+    // Returns hours elapsed since 23:00 (the grid top).
+    if (!t) return null;
+    const parts = t.split(":");
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1] || "0", 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    return h >= 23 ? (h - 23 + m / 60) : (h + 1 + m / 60);
   }
 
-  // ── build grid HTML ───────────────────────────────────────────────────────
+  function eventTopHeight(ev) {
+    const startOff = timeToOffset(ev.time);
+    if (startOff === null) return null;
+    let endOff = ev.endTime ? timeToOffset(ev.endTime) : startOff + 1;
+    if (endOff === null || endOff <= startOff) endOff = startOff + 1;
+    return {
+      top:    Math.round(startOff * HOUR_PX),
+      height: Math.max(22, Math.round((endOff - startOff) * HOUR_PX))
+    };
+  }
+
+  // ── build time-grid HTML ──────────────────────────────────────────────────
   const displayDays = getDisplayDays();
   const rangeTitle  = formatRangeTitle(displayDays);
+  const numCols     = displayDays.length;
 
-  const gridHtml = displayDays.map(dateStr => {
-    const d = new Date(dateStr + "T12:00:00");
+  const headDaysHtml = displayDays.map(dateStr => {
+    const d       = new Date(dateStr + "T12:00:00");
     const isToday = dateStr === todayStr;
-    const events  = eventsForDate(dateStr);
-    const eventsHtml = events.length
-      ? events.map(eventCardHtml).join("")
-      : `<div class="cal-week-day__empty">No events</div>`;
+    return `<div class="cal-tg-head__day${isToday ? " is-today" : ""}">
+      <span class="cal-tg-day-name">${viewMode === "day" ? DAY_FULL[d.getDay()] : DAY_SHORT[d.getDay()]}</span>
+      <span class="cal-tg-day-num${isToday ? " is-today-num" : ""}">${d.getDate()}</span>
+    </div>`;
+  }).join("");
 
-    return `<div class="cal-week-day${isToday ? " is-today" : ""}">
-      <div class="cal-week-day__header">
-        <span class="cal-week-day__name">${viewMode === "day" ? DAY_FULL[d.getDay()] : DAY_SHORT[d.getDay()]}</span>
-        <span class="cal-week-day__num${isToday ? " is-today-num" : ""}">${d.getDate()}</span>
+  const hasAnyAllDay = displayDays.some(dateStr => eventsForDate(dateStr).some(e => !e.time));
+  const allDayRowHtml = hasAnyAllDay ? `
+    <div class="cal-tg-allday">
+      <div class="cal-tg-allday__gutter"><span>All&#8209;day</span></div>
+      <div class="cal-tg-allday__cols" style="grid-template-columns:repeat(${numCols},minmax(0,1fr))">
+        ${displayDays.map(dateStr => {
+          const evts = eventsForDate(dateStr).filter(e => !e.time);
+          return `<div class="cal-tg-allday__cell">
+            ${evts.map(e => {
+              const recurBadge = e.recurrence ? `<span class="cal-recur-badge">↻</span>` : "";
+              return `<div class="cal-week-event cal-week-event--${e.color}">
+                <div class="cal-week-event__top">
+                  <span class="cal-week-event__title">${e.title}${recurBadge}</span>
+                  <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
+                </div>
+              </div>`;
+            }).join("")}
+          </div>`;
+        }).join("")}
       </div>
-      <div class="cal-week-day__events">${eventsHtml}</div>
+    </div>` : "";
+
+  const gutterHtml = TG_HOURS.map(h =>
+    `<div class="cal-tg-hour-label"><span>${String(h).padStart(2, "0")}:00</span></div>`
+  ).join("");
+
+  // 48 slots per column (24 hours × 2 half-hour slots).
+  // Odd-indexed slots mark the hour boundary (solid line).
+  const slotRowsHtml = Array.from({ length: 48 }, (_, i) =>
+    `<div class="cal-tg-slot${i % 2 === 1 ? " cal-tg-slot--hour" : ""}"></div>`
+  ).join("");
+
+  const colsHtml = displayDays.map(dateStr => {
+    const isToday   = dateStr === todayStr;
+    const timedEvts = eventsForDate(dateStr).filter(e => e.time);
+    const eventsHtml = timedEvts.map(e => {
+      const pos = eventTopHeight(e);
+      if (!pos) return "";
+      const timeRange  = formatTimeRange(e.time, e.endTime);
+      const recurBadge = e.recurrence ? `<span class="cal-recur-badge">↻</span>` : "";
+      const notePart   = e.note ? `<span class="cal-tg-event__note">${e.note}</span>` : "";
+      return `<div class="cal-tg-event cal-tg-event--${e.color}" style="top:${pos.top}px;height:${pos.height}px" data-id="${e.id}">
+        <div class="cal-tg-event__inner">
+          <span class="cal-tg-event__title">${e.title}${recurBadge}</span>
+          ${timeRange ? `<span class="cal-tg-event__time">${timeRange}</span>` : ""}
+          ${notePart}
+        </div>
+        <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
+      </div>`;
+    }).join("");
+    return `<div class="cal-tg-col${isToday ? " is-today" : ""}" data-date="${dateStr}">
+      ${slotRowsHtml}${eventsHtml}
     </div>`;
   }).join("");
 
@@ -2837,8 +2895,18 @@ function renderCalendar() {
           <span class="calendar-nav__title">${rangeTitle}</span>
           ${viewToggleHtml}
         </div>
-        <div class="cal-week-grid cal-week-grid--${viewMode}" id="cal-week-grid">
-          ${gridHtml}
+        <div class="cal-tg" id="cal-week-grid">
+          <div class="cal-tg-head">
+            <div class="cal-tg-head__gutter"></div>
+            <div class="cal-tg-head__days" style="grid-template-columns:repeat(${numCols},minmax(0,1fr))">${headDaysHtml}</div>
+          </div>
+          ${allDayRowHtml}
+          <div class="cal-tg-scroll" id="cal-tg-scroll">
+            <div class="cal-tg-body">
+              <div class="cal-tg-gutter">${gutterHtml}</div>
+              <div class="cal-tg-cols" style="grid-template-columns:repeat(${numCols},minmax(0,1fr))">${colsHtml}</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2893,6 +2961,15 @@ function renderCalendar() {
       </div>
     </div>
   `;
+
+  // ── auto-scroll to current time ──────────────────────────────────────────
+  (function () {
+    const scrollEl = document.getElementById("cal-tg-scroll");
+    if (!scrollEl) return;
+    const h = now.getHours(), m = now.getMinutes();
+    const nowOff = h >= 23 ? (h - 23 + m / 60) : (h + 1 + m / 60);
+    scrollEl.scrollTop = Math.max(0, Math.round(nowOff * HOUR_PX) - 120);
+  })();
 
   // ── navigation ────────────────────────────────────────────────────────────
   const step = viewMode === "day" ? 1 : 7;
