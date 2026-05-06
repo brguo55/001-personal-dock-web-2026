@@ -422,7 +422,9 @@ h1 {
 .task-list { display: grid; gap: 8px; flex: 1; }
 .task-item { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
 .task-item input[type="checkbox"],.budget-item__check { width: 16px; height: 16px; accent-color: var(--green); }
-.task-title { line-height: 1.4; font-size: .92rem; }
+/* font-weight 500 pairs Rajdhani Medium (Latin) with Noto Sans SC 500 (CJK);
+   line-height 1.55 gives Chinese characters comfortable vertical rhythm. */
+.task-title { line-height: 1.55; font-size: .92rem; font-weight: 500; letter-spacing: 0; }
 .task-item.is-done .task-title { color: var(--muted); text-decoration: line-through; }
 .task-title strong { font-weight: 700; color: var(--text-bright); }
 .task-title em { font-style: italic; color: inherit; }
@@ -436,6 +438,8 @@ h1 {
 .section-form button { padding-inline: 16px; background: var(--green-dim); border-color: rgba(10,191,83,.25); color: var(--dark-green); }
 .section-form button:hover { background: rgba(10,191,83,.18); border-color: rgba(10,191,83,.45); }
 .section-form__message { margin: 8px 0 0; color: var(--danger); font-size: .8rem; line-height: 1.4; }
+.section-form__hint { margin: 5px 0 0; color: var(--muted); font-size: .74rem; opacity: .72; letter-spacing: .01em; }
+.section-form__hint code { font-family: inherit; font-weight: 600; color: var(--dark-green); }
 .empty-state { color: var(--muted); line-height: 1.5; font-size: .88rem; }
 
 /* ── GTD ─────────────────────────────────────────────── */
@@ -760,6 +764,7 @@ h1 {
   display: grid; gap: 10px;
 }
 .calendar-add-form__title { font-size: .88rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-bright); margin-bottom: 4px; }
+.cal-time-range { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 .calendar-color-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .calendar-color-row label { color: var(--muted); font-size: .76rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }

@@ -2011,6 +2011,11 @@ function renderActionBoard() {
     limitMessage.hidden = true;
     form.insertAdjacentElement("afterend", limitMessage);
 
+    const formatHint = document.createElement("p");
+    formatHint.className = "section-form__hint";
+    formatHint.innerHTML = "Use <code>**bold**</code> or <code>*italic*</code> — supports Chinese text";
+    limitMessage.insertAdjacentElement("afterend", formatHint);
+
     card.style.setProperty("--section-accent", section.accent);
 
     if (quadrantSections.some(item => item.id === section.id)) {
@@ -2030,7 +2035,7 @@ function renderActionBoard() {
     input.setAttribute("aria-label", `Add a task to ${section.title}`);
 
     if (section.tasks.length === 0) {
-      taskList.appendChild(createEmptyState("There is nothing here yet. Add one item to start using this section."));
+      taskList.appendChild(createEmptyState(""));
     } else {
       section.tasks.forEach(task => {
         const item = document.createElement("li");
@@ -2329,8 +2334,22 @@ function renderCalendar() {
          : "var(--green)";
   }
 
+  function formatTime(t) {
+    if (!t) return "";
+    const [h, m] = t.split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    const hour = h % 12 || 12;
+    return m === 0 ? `${hour} ${period}` : `${hour}:${String(m).padStart(2, "0")} ${period}`;
+  }
+
+  function formatTimeRange(startTime, endTime) {
+    if (!startTime) return "";
+    return endTime ? `${formatTime(startTime)} – ${formatTime(endTime)}` : formatTime(startTime);
+  }
+
   function eventCardHtml(e) {
-    const timePart = e.time ? `<span class="cal-week-event__time">${e.time}</span>` : "";
+    const timeRange = formatTimeRange(e.time, e.endTime);
+    const timePart = timeRange ? `<span class="cal-week-event__time">${timeRange}</span>` : "";
     const notePart = e.note ? `<span class="cal-week-event__note">${e.note}</span>` : "";
     return `<div class="cal-week-event cal-week-event--${e.color}">
       <div class="cal-week-event__top">
@@ -2371,7 +2390,8 @@ function renderCalendar() {
   const upcomingHtml = upcomingEvents.length === 0
     ? `<li><div class="empty-state">No upcoming events.</div></li>`
     : upcomingEvents.map(e => {
-        const meta = [e.date, e.time].filter(Boolean).join(" · ");
+        const timeRange = formatTimeRange(e.time, e.endTime);
+        const meta = [e.date, timeRange].filter(Boolean).join(" · ");
         return `<li class="calendar-event-item">
           <span class="calendar-event-item__dot" style="background:${dotColor(e.color)}"></span>
           <div class="calendar-event-item__copy">
@@ -2423,9 +2443,15 @@ function renderCalendar() {
             <label for="cal-date">Date</label>
             <input id="cal-date" name="date" type="date" required value="${todayStr}">
           </div>
-          <div class="field">
-            <label for="cal-time">Time (optional)</label>
-            <input id="cal-time" name="time" type="time">
+          <div class="cal-time-range">
+            <div class="field">
+              <label for="cal-start-time">Start Time (optional)</label>
+              <input id="cal-start-time" name="startTime" type="time">
+            </div>
+            <div class="field">
+              <label for="cal-end-time">End Time (optional)</label>
+              <input id="cal-end-time" name="endTime" type="time">
+            </div>
           </div>
           <div class="field">
             <label for="cal-note">Note (optional)</label>
@@ -2504,15 +2530,21 @@ function renderCalendar() {
   document.getElementById("cal-add-form").addEventListener("submit", e => {
     e.preventDefault();
     const form  = e.target;
-    const title = form.title.value.trim();
-    const date  = form.date.value;
-    const time  = form.time.value || "";
-    const note  = form.note.value.trim();
-    const color = form.color.value || "green";
-    const msg   = document.getElementById("cal-form-msg");
+    const title     = form.title.value.trim();
+    const date      = form.date.value;
+    const startTime = form.startTime.value || "";
+    const endTime   = form.endTime.value || "";
+    const note      = form.note.value.trim();
+    const color     = form.color.value || "green";
+    const msg       = document.getElementById("cal-form-msg");
 
     if (!title) { msg.textContent = "Please enter a title."; msg.style.display = ""; return; }
     if (!date)  { msg.textContent = "Please pick a date.";   msg.style.display = ""; return; }
+    if (endTime && startTime && endTime <= startTime) {
+      msg.textContent = "End time must be after start time.";
+      msg.style.display = "";
+      return;
+    }
     msg.style.display = "none";
 
     // navigate to the week/day containing the new event
@@ -2522,7 +2554,7 @@ function renderCalendar() {
       uiState.calendarWeekStart = sundayOfWeek(new Date(date + "T12:00:00"));
     }
 
-    appState.calendarEvents.push(createCalendarEvent({ title, date, time, note, color }));
+    appState.calendarEvents.push(createCalendarEvent({ title, date, time: startTime, endTime, note, color }));
     saveState();
     renderApp();
   });
