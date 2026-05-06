@@ -4764,12 +4764,12 @@ function renderBudgetList(entries) {
     });
 
     expandButton.addEventListener("click", () => {
-      const opening = detailsPanel.hidden;
+      const opening = !detailsPanel.classList.contains("is-visible");
       if (opening && !detailsPanel.dataset.built) {
         buildBudgetItemDetails(detailsPanel, item, refreshExpandIndicator);
         detailsPanel.dataset.built = "1";
       }
-      detailsPanel.hidden = !opening;
+      detailsPanel.classList.toggle("is-visible", opening);
       expandButton.setAttribute("aria-expanded", String(opening));
       expandButton.classList.toggle("is-open", opening);
     });

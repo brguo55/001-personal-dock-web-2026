@@ -838,12 +838,14 @@ h1 {
   background: var(--green); border-radius: 50%;
 }
 .budget-item__details-panel {
+  display: none;
   margin-top: 8px; padding: 12px 14px;
   background: var(--green-dim);
   border-left: 3px solid var(--green);
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  display: grid; gap: 14px;
+  gap: 14px;
 }
+.budget-item__details-panel.is-visible { display: grid; }
 .bid-group { display: grid; gap: 6px; }
 .bid-label {
   font-size: .72rem; font-weight: 700;
