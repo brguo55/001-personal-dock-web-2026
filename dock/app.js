@@ -5457,6 +5457,10 @@ function populateBudgetForm(editorTarget) {
     if (currSel) currSel.value = editorTarget.item.currency || "USD";
     categorySelect.value = editorTarget.category.id;
   }
+
+  // Upgrade currency selector to match the GTD custom-select style
+  const currencySelectEl = document.getElementById("budgetCurrencySelect");
+  if (currencySelectEl) buildGtdCustomSelect(currencySelectEl);
 }
 
 function renderBudgetList(entries) {
