@@ -5471,6 +5471,88 @@ function renderBudgetList(entries) {
     return;
   }
 
+  // ── Drag-and-drop state ──────────────────────────────────────────────────
+  let dragSrcId = null;
+
+  function getDragLi(el) {
+    // Walk up to find the .budget-item li
+    while (el && !el.classList.contains("budget-item")) el = el.parentElement;
+    return el;
+  }
+
+  budgetList.addEventListener("dragstart", e => {
+    const li = getDragLi(e.target);
+    if (!li) return;
+    dragSrcId = li.dataset.itemId;
+    li.classList.add("budget-item--dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", dragSrcId);
+  });
+
+  budgetList.addEventListener("dragend", e => {
+    const li = getDragLi(e.target);
+    if (li) li.classList.remove("budget-item--dragging");
+    budgetList.querySelectorAll(".budget-item--drag-over").forEach(el =>
+      el.classList.remove("budget-item--drag-over")
+    );
+    dragSrcId = null;
+  });
+
+  budgetList.addEventListener("dragover", e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const li = getDragLi(e.target);
+    if (!li || li.dataset.itemId === dragSrcId) return;
+    budgetList.querySelectorAll(".budget-item--drag-over").forEach(el =>
+      el.classList.remove("budget-item--drag-over")
+    );
+    li.classList.add("budget-item--drag-over");
+  });
+
+  budgetList.addEventListener("dragleave", e => {
+    const li = getDragLi(e.target);
+    if (li) li.classList.remove("budget-item--drag-over");
+  });
+
+  budgetList.addEventListener("drop", e => {
+    e.preventDefault();
+    const targetLi = getDragLi(e.target);
+    if (!targetLi || !dragSrcId) return;
+    const targetId = targetLi.dataset.itemId;
+    if (targetId === dragSrcId) return;
+
+    // Locate both items in their categories
+    const srcEntry  = entries.find(en => en.item.id === dragSrcId);
+    const destEntry = entries.find(en => en.item.id === targetId);
+    if (!srcEntry || !destEntry) return;
+
+    const srcCat  = srcEntry.category;
+    const destCat = destEntry.category;
+
+    if (srcCat.id === destCat.id) {
+      // Same category — simple in-place reorder
+      const items = srcCat.items;
+      const fromIdx = items.findIndex(it => it.id === dragSrcId);
+      const toIdx   = items.findIndex(it => it.id === targetId);
+      if (fromIdx === -1 || toIdx === -1) return;
+      items.splice(toIdx, 0, items.splice(fromIdx, 1)[0]);
+    } else {
+      // Different categories — move item from srcCat to destCat at target position
+      const fromItems = srcCat.items;
+      const toItems   = destCat.items;
+      const fromIdx   = fromItems.findIndex(it => it.id === dragSrcId);
+      const toIdx     = toItems.findIndex(it => it.id === targetId);
+      if (fromIdx === -1 || toIdx === -1) return;
+      const [movedItem] = fromItems.splice(fromIdx, 1);
+      movedItem.currency = movedItem.currency || "USD"; // keep field intact
+      toItems.splice(toIdx, 0, movedItem);
+    }
+
+    saveState();
+    renderApp();
+  });
+  // ── End drag-and-drop ────────────────────────────────────────────────────
+
   entries.forEach(({ category, item }) => {
     const row = budgetItemTemplate.content.cloneNode(true);
     const budgetItem = row.querySelector(".budget-item");
@@ -5483,6 +5565,8 @@ function renderBudgetList(entries) {
     const expandButton = row.querySelector(".budget-item__expand-btn");
     const detailsPanel = row.querySelector(".budget-item__details-panel");
 
+    budgetItem.draggable = true;
+    budgetItem.dataset.itemId = item.id;
     budgetItem.classList.toggle("is-checked", item.checked);
     checkbox.checked = item.checked;
     title.textContent = item.title;
