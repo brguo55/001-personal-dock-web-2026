@@ -306,6 +306,25 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0
 });
 
+const cnyFormatter = new Intl.NumberFormat("zh-CN", {
+  style: "currency",
+  currency: "CNY",
+  maximumFractionDigits: 0
+});
+
+// Update this value manually to change the exchange rate used for totals.
+const CNY_TO_USD_RATE = 0.138;
+
+function itemAmountInUSD(item) {
+  const currency = item.currency || "USD";
+  return currency === "CNY" ? item.amount * CNY_TO_USD_RATE : item.amount;
+}
+
+function formatBudgetAmount(amount, currency) {
+  if (currency === "CNY") return cnyFormatter.format(amount || 0);
+  return currencyFormatter.format(amount || 0);
+}
+
 const viewRoot = document.getElementById("viewRoot");
 const actionTemplate = document.getElementById("actionSectionTemplate");
 const budgetItemTemplate = document.getElementById("budgetItemTemplate");
@@ -384,11 +403,12 @@ function normalizeTaskRecord(task) {
   };
 }
 
-function createBudgetItem(title, amount, checked = false) {
+function createBudgetItem(title, amount, checked = false, currency = "USD") {
   return {
     id: createId(),
     title,
     amount: Number(amount) || 0,
+    currency: currency === "CNY" ? "CNY" : "USD",
     checked,
     itemNote: "",
     reminders: [],
@@ -677,6 +697,7 @@ function normalizeBudgetCategoryRecord(category) {
             id: item.id || createId(),
             title,
             amount,
+            currency: item?.currency === "CNY" ? "CNY" : "USD",
             checked: Boolean(item.checked),
             itemNote: typeof item?.itemNote === "string" ? item.itemNote : "",
             reminders: Array.isArray(item?.reminders)
@@ -1642,18 +1663,19 @@ function getBudgetStats() {
 
   appState.budgetCategories.forEach(category => {
     category.items.forEach(item => {
+      const usdAmount = itemAmountInUSD(item);
       if (category.id === "payroll") {
-        income += item.amount;
+        income += usdAmount;
       } else {
-        planned += item.amount;
+        planned += usdAmount;
       }
 
       if (category.id === "savings") {
-        savings += item.amount;
+        savings += usdAmount;
       }
 
       if (item.checked) {
-        settled += item.amount;
+        settled += usdAmount;
       } else {
         openItems += 1;
       }
@@ -3678,7 +3700,10 @@ function renderBudgetPlanner() {
     ? null
     : getBudgetCategoryById(selectedCategory);
   const editorTarget = uiState.budgetEditorId ? findBudgetItem(uiState.budgetEditorId) : null;
-  const currentTotal = visibleEntries.reduce((sum, entry) => sum + entry.item.amount, 0);
+  const currentTotal = visibleEntries.reduce((sum, entry) => sum + itemAmountInUSD(entry.item), 0);
+  // CNY-only subtotal for the secondary display
+  const cnySub = visibleEntries.filter(e => (e.item.currency || "USD") === "CNY").reduce((s, e) => s + e.item.amount, 0);
+  const hasCNY  = visibleEntries.some(e => (e.item.currency || "USD") === "CNY");
 
   viewRoot.innerHTML = `
     <section class="budget-layout">
@@ -3756,6 +3781,7 @@ function renderBudgetPlanner() {
           <div class="budget-total">
             <span>Total in view</span>
             <strong>${formatCurrency(currentTotal)}</strong>
+            ${hasCNY ? `<small style="font-size:.72rem;color:var(--muted);display:block;margin-top:2px;">incl. ${cnyFormatter.format(cnySub)} CNY @ ${CNY_TO_USD_RATE}</small>` : ""}
           </div>
         </div>
 
@@ -3770,6 +3796,14 @@ function renderBudgetPlanner() {
           <div class="field">
             <label for="budgetAmountInput">Amount</label>
             <input id="budgetAmountInput" type="number" step="0.01" min="0" placeholder="0" required />
+          </div>
+
+          <div class="field">
+            <label for="budgetCurrencySelect">Currency</label>
+            <select id="budgetCurrencySelect">
+              <option value="USD">USD</option>
+              <option value="CNY">CNY</option>
+            </select>
           </div>
 
           <div class="field">
@@ -3926,8 +3960,10 @@ function renderBudgetPlanner() {
 
     const titleInput = document.getElementById("budgetTitleInput");
     const amountInput = document.getElementById("budgetAmountInput");
+    const currencySelect = document.getElementById("budgetCurrencySelect");
     const title = titleInput.value.trim();
     const amount = Number(amountInput.value);
+    const currency = currencySelect?.value === "CNY" ? "CNY" : "USD";
     const categoryId = categorySelect.value;
 
     if (!title || Number.isNaN(amount) || amount < 0) {
@@ -3943,6 +3979,7 @@ function renderBudgetPlanner() {
     if (editorTarget) {
       editorTarget.item.title = title;
       editorTarget.item.amount = amount;
+      editorTarget.item.currency = currency;
 
       if (editorTarget.category.id !== targetCategory.id) {
         editorTarget.category.items = editorTarget.category.items.filter(item => item.id !== editorTarget.item.id);
@@ -3951,7 +3988,7 @@ function renderBudgetPlanner() {
 
       uiState.budgetEditorId = null;
     } else {
-      targetCategory.items.unshift(createBudgetItem(title, amount));
+      targetCategory.items.unshift(createBudgetItem(title, amount, false, currency));
     }
 
     saveState();
@@ -5416,6 +5453,8 @@ function populateBudgetForm(editorTarget) {
   if (editorTarget) {
     document.getElementById("budgetTitleInput").value = editorTarget.item.title;
     document.getElementById("budgetAmountInput").value = editorTarget.item.amount;
+    const currSel = document.getElementById("budgetCurrencySelect");
+    if (currSel) currSel.value = editorTarget.item.currency || "USD";
     categorySelect.value = editorTarget.category.id;
   }
 }
@@ -5452,7 +5491,7 @@ function renderBudgetList(entries) {
       : item.checked
         ? "Completed"
         : "In Progress";
-    amount.textContent = formatCurrency(item.amount);
+    amount.textContent = formatBudgetAmount(item.amount, item.currency || "USD");
 
     function itemHasDetails() {
       return Boolean(item.itemNote) || (item.reminders || []).length > 0 || (item.checklist || []).length > 0;
