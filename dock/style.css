@@ -1174,7 +1174,132 @@ h1 {
   flex-wrap: wrap;
 }
 
-.calendar-nav__left { display: flex; gap: 6px; align-items: center; }
+.calendar-nav__left { display: flex; gap: 6px; align-items: center; position: relative; }
+
+/* ── Mini month-picker ──────────────────────────────────────────────────── */
+.cal-mini-picker {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 200;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 10px 10px 8px;
+  width: 228px;
+  user-select: none;
+}
+.cal-mini-picker__header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 7px;
+}
+.cal-mini-picker__nav {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: .9rem;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background .1s, border-color .1s, color .1s;
+}
+.cal-mini-picker__nav:hover { background: var(--surface-2); border-color: var(--green); color: var(--green); }
+.cal-mini-picker__label {
+  flex: 1;
+  text-align: center;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--text-bright);
+  white-space: nowrap;
+}
+.cal-mini-picker__dow-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 3px;
+}
+.cal-mini-picker__dow-row span {
+  text-align: center;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 2px 0;
+}
+.cal-mini-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+}
+.cal-mini-picker__day {
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: .74rem;
+  height: 27px;
+  cursor: pointer;
+  text-align: center;
+  line-height: 1;
+  transition: background .1s, color .1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cal-mini-picker__day:hover { background: var(--surface-2); color: var(--text-bright); }
+.cal-mini-picker__day.is-other-month { color: var(--muted); opacity: .45; }
+.cal-mini-picker__day.is-today {
+  color: var(--green);
+  font-weight: 700;
+}
+.cal-mini-picker__day.is-in-range {
+  background: rgba(10,191,83,.1);
+  border-radius: 0;
+}
+.cal-mini-picker__day.is-selected {
+  background: var(--green);
+  color: #000;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+}
+.cal-mini-picker__day.is-today.is-selected { background: var(--green); color: #000; }
+.cal-mini-picker__footer {
+  margin-top: 8px;
+  border-top: 1px solid var(--line-faint);
+  padding-top: 6px;
+  display: flex;
+  justify-content: center;
+}
+.cal-mini-picker__today-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--green);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 4px 14px;
+  cursor: pointer;
+  transition: background .1s, border-color .1s;
+}
+.cal-mini-picker__today-btn:hover { background: var(--green-dim); border-color: var(--green); }
+/* Active state for the Today button when picker is open */
+.calendar-nav__btn.cal-today-btn.is-active {
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--green);
+}
 
 .calendar-nav__title {
   flex: 1;

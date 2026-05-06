@@ -345,6 +345,9 @@ let uiState = {
   calendarMonth: new Date().getMonth(),
   calendarWeekStart: null,  // ISO date string for Monday of displayed week; null = use today's week
   calendarViewMode: "week",  // "week" | "day"
+  calendarPickerOpen: false,     // mini month-picker panel open
+  calendarPickerMonth: null,     // 0-11, month shown in picker; null = sync from view on open
+  calendarPickerYear: null,      // year shown in picker
   justCompletedTaskId: null,  // task id for the fade-in animation in the completed panel
   expandedTaskIds: new Set(),  // task ids whose details panel is open
   selectedPlannerSection: "all",  // planner section filter
@@ -356,6 +359,7 @@ let backupUiState = {
   tone: "info"
 };
 let _calendarDragAbort = null;
+let _calendarPickerAbort = null;
 
 // Active Action Board daily sections — set when the action board is rendered,
 // cleared when navigating away. All board mutations operate on this reference.
@@ -2023,6 +2027,10 @@ function renderApp() {
     _calendarDragAbort.abort();
     _calendarDragAbort = null;
   }
+  if (uiState.activeView !== "calendar") {
+    if (_calendarPickerAbort) { _calendarPickerAbort.abort(); _calendarPickerAbort = null; }
+    uiState.calendarPickerOpen = false;
+  }
   if (uiState.activeView !== "actionBoard" && _activeDailySections) {
     clearActiveDailyBoard();
   }
@@ -2950,6 +2958,11 @@ function renderPromise() {
 function renderCalendar() {
   const now = new Date();
   if (_calendarDragAbort) { _calendarDragAbort.abort(); _calendarDragAbort = null; }
+  // Abort picker outside-click listener when picker is being closed
+  if (!uiState.calendarPickerOpen && _calendarPickerAbort) {
+    _calendarPickerAbort.abort();
+    _calendarPickerAbort = null;
+  }
 
   // ── helpers ────────────────────────────────────────────────────────────────
   function toISODateString(d) {
@@ -3015,7 +3028,10 @@ function renderCalendar() {
   function formatRangeTitle(days) {
     if (viewMode === "day") {
       const d = new Date(days[0] + "T12:00:00");
-      return `${DAY_FULL[d.getDay()]}, ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+      const { week, year: isoYear } = isoWeekNumber(d);
+      const totalWeeks = isoWeeksInYear(isoYear);
+      const weekBadge = ` <span class="cal-week-badge">(Week ${week} / ${totalWeeks})</span>`;
+      return `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}${weekBadge}`;
     }
     const s = new Date(days[0] + "T12:00:00");
     const e = new Date(days[6] + "T12:00:00");
@@ -3238,7 +3254,7 @@ function renderCalendar() {
         <div class="calendar-nav">
           <div class="calendar-nav__left">
             <button class="calendar-nav__btn" id="cal-prev">&#8249;</button>
-            <button class="calendar-nav__btn cal-today-btn" id="cal-today">Today</button>
+            <button class="calendar-nav__btn cal-today-btn${uiState.calendarPickerOpen ? " is-active" : ""}" id="cal-today">Today</button>
             <button class="calendar-nav__btn" id="cal-next">&#8250;</button>
           </div>
           <span class="calendar-nav__title">${rangeTitle}</span>
@@ -3339,7 +3355,17 @@ function renderCalendar() {
   });
 
   document.getElementById("cal-today").addEventListener("click", () => {
-    uiState.calendarWeekStart = viewMode === "day" ? todayStr : mondayOfWeek(now);
+    if (uiState.calendarPickerOpen) {
+      // Close picker — abort handled at top of next renderCalendar()
+      uiState.calendarPickerOpen = false;
+      renderApp();
+      return;
+    }
+    // Open picker at the month of the currently visible date
+    const anchorDate = new Date(uiState.calendarWeekStart + "T12:00:00");
+    uiState.calendarPickerYear  = anchorDate.getFullYear();
+    uiState.calendarPickerMonth = anchorDate.getMonth();
+    uiState.calendarPickerOpen  = true;
     renderApp();
   });
 
@@ -3461,6 +3487,158 @@ function renderCalendar() {
     saveState();
     renderApp();
   });
+
+  // ── Mini month-picker (date locator) ─────────────────────────────────────
+  if (uiState.calendarPickerOpen) {
+    const py = uiState.calendarPickerYear;
+    const pm = uiState.calendarPickerMonth;
+    const firstOfMonth = new Date(py, pm, 1);
+    const lastOfMonth  = new Date(py, pm + 1, 0);
+    const startDow = (firstOfMonth.getDay() + 6) % 7; // 0=Mon…6=Sun
+
+    const cells = [];
+    for (let i = 0; i < startDow; i++) {
+      const d = new Date(py, pm, 1 - (startDow - i));
+      cells.push({ dateStr: toISODateString(d), otherMonth: true });
+    }
+    for (let d = 1; d <= lastOfMonth.getDate(); d++) {
+      cells.push({ dateStr: toISODateString(new Date(py, pm, d)), otherMonth: false });
+    }
+    let nd = 1;
+    while (cells.length < 42) {
+      cells.push({ dateStr: toISODateString(new Date(py, pm + 1, nd++)), otherMonth: true });
+    }
+
+    // Compute the range of currently displayed days (for in-range highlight)
+    const rangeStart = uiState.calendarWeekStart;
+    let rangeEnd;
+    if (viewMode === "day") {
+      rangeEnd = rangeStart;
+    } else {
+      const re = new Date(rangeStart + "T12:00:00");
+      re.setDate(re.getDate() + 6);
+      rangeEnd = toISODateString(re);
+    }
+
+    const picker = document.createElement("div");
+    picker.className = "cal-mini-picker";
+    picker.id = "cal-mini-picker";
+
+    // Header row: «prev-yr  ‹prev-mo  Month Year  next-mo›  next-yr»
+    const header = document.createElement("div");
+    header.className = "cal-mini-picker__header";
+    header.innerHTML = `
+      <button type="button" class="cal-mini-picker__nav" id="pmPrevYear"  title="Previous year">&laquo;</button>
+      <button type="button" class="cal-mini-picker__nav" id="pmPrevMonth" title="Previous month">&lsaquo;</button>
+      <span class="cal-mini-picker__label">${MONTH_NAMES[pm]} ${py}</span>
+      <button type="button" class="cal-mini-picker__nav" id="pmNextMonth" title="Next month">&rsaquo;</button>
+      <button type="button" class="cal-mini-picker__nav" id="pmNextYear"  title="Next year">&raquo;</button>
+    `;
+    picker.appendChild(header);
+
+    // Day-of-week header
+    const dowRow = document.createElement("div");
+    dowRow.className = "cal-mini-picker__dow-row";
+    ["Mo","Tu","We","Th","Fr","Sa","Su"].forEach(label => {
+      const span = document.createElement("span");
+      span.textContent = label;
+      dowRow.appendChild(span);
+    });
+    picker.appendChild(dowRow);
+
+    // Day grid
+    const grid = document.createElement("div");
+    grid.className = "cal-mini-picker__grid";
+    cells.forEach(({ dateStr, otherMonth }) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const isToday      = dateStr === todayStr;
+      const isRangeStart = dateStr === rangeStart;
+      const isInRange    = !isRangeStart && dateStr > rangeStart && dateStr <= rangeEnd;
+      btn.className = [
+        "cal-mini-picker__day",
+        otherMonth    ? "is-other-month" : "",
+        isToday       ? "is-today"       : "",
+        isRangeStart  ? "is-selected"    : (isInRange ? "is-in-range" : "")
+      ].filter(Boolean).join(" ");
+      btn.textContent = parseInt(dateStr.slice(8), 10);
+      btn.dataset.date = dateStr;
+      grid.appendChild(btn);
+    });
+    picker.appendChild(grid);
+
+    // Footer with "Jump to Today" shortcut
+    const footer = document.createElement("div");
+    footer.className = "cal-mini-picker__footer";
+    const jumpBtn = document.createElement("button");
+    jumpBtn.type = "button";
+    jumpBtn.className = "cal-mini-picker__today-btn";
+    jumpBtn.id = "pmJumpToday";
+    jumpBtn.textContent = "Jump to Today";
+    footer.appendChild(jumpBtn);
+    picker.appendChild(footer);
+
+    // Inject into calendar-nav__left so it positions relative to it
+    document.querySelector(".calendar-nav__left").appendChild(picker);
+
+    // ── Picker navigation ──────────────────────────────────────────────────
+    header.querySelector("#pmPrevYear").addEventListener("click", () => {
+      uiState.calendarPickerYear--;
+      renderApp();
+    });
+    header.querySelector("#pmPrevMonth").addEventListener("click", () => {
+      let m = uiState.calendarPickerMonth - 1, y = uiState.calendarPickerYear;
+      if (m < 0) { m = 11; y--; }
+      uiState.calendarPickerMonth = m;
+      uiState.calendarPickerYear  = y;
+      renderApp();
+    });
+    header.querySelector("#pmNextMonth").addEventListener("click", () => {
+      let m = uiState.calendarPickerMonth + 1, y = uiState.calendarPickerYear;
+      if (m > 11) { m = 0; y++; }
+      uiState.calendarPickerMonth = m;
+      uiState.calendarPickerYear  = y;
+      renderApp();
+    });
+    header.querySelector("#pmNextYear").addEventListener("click", () => {
+      uiState.calendarPickerYear++;
+      renderApp();
+    });
+
+    // ── Day selection ──────────────────────────────────────────────────────
+    grid.addEventListener("click", ev => {
+      const btn = ev.target.closest(".cal-mini-picker__day");
+      if (!btn) return;
+      const date = btn.dataset.date;
+      if (viewMode === "day") {
+        uiState.calendarWeekStart = date;
+      } else {
+        uiState.calendarWeekStart = mondayOfWeek(new Date(date + "T12:00:00"));
+      }
+      uiState.calendarPickerOpen = false;
+      if (_calendarPickerAbort) { _calendarPickerAbort.abort(); _calendarPickerAbort = null; }
+      renderApp();
+    });
+
+    // ── Jump to today ──────────────────────────────────────────────────────
+    jumpBtn.addEventListener("click", () => {
+      uiState.calendarWeekStart  = viewMode === "day" ? todayStr : mondayOfWeek(now);
+      uiState.calendarPickerOpen = false;
+      if (_calendarPickerAbort) { _calendarPickerAbort.abort(); _calendarPickerAbort = null; }
+      renderApp();
+    });
+
+    // ── Outside-click closes picker ────────────────────────────────────────
+    if (_calendarPickerAbort) { _calendarPickerAbort.abort(); _calendarPickerAbort = null; }
+    _calendarPickerAbort = new AbortController();
+    document.addEventListener("click", ev => {
+      if (ev.target.closest && ev.target.closest("#cal-mini-picker")) return;
+      if (ev.target.closest && ev.target.closest("#cal-today"))       return;
+      uiState.calendarPickerOpen = false;
+      if (_calendarPickerAbort) { _calendarPickerAbort.abort(); _calendarPickerAbort = null; }
+      renderApp();
+    }, { signal: _calendarPickerAbort.signal });
+  }
 
   // ── Drag & resize for timed event blocks ──────────────────────────────────
   {
