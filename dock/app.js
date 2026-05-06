@@ -3259,6 +3259,7 @@ function renderPlanner() {
       opt.textContent = section.title;
       sectionSelect.appendChild(opt);
     });
+    buildGtdCustomSelect(sectionSelect);
   }
 
   // ── Item list ─────────────────────────────────────────────────────────────
