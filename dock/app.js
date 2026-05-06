@@ -2761,6 +2761,25 @@ function renderCalendar() {
     });
   }
 
+  function isoWeekNumber(d) {
+    // Returns { week, year } per ISO 8601 (week starts Monday, week 1 contains Jan 4).
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+    return { week, year: date.getUTCFullYear() };
+  }
+
+  function isoWeeksInYear(y) {
+    // A year has 53 ISO weeks if Dec 31 or Jan 1 of that year is a Thursday.
+    const dec31 = new Date(Date.UTC(y, 11, 31));
+    const dec31Day = dec31.getUTCDay() || 7;
+    if (dec31Day === 4) return 53;
+    const jan1 = new Date(Date.UTC(y, 0, 1));
+    if ((jan1.getUTCDay() || 7) === 4) return 53;
+    return 52;
+  }
+
   function formatRangeTitle(days) {
     if (viewMode === "day") {
       const d = new Date(days[0] + "T12:00:00");
@@ -2768,11 +2787,17 @@ function renderCalendar() {
     }
     const s = new Date(days[0] + "T12:00:00");
     const e = new Date(days[6] + "T12:00:00");
+    const { week, year: isoYear } = isoWeekNumber(s);
+    const totalWeeks = isoWeeksInYear(isoYear);
+    const weekSuffix = ` <span class="cal-week-badge">(Week ${week} / ${totalWeeks})</span>`;
+    let dateRange;
     if (s.getFullYear() !== e.getFullYear())
-      return `${MONTH_NAMES[s.getMonth()]} ${s.getDate()}, ${s.getFullYear()} – ${MONTH_NAMES[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
-    if (s.getMonth() !== e.getMonth())
-      return `${MONTH_NAMES[s.getMonth()]} ${s.getDate()} – ${MONTH_NAMES[e.getMonth()]} ${e.getDate()}, ${s.getFullYear()}`;
-    return `${MONTH_NAMES[s.getMonth()]} ${s.getDate()} – ${e.getDate()}, ${s.getFullYear()}`;
+      dateRange = `${MONTH_NAMES[s.getMonth()]} ${s.getDate()}, ${s.getFullYear()} \u2013 ${MONTH_NAMES[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+    else if (s.getMonth() !== e.getMonth())
+      dateRange = `${MONTH_NAMES[s.getMonth()]} ${s.getDate()} \u2013 ${MONTH_NAMES[e.getMonth()]} ${e.getDate()}, ${s.getFullYear()}`;
+    else
+      dateRange = `${MONTH_NAMES[s.getMonth()]} ${s.getDate()} \u2013 ${e.getDate()}, ${s.getFullYear()}`;
+    return dateRange + weekSuffix;
   }
 
   function eventsForDate(dateStr) {
