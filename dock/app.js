@@ -318,7 +318,7 @@ let uiState = {
   showBudgetCategoryManager: false,
   calendarYear: new Date().getFullYear(),
   calendarMonth: new Date().getMonth(),
-  calendarWeekStart: null,  // ISO date string for Sunday of displayed week; null = use today's week
+  calendarWeekStart: null,  // ISO date string for Monday of displayed week; null = use today's week
   calendarViewMode: "week"  // "week" | "day"
 };
 let backupUiState = {
@@ -2271,14 +2271,14 @@ function renderCalendar() {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   }
 
-  function sundayOfWeek(d) {
+  function mondayOfWeek(d) {
     const copy = new Date(d);
-    copy.setDate(copy.getDate() - copy.getDay());
+    copy.setDate(copy.getDate() - (copy.getDay() + 6) % 7);
     return toISODateString(copy);
   }
 
   // ── initialise uiState ────────────────────────────────────────────────────
-  if (!uiState.calendarWeekStart) uiState.calendarWeekStart = sundayOfWeek(now);
+  if (!uiState.calendarWeekStart) uiState.calendarWeekStart = mondayOfWeek(now);
   if (typeof uiState.calendarYear  !== "number") uiState.calendarYear  = now.getFullYear();
   if (typeof uiState.calendarMonth !== "number") uiState.calendarMonth = now.getMonth();
   if (!uiState.calendarViewMode) uiState.calendarViewMode = "week";
@@ -2494,7 +2494,7 @@ function renderCalendar() {
   });
 
   document.getElementById("cal-today").addEventListener("click", () => {
-    uiState.calendarWeekStart = viewMode === "day" ? todayStr : sundayOfWeek(now);
+    uiState.calendarWeekStart = viewMode === "day" ? todayStr : mondayOfWeek(now);
     renderApp();
   });
 
@@ -2508,7 +2508,7 @@ function renderCalendar() {
         uiState.calendarWeekStart = todayStr;
       } else {
         // switch to week: jump to week containing current day
-        uiState.calendarWeekStart = sundayOfWeek(new Date(uiState.calendarWeekStart + "T12:00:00"));
+        uiState.calendarWeekStart = mondayOfWeek(new Date(uiState.calendarWeekStart + "T12:00:00"));
       }
       uiState.calendarViewMode = mode;
       renderApp();
