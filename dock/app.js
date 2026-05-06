@@ -2819,20 +2819,36 @@ function renderCalendar() {
   const TG_HOURS = [23, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
 
   function timeToOffset(t) {
-    // Returns hours elapsed since 23:00 (the grid top).
+    // Returns hours elapsed since 22:30 (the grid top).
     if (!t) return null;
     const parts = t.split(":");
     const h = parseInt(parts[0], 10);
     const m = parseInt(parts[1] || "0", 10);
     if (isNaN(h) || isNaN(m)) return null;
-    return h >= 23 ? (h - 23 + m / 60) : (h + 1 + m / 60);
+    const timeInHours = h + m / 60;
+    return timeInHours >= 22.5 ? (timeInHours - 22.5) : (timeInHours + 24 - 22.5);
   }
 
   function eventTopHeight(ev) {
     const startOff = timeToOffset(ev.time);
     if (startOff === null) return null;
-    let endOff = ev.endTime ? timeToOffset(ev.endTime) : startOff + 1;
-    if (endOff === null || endOff <= startOff) endOff = startOff + 1;
+    let endOff;
+    if (!ev.endTime) {
+      endOff = startOff + 1;
+    } else {
+      endOff = timeToOffset(ev.endTime);
+      if (endOff === null) {
+        endOff = startOff + 1;
+      } else if (endOff <= startOff && ev.endTime > ev.time) {
+        // Same-day event whose end time crosses the 22:30 grid boundary
+        endOff += 24;
+      } else if (endOff <= startOff) {
+        // Identical or otherwise indeterminate times — default to 1-hour block
+        endOff = startOff + 1;
+      }
+      // Overnight events (endTime < startTime string-wise) are already correct:
+      // timeToOffset wraps them so endOff > startOff naturally.
+    }
     return {
       top:    Math.round(startOff * HOUR_PX),
       height: Math.max(22, Math.round((endOff - startOff) * HOUR_PX))
@@ -2875,14 +2891,17 @@ function renderCalendar() {
       </div>
     </div>` : "";
 
-  const gutterHtml = TG_HOURS.map(h =>
-    `<div class="cal-tg-hour-label"><span>${String(h).padStart(2, "0")}:00</span></div>`
-  ).join("");
+  // Gutter: half-hour spacer so grid top = 22:30, first label = 23:00
+  const gutterHtml =
+    `<div class="cal-tg-hour-spacer"></div>` +
+    TG_HOURS.map(h =>
+      `<div class="cal-tg-hour-label"><span>${String(h).padStart(2, "0")}:00</span></div>`
+    ).join("");
 
-  // 48 slots per column (24 hours × 2 half-hour slots).
-  // Odd-indexed slots mark the hour boundary (solid line).
-  const slotRowsHtml = Array.from({ length: 48 }, (_, i) =>
-    `<div class="cal-tg-slot${i % 2 === 1 ? " cal-tg-slot--hour" : ""}"></div>`
+  // 49 slots per column (22:30 buffer slot + 24 hours × 2 half-hour slots).
+  // The grid top is 22:30; even-indexed slots end on the hour (solid line).
+  const slotRowsHtml = Array.from({ length: 49 }, (_, i) =>
+    `<div class="cal-tg-slot${i % 2 === 0 ? " cal-tg-slot--hour" : ""}"></div>`
   ).join("");
 
   const colsHtml = displayDays.map(dateStr => {
@@ -3031,7 +3050,8 @@ function renderCalendar() {
     const scrollEl = document.getElementById("cal-tg-scroll");
     if (!scrollEl) return;
     const h = now.getHours(), m = now.getMinutes();
-    const nowOff = h >= 23 ? (h - 23 + m / 60) : (h + 1 + m / 60);
+    const timeInHours = h + m / 60;
+    const nowOff = timeInHours >= 22.5 ? (timeInHours - 22.5) : (timeInHours + 24 - 22.5);
     scrollEl.scrollTop = Math.max(0, Math.round(nowOff * HOUR_PX) - 120);
   })();
 
@@ -3138,11 +3158,7 @@ function renderCalendar() {
     if (endTime && !timePattern.test(endTime)) {
       msg.textContent = "End time must be in HH:MM format (e.g. 09:00 or 14:30)."; msg.style.display = ""; return;
     }
-    if (endTime && startTime && endTime <= startTime) {
-      msg.textContent = "End time must be after start time.";
-      msg.style.display = "";
-      return;
-    }
+    // Overnight events (endTime < startTime) are valid — no rejection here.
     msg.style.display = "none";
 
     // navigate to the week/day containing the new event
