@@ -319,7 +319,9 @@ let uiState = {
   calendarYear: new Date().getFullYear(),
   calendarMonth: new Date().getMonth(),
   calendarWeekStart: null,  // ISO date string for Monday of displayed week; null = use today's week
-  calendarViewMode: "week"  // "week" | "day"
+  calendarViewMode: "week",  // "week" | "day"
+  justCompletedTaskId: null,  // task id for the fade-in animation in the completed panel
+  expandedTaskIds: new Set()  // task ids whose details panel is open
 };
 let backupUiState = {
   message: "Export a JSON backup or import one to restore your current data.",
@@ -344,7 +346,9 @@ function createTask(title, done = false, options = {}) {
     title,
     done,
     context: normalizeTaskContext(options.context),
-    projectId: typeof options.projectId === "string" ? options.projectId : ""
+    projectId: typeof options.projectId === "string" ? options.projectId : "",
+    note: "",
+    subtasks: []
   };
 }
 
@@ -364,7 +368,14 @@ function normalizeTaskRecord(task) {
     title,
     done: Boolean(task.done),
     context: normalizeTaskContext(task.context),
-    projectId: typeof task?.projectId === "string" ? task.projectId : ""
+    projectId: typeof task?.projectId === "string" ? task.projectId : "",
+    note: typeof task?.note === "string" ? task.note : "",
+    subtasks: Array.isArray(task?.subtasks)
+      ? task.subtasks.map(s => {
+          if (!s || typeof s?.title !== "string" || !s.title.trim()) return null;
+          return { id: s.id || createId(), title: s.title.trim(), done: Boolean(s.done) };
+        }).filter(Boolean)
+      : []
   };
 }
 
@@ -444,8 +455,8 @@ function createPromise({ text, to = "", dueDate = "" }) {
   return { id: createId(), text, to, dueDate, done: false, createdAt: new Date().toISOString() };
 }
 
-function createCalendarEvent({ title, date, time = "", endTime = "", color = "green", note = "" }) {
-  return { id: createId(), title, date, time, endTime, color, note, createdAt: new Date().toISOString() };
+function createCalendarEvent({ title, date, time = "", endTime = "", color = "green", note = "", recurrence = "" }) {
+  return { id: createId(), title, date, time, endTime, color, note, recurrence, createdAt: new Date().toISOString() };
 }
 
 function normalizeCalendarEvents(events) {
@@ -463,6 +474,7 @@ function normalizeCalendarEvents(events) {
       endTime: typeof e?.endTime === "string" ? e.endTime : "",
       color: typeof e?.color === "string" ? e.color : "pink",
       note: typeof e?.note === "string" ? e.note.trim() : "",
+      recurrence: ["weekly", "monthly"].includes(e?.recurrence) ? e.recurrence : "",
       createdAt: normalizeTimestamp(e.createdAt) || new Date().toISOString()
     };
   }).filter(Boolean);
@@ -1987,6 +1999,8 @@ function renderActionBoard() {
           <div class="action-secondary-grid" id="actionSecondaryGrid"></div>
         </div>
       </div>
+
+      <div class="action-completed-panel" id="actionCompletedPanel" hidden></div>
     </section>
   `;
 
@@ -2011,11 +2025,6 @@ function renderActionBoard() {
     limitMessage.hidden = true;
     form.insertAdjacentElement("afterend", limitMessage);
 
-    const formatHint = document.createElement("p");
-    formatHint.className = "section-form__hint";
-    formatHint.innerHTML = "Use <code>**bold**</code> or <code>*italic*</code> — supports Chinese text";
-    limitMessage.insertAdjacentElement("afterend", formatHint);
-
     card.style.setProperty("--section-accent", section.accent);
 
     if (quadrantSections.some(item => item.id === section.id)) {
@@ -2034,25 +2043,45 @@ function renderActionBoard() {
     count.textContent = `${section.tasks.length} total`;
     input.setAttribute("aria-label", `Add a task to ${section.title}`);
 
-    if (section.tasks.length === 0) {
+    if (openCount === 0) {
       taskList.appendChild(createEmptyState(""));
     } else {
-      section.tasks.forEach(task => {
-        const item = document.createElement("li");
-        item.className = `task-item ${task.done ? "is-done" : ""}`;
+      section.tasks.filter(task => !task.done).forEach(task => {
+        const isExpanded = uiState.expandedTaskIds.has(task.id);
 
+        const item = document.createElement("li");
+        item.className = "task-item";
+
+        // ── checkbox ──────────────────────────────────────────────────────
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
-        checkbox.checked = task.done;
+        checkbox.checked = false;
         checkbox.addEventListener("change", () => {
-          task.done = checkbox.checked;
-          saveState();
-          renderApp();
+          uiState.justCompletedTaskId = task.id;
+          item.classList.add("is-completing");
+          setTimeout(() => {
+            task.done = true;
+            saveState();
+            renderApp();
+          }, 270);
         });
 
+        // ── title ─────────────────────────────────────────────────────────
         const titleNode = document.createElement("span");
         titleNode.className = "task-title";
         titleNode.innerHTML = renderInlineMarkdown(task.title);
+
+        // ── action buttons ────────────────────────────────────────────────
+        const hasDetails = Boolean(task.note) || (Array.isArray(task.subtasks) && task.subtasks.length > 0);
+
+        const expandBtn = document.createElement("button");
+        expandBtn.type = "button";
+        expandBtn.className = "icon-btn task-expand-btn" +
+          (isExpanded  ? " is-open"      : "") +
+          (hasDetails  ? " has-details"  : "");
+        expandBtn.textContent = "▾";
+        expandBtn.setAttribute("title", "Notes & checklist");
+        expandBtn.setAttribute("aria-label", "Toggle task details");
 
         const deleteButton = document.createElement("button");
         deleteButton.type = "button";
@@ -2065,9 +2094,144 @@ function renderActionBoard() {
           renderApp();
         });
 
+        const btnRow = document.createElement("div");
+        btnRow.className = "task-item__btns";
+        btnRow.appendChild(expandBtn);
+        btnRow.appendChild(deleteButton);
+
+        // ── details panel ─────────────────────────────────────────────────
+        const detailsPanel = document.createElement("div");
+        detailsPanel.className = "task-details";
+        detailsPanel.hidden = !isExpanded;
+
+        // Note
+        const noteGroup = document.createElement("div");
+        noteGroup.className = "task-details__group";
+
+        const noteLabel = document.createElement("label");
+        noteLabel.className = "task-details__label";
+        noteLabel.textContent = "Note";
+
+        const noteInput = document.createElement("textarea");
+        noteInput.className = "task-note-input";
+        noteInput.placeholder = "Add a note…";
+        noteInput.maxLength = 500;
+        noteInput.rows = 2;
+        noteInput.value = task.note || "";
+        noteInput.addEventListener("blur", () => {
+          task.note = noteInput.value.trim();
+          const hd = Boolean(task.note) || task.subtasks.length > 0;
+          expandBtn.classList.toggle("has-details", hd);
+          saveState();
+        });
+
+        noteGroup.appendChild(noteLabel);
+        noteGroup.appendChild(noteInput);
+
+        // Checklist
+        const checklistGroup = document.createElement("div");
+        checklistGroup.className = "task-details__group";
+
+        const checklistLabel = document.createElement("label");
+        checklistLabel.className = "task-details__label";
+        checklistLabel.textContent = "Checklist";
+
+        const subtaskListEl = document.createElement("ul");
+        subtaskListEl.className = "subtask-list";
+
+        const refreshSubtasks = () => {
+          subtaskListEl.innerHTML = "";
+          (task.subtasks || []).forEach(sub => {
+            const li = document.createElement("li");
+            li.className = "subtask-item";
+
+            const subCheck = document.createElement("input");
+            subCheck.type = "checkbox";
+            subCheck.checked = sub.done;
+
+            const subTitle = document.createElement("span");
+            subTitle.className = "subtask-title" + (sub.done ? " is-done" : "");
+            subTitle.textContent = sub.title;
+
+            subCheck.addEventListener("change", () => {
+              sub.done = subCheck.checked;
+              subTitle.className = "subtask-title" + (sub.done ? " is-done" : "");
+              saveState();
+            });
+
+            const subDel = document.createElement("button");
+            subDel.type = "button";
+            subDel.className = "icon-btn";
+            subDel.textContent = "x";
+            subDel.setAttribute("aria-label", `Delete ${sub.title}`);
+            subDel.addEventListener("click", () => {
+              task.subtasks = task.subtasks.filter(s => s.id !== sub.id);
+              saveState();
+              refreshSubtasks();
+              const hd = Boolean(task.note) || task.subtasks.length > 0;
+              expandBtn.classList.toggle("has-details", hd);
+            });
+
+            li.appendChild(subCheck);
+            li.appendChild(subTitle);
+            li.appendChild(subDel);
+            subtaskListEl.appendChild(li);
+          });
+        };
+        refreshSubtasks();
+
+        const subtaskForm = document.createElement("form");
+        subtaskForm.className = "subtask-add-form";
+
+        const subtaskInput = document.createElement("input");
+        subtaskInput.type = "text";
+        subtaskInput.placeholder = "Add checklist item…";
+        subtaskInput.maxLength = 120;
+
+        const subtaskAddBtn = document.createElement("button");
+        subtaskAddBtn.type = "submit";
+        subtaskAddBtn.textContent = "Add";
+
+        subtaskForm.appendChild(subtaskInput);
+        subtaskForm.appendChild(subtaskAddBtn);
+        subtaskForm.addEventListener("submit", ev => {
+          ev.preventDefault();
+          const val = subtaskInput.value.trim();
+          if (!val) return;
+          if (!Array.isArray(task.subtasks)) task.subtasks = [];
+          task.subtasks.push({ id: createId(), title: val, done: false });
+          saveState();
+          subtaskInput.value = "";
+          refreshSubtasks();
+          expandBtn.classList.add("has-details");
+        });
+
+        checklistGroup.appendChild(checklistLabel);
+        checklistGroup.appendChild(subtaskListEl);
+        checklistGroup.appendChild(subtaskForm);
+
+        detailsPanel.appendChild(noteGroup);
+        detailsPanel.appendChild(checklistGroup);
+
+        // ── expand / collapse ─────────────────────────────────────────────
+        expandBtn.addEventListener("click", () => {
+          const opening = detailsPanel.hidden;
+          detailsPanel.hidden = !opening;
+          expandBtn.classList.toggle("is-open", opening);
+          if (opening) {
+            uiState.expandedTaskIds.add(task.id);
+            noteInput.focus();
+          } else {
+            uiState.expandedTaskIds.delete(task.id);
+            task.note = noteInput.value.trim();
+            saveState();
+          }
+        });
+
         item.appendChild(checkbox);
         item.appendChild(titleNode);
-        item.appendChild(deleteButton);
+        item.appendChild(btnRow);
+        item.appendChild(detailsPanel);
         taskList.appendChild(item);
       });
     }
@@ -2123,6 +2287,84 @@ function renderActionBoard() {
 
     actionSecondaryGrid.appendChild(sectionFragment);
   });
+
+  // ── completed panel ─────────────────────────────────────────────────────────────────
+  const allCompleted = getAllActionTaskEntries().filter(e => e.task.done);
+  const completedPanel = document.getElementById("actionCompletedPanel");
+  const justCompletedId = uiState.justCompletedTaskId;
+  uiState.justCompletedTaskId = null;   // clear so next render doesn't re-animate
+
+  if (allCompleted.length > 0) {
+    completedPanel.hidden = false;
+
+    const box = document.createElement("div");
+    box.className = "completed-panel";
+
+    const panelHeader = document.createElement("div");
+    panelHeader.className = "completed-panel__header";
+    panelHeader.innerHTML = `
+      <div class="completed-panel__title-row">
+        <span class="completed-panel__title">Completed</span>
+        <span class="completed-panel__count">${allCompleted.length} task${allCompleted.length !== 1 ? "s" : ""}</span>
+      </div>
+      <button type="button" class="ghost-btn" id="clearAllCompletedBtn">Clear all</button>
+    `;
+
+    const list = document.createElement("ul");
+    list.className = "completed-task-list";
+
+    allCompleted.forEach(({ section, task }) => {
+      const li = document.createElement("li");
+      li.className = "completed-task-item" + (task.id === justCompletedId ? " is-fading-in" : "");
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = true;
+      cb.addEventListener("change", () => {
+        task.done = false;
+        saveState();
+        renderApp();
+      });
+
+      const titleNode = document.createElement("span");
+      titleNode.className = "task-title";
+      titleNode.innerHTML = renderInlineMarkdown(task.title);
+
+      const sectionLabel = document.createElement("span");
+      sectionLabel.className = "completed-task-item__section";
+      sectionLabel.textContent = section.title;
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "icon-btn";
+      deleteBtn.textContent = "x";
+      deleteBtn.setAttribute("aria-label", `Delete ${task.title}`);
+      deleteBtn.addEventListener("click", () => {
+        discardActionTask(task.id);
+        saveState();
+        renderApp();
+      });
+
+      li.appendChild(cb);
+      li.appendChild(titleNode);
+      li.appendChild(sectionLabel);
+      li.appendChild(deleteBtn);
+      list.appendChild(li);
+    });
+
+    box.appendChild(panelHeader);
+    box.appendChild(list);
+    completedPanel.appendChild(box);
+
+    document.getElementById("clearAllCompletedBtn").addEventListener("click", () => {
+      getAllActionTaskEntries()
+        .filter(entry => entry.task.done)
+        .map(entry => entry.task.id)
+        .forEach(id => discardActionTask(id));
+      saveState();
+      renderApp();
+    });
+  }
 
   document.getElementById("clearCompletedTasksBtn").addEventListener("click", () => {
     const completedTaskIds = getAllActionTaskEntries()
@@ -2290,7 +2532,10 @@ function renderCalendar() {
   const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const DAY_FULL    = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  const COLOR_OPTIONS = ["green","rose","purple","blue","teal"];
+  const COLOR_OPTIONS = [
+    "green", "rose", "purple", "blue", "teal",
+    "lime", "teal-blue", "brown", "slate", "gray"
+  ];
 
   // ── compute displayed days ────────────────────────────────────────────────
   function getDisplayDays() {
@@ -2320,26 +2565,43 @@ function renderCalendar() {
   }
 
   function eventsForDate(dateStr) {
+    const target = new Date(dateStr + "T12:00:00");
+    const targetWeekday    = target.getDay();
+    const targetDayOfMonth = target.getDate();
     return appState.calendarEvents
-      .filter(e => e.date === dateStr)
+      .filter(e => {
+        if (e.date === dateStr) return true;
+        if (dateStr <= e.date) return false;
+        if (e.recurrence === "weekly") {
+          return new Date(e.date + "T12:00:00").getDay() === targetWeekday;
+        }
+        if (e.recurrence === "monthly") {
+          return new Date(e.date + "T12:00:00").getDate() === targetDayOfMonth;
+        }
+        return false;
+      })
+      .map(e => e.date === dateStr ? e : { ...e, _virtual: dateStr })
       .sort((a, b) => (a.time || "99:99") < (b.time || "99:99") ? -1 : 1);
   }
 
   function dotColor(color) {
     return color === "green" || color === "pink" ? "var(--green)"
-         : color === "rose"   ? "var(--danger)"
-         : color === "purple" ? "#7840b4"
-         : color === "blue"   ? "#1e64dc"
-         : color === "teal"   ? "#009898"
+         : color === "rose"      ? "var(--danger)"
+         : color === "purple"    ? "#7840b4"
+         : color === "blue"      ? "#1e64dc"
+         : color === "teal"      ? "#009898"
+         : color === "lime"      ? "#7abf20"
+         : color === "teal-blue" ? "#1b8fa8"
+         : color === "brown"     ? "#8b5e3c"
+         : color === "slate"     ? "#4a6eaa"
+         : color === "gray"      ? "#7a8a9a"
          : "var(--green)";
   }
 
   function formatTime(t) {
     if (!t) return "";
-    const [h, m] = t.split(":").map(Number);
-    const period = h >= 12 ? "PM" : "AM";
-    const hour = h % 12 || 12;
-    return m === 0 ? `${hour} ${period}` : `${hour}:${String(m).padStart(2, "0")} ${period}`;
+    // t is already HH:MM — strip seconds if present, return as-is
+    return t.slice(0, 5);
   }
 
   function formatTimeRange(startTime, endTime) {
@@ -2351,9 +2613,11 @@ function renderCalendar() {
     const timeRange = formatTimeRange(e.time, e.endTime);
     const timePart = timeRange ? `<span class="cal-week-event__time">${timeRange}</span>` : "";
     const notePart = e.note ? `<span class="cal-week-event__note">${e.note}</span>` : "";
+    const recurTitle = e.recurrence === "weekly" ? "Repeats weekly" : e.recurrence === "monthly" ? "Repeats monthly" : "";
+    const recurBadge = recurTitle ? `<span class="cal-recur-badge" title="${recurTitle}">↻</span>` : "";
     return `<div class="cal-week-event cal-week-event--${e.color}">
       <div class="cal-week-event__top">
-        <span class="cal-week-event__title">${e.title}</span>
+        <span class="cal-week-event__title">${e.title}${recurBadge}</span>
         <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
       </div>
       ${timePart}${notePart}
@@ -2391,7 +2655,12 @@ function renderCalendar() {
     ? `<li><div class="empty-state">No upcoming events.</div></li>`
     : upcomingEvents.map(e => {
         const timeRange = formatTimeRange(e.time, e.endTime);
-        const meta = [e.date, timeRange].filter(Boolean).join(" · ");
+        const displayDate = e._virtual || e.date;
+        const originDate = new Date(e.date + "T12:00:00");
+        const recurLabel = e.recurrence === "weekly"  ? ` · Weekly on ${DAY_FULL[originDate.getDay()]}`
+                         : e.recurrence === "monthly" ? ` · Monthly on the ${originDate.getDate()}${[,"st","nd","rd"][((originDate.getDate()%100-20)%10)||originDate.getDate()%100] || "th"}`
+                         : "";
+        const meta = [displayDate, timeRange].filter(Boolean).join(" · ") + recurLabel;
         return `<li class="calendar-event-item">
           <span class="calendar-event-item__dot" style="background:${dotColor(e.color)}"></span>
           <div class="calendar-event-item__copy">
@@ -2446,16 +2715,24 @@ function renderCalendar() {
           <div class="cal-time-range">
             <div class="field">
               <label for="cal-start-time">Start Time (optional)</label>
-              <input id="cal-start-time" name="startTime" type="time">
+              <input id="cal-start-time" name="startTime" type="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" maxlength="5" autocomplete="off">
             </div>
             <div class="field">
               <label for="cal-end-time">End Time (optional)</label>
-              <input id="cal-end-time" name="endTime" type="time">
+              <input id="cal-end-time" name="endTime" type="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" maxlength="5" autocomplete="off">
             </div>
           </div>
           <div class="field">
             <label for="cal-note">Note (optional)</label>
             <input id="cal-note" name="note" type="text" placeholder="Details…" maxlength="300">
+          </div>
+          <div class="field">
+            <label for="cal-recurrence">Repeat</label>
+            <select id="cal-recurrence" name="recurrence" class="cal-select">
+              <option value="">Does not repeat</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
           </div>
           <div class="calendar-color-row">
             <label>Color</label>
@@ -2536,10 +2813,19 @@ function renderCalendar() {
     const endTime   = form.endTime.value || "";
     const note      = form.note.value.trim();
     const color     = form.color.value || "green";
+    const recurrence = form.recurrence.value || "";
     const msg       = document.getElementById("cal-form-msg");
 
     if (!title) { msg.textContent = "Please enter a title."; msg.style.display = ""; return; }
     if (!date)  { msg.textContent = "Please pick a date.";   msg.style.display = ""; return; }
+
+    const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+    if (startTime && !timePattern.test(startTime)) {
+      msg.textContent = "Start time must be in HH:MM format (e.g. 09:00 or 14:30)."; msg.style.display = ""; return;
+    }
+    if (endTime && !timePattern.test(endTime)) {
+      msg.textContent = "End time must be in HH:MM format (e.g. 09:00 or 14:30)."; msg.style.display = ""; return;
+    }
     if (endTime && startTime && endTime <= startTime) {
       msg.textContent = "End time must be after start time.";
       msg.style.display = "";
@@ -2551,10 +2837,10 @@ function renderCalendar() {
     if (viewMode === "day") {
       uiState.calendarWeekStart = date;
     } else {
-      uiState.calendarWeekStart = sundayOfWeek(new Date(date + "T12:00:00"));
+      uiState.calendarWeekStart = mondayOfWeek(new Date(date + "T12:00:00"));
     }
 
-    appState.calendarEvents.push(createCalendarEvent({ title, date, time: startTime, endTime, note, color }));
+    appState.calendarEvents.push(createCalendarEvent({ title, date, time: startTime, endTime, note, color, recurrence }));
     saveState();
     renderApp();
   });
@@ -2612,7 +2898,6 @@ function renderBudgetPlanner() {
               id="budgetCategoryNameInput"
               type="text"
               maxlength="60"
-              placeholder="For example: Gifts, Home Studio, Side Project"
               required
             />
           </div>
