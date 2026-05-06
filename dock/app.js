@@ -11,6 +11,7 @@ const VIEW_DETAILS = {
   budgetPlanner: "Track personal budget items so income, spending, and progress stay visible.",
   planner: "Plan your day, set goals, capture notes, and track short-term plans in one place.",
   promise: "Record commitments and promises you have made to other people.",
+  diary: "Write and revisit your daily journal entries.",
   calendar: "View and manage your schedule in a monthly calendar.",
   settings: "Manage backups, import data, and adjust app preferences."
 };
@@ -1934,6 +1935,11 @@ function renderApp() {
     return;
   }
 
+  if (uiState.activeView === "diary") {
+    renderDiary();
+    return;
+  }
+
   renderBudgetPlanner();
 }
 
@@ -3380,6 +3386,223 @@ function renderPlanner() {
     targetSection.items.unshift(createPlannerItem(title));
     titleInput.value = "";
     saveState();
+    renderApp();
+  });
+}
+
+// ── Diary ─────────────────────────────────────────────────────────────────────
+
+const DIARY_STORAGE_KEY = "dockDiaryEntries";
+
+function loadDiaryEntries() {
+  try {
+    const raw = localStorage.getItem(DIARY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(e => {
+      if (!e || typeof e.id !== "string" || typeof e.date !== "string") return null;
+      return {
+        id: e.id,
+        date: e.date,
+        dayOfWeek: typeof e.dayOfWeek === "string" ? e.dayOfWeek : "",
+        location: typeof e.location === "string" ? e.location : "",
+        text: typeof e.text === "string" ? e.text : "",
+        createdAt: typeof e.createdAt === "string" ? e.createdAt : new Date().toISOString()
+      };
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function saveDiaryEntries(entries) {
+  localStorage.setItem(DIARY_STORAGE_KEY, JSON.stringify(entries));
+}
+
+function createDiaryEntry({ date, dayOfWeek, location, text }) {
+  return {
+    id: createId(),
+    date,
+    dayOfWeek,
+    location: location.trim(),
+    text: text.trim(),
+    createdAt: new Date().toISOString()
+  };
+}
+
+function renderDiary() {
+  const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const entries = loadDiaryEntries();
+
+  // Track which entry is being viewed/edited in uiState (session-only, not persisted)
+  if (!("diaryActiveId" in uiState)) uiState.diaryActiveId = null;
+
+  // Resolve the active entry (may have been deleted)
+  let active = uiState.diaryActiveId
+    ? entries.find(e => e.id === uiState.diaryActiveId) || null
+    : null;
+
+  // Default the date field to today
+  const todayIso = (function() {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`;
+  })();
+
+  function dayOfWeekFromDate(iso) {
+    if (!iso) return "";
+    const d = new Date(iso + "T12:00:00");
+    return isNaN(d) ? "" : DAY_NAMES[d.getDay()];
+  }
+
+  function previewText(text, len = 80) {
+    const clean = text.replace(/\s+/g, " ").trim();
+    return clean.length <= len ? clean : clean.slice(0, len) + "…";
+  }
+
+  viewRoot.innerHTML = `
+    <div class="diary-layout">
+      <div class="diary-main">
+        <div class="budget-main__top">
+          <div>
+            <h2 class="panel-title">${active ? "Edit Entry" : "New Entry"}</h2>
+            <p class="panel-subtitle">${active ? `${active.dayOfWeek ? active.dayOfWeek + ", " : ""}${active.date}` : "Write today\u2019s diary entry."}</p>
+          </div>
+          ${active ? `<button type="button" class="ghost-btn" id="diaryNewBtn">+ New entry</button>` : ""}
+        </div>
+
+        <form class="diary-form" id="diaryForm" novalidate>
+          <div class="diary-form__meta-row">
+            <div class="field">
+              <label for="diaryDate">Date</label>
+              <input id="diaryDate" name="date" type="date" required value="${active ? active.date : todayIso}" />
+            </div>
+            <div class="field">
+              <label for="diaryDay">Day</label>
+              <input id="diaryDay" name="dayOfWeek" type="text" readonly placeholder="Auto-filled" value="${active ? active.dayOfWeek : dayOfWeekFromDate(todayIso)}" />
+            </div>
+            <div class="field diary-form__location">
+              <label for="diaryLocation">Location</label>
+              <input id="diaryLocation" name="location" type="text" maxlength="100" placeholder="e.g. Home, Caf\u00e9\u2026" value="${active ? active.location.replace(/"/g, "&quot;") : ""}" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="diaryText">Entry</label>
+            <textarea id="diaryText" name="text" class="diary-textarea" rows="14" maxlength="20000" placeholder="Write freely\u2026" required>${active ? active.text.replace(/</g, "&lt;") : ""}</textarea>
+          </div>
+          <div class="diary-form__actions">
+            <span class="diary-form__msg" id="diaryMsg"></span>
+            <button type="submit" class="primary-btn">${active ? "Save changes" : "Save entry"}</button>
+            ${active ? `<button type="button" class="tiny-btn is-danger" id="diaryDeleteBtn">Delete</button>` : ""}
+          </div>
+        </form>
+      </div>
+
+      <div class="diary-sidebar">
+        <div class="diary-sidebar__header">
+          <span class="budget-sidebar__heading">Previous Entries</span>
+          <span class="inline-stat">${entries.length}</span>
+        </div>
+        <ul class="diary-entry-list" id="diaryEntryList"></ul>
+      </div>
+    </div>
+  `;
+
+  // ── Populate sidebar list ─────────────────────────────────────────────────
+  const entryList = document.getElementById("diaryEntryList");
+  if (entries.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "diary-entry-list__empty";
+    empty.textContent = "No entries yet. Write your first one.";
+    entryList.appendChild(empty);
+  } else {
+    const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+    sorted.forEach(entry => {
+      const li = document.createElement("li");
+      li.className = "diary-entry-item" + (active && entry.id === active.id ? " is-active" : "");
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "diary-entry-item__btn";
+
+      const dateRow = document.createElement("span");
+      dateRow.className = "diary-entry-item__date";
+      dateRow.textContent = [entry.dayOfWeek, entry.date].filter(Boolean).join(", ");
+
+      const preview = document.createElement("span");
+      preview.className = "diary-entry-item__preview";
+      preview.textContent = entry.location
+        ? `📍 ${entry.location}  ${previewText(entry.text, 60)}`
+        : previewText(entry.text, 72);
+
+      btn.appendChild(dateRow);
+      btn.appendChild(preview);
+      btn.addEventListener("click", () => {
+        uiState.diaryActiveId = entry.id;
+        renderApp();
+      });
+
+      li.appendChild(btn);
+      entryList.appendChild(li);
+    });
+  }
+
+  // ── Date → day-of-week auto-fill ──────────────────────────────────────────
+  const dateInput = document.getElementById("diaryDate");
+  const dayInput  = document.getElementById("diaryDay");
+  dateInput.addEventListener("change", () => {
+    dayInput.value = dayOfWeekFromDate(dateInput.value);
+  });
+
+  // ── New entry button ──────────────────────────────────────────────────────
+  const newBtn = document.getElementById("diaryNewBtn");
+  if (newBtn) {
+    newBtn.addEventListener("click", () => {
+      uiState.diaryActiveId = null;
+      renderApp();
+    });
+  }
+
+  // ── Delete button ─────────────────────────────────────────────────────────
+  const deleteBtn = document.getElementById("diaryDeleteBtn");
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", () => {
+      if (!active) return;
+      if (!confirm("Delete this diary entry? This cannot be undone.")) return;
+      const updated = entries.filter(e => e.id !== active.id);
+      saveDiaryEntries(updated);
+      uiState.diaryActiveId = null;
+      renderApp();
+    });
+  }
+
+  // ── Form submit ───────────────────────────────────────────────────────────
+  document.getElementById("diaryForm").addEventListener("submit", evt => {
+    evt.preventDefault();
+    const form = evt.target;
+    const date      = form.date.value;
+    const dayOfWeek = form.dayOfWeek.value.trim();
+    const location  = form.location.value.trim();
+    const text      = form.text.value.trim();
+    const msg       = document.getElementById("diaryMsg");
+
+    if (!date) { msg.textContent = "Please pick a date."; return; }
+    if (!text) { msg.textContent = "Please write something before saving."; return; }
+    msg.textContent = "";
+
+    if (active) {
+      // Update existing
+      const updated = entries.map(e => e.id === active.id
+        ? { ...e, date, dayOfWeek, location, text }
+        : e);
+      saveDiaryEntries(updated);
+      uiState.diaryActiveId = active.id;
+    } else {
+      // Create new
+      const newEntry = createDiaryEntry({ date, dayOfWeek, location, text });
+      saveDiaryEntries([newEntry, ...entries]);
+      uiState.diaryActiveId = newEntry.id;
+    }
     renderApp();
   });
 }
