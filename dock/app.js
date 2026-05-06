@@ -2764,11 +2764,11 @@ function renderCalendar() {
           <div class="cal-time-range">
             <div class="field">
               <label for="cal-start-time">Start Time (optional)</label>
-              <input id="cal-start-time" name="startTime" type="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" maxlength="5" autocomplete="off">
+              <input id="cal-start-time" name="startTime" type="text" placeholder="e.g. 09:00 or 930" maxlength="5" autocomplete="off">
             </div>
             <div class="field">
               <label for="cal-end-time">End Time (optional)</label>
-              <input id="cal-end-time" name="endTime" type="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" placeholder="HH:MM" maxlength="5" autocomplete="off">
+              <input id="cal-end-time" name="endTime" type="text" placeholder="e.g. 17:30 or 1730" maxlength="5" autocomplete="off">
             </div>
           </div>
           <div class="field">
@@ -2843,6 +2843,36 @@ function renderCalendar() {
 
   // ── color swatches ────────────────────────────────────────────────────────
   const calColorInput = document.getElementById("cal-color");
+
+  // ── time input: auto-normalize on blur ───────────────────────────────────
+  function normalizeTime(raw) {
+    const s = raw.trim().replace(":", "");
+    if (!s) return "";
+    let h, m;
+    if (/^\d{3}$/.test(s)) {
+      h = parseInt(s.slice(0, 1), 10);
+      m = parseInt(s.slice(1), 10);
+    } else if (/^\d{4}$/.test(s)) {
+      h = parseInt(s.slice(0, 2), 10);
+      m = parseInt(s.slice(2), 10);
+    } else if (/^\d{1,2}$/.test(s)) {
+      h = parseInt(s, 10);
+      m = 0;
+    } else {
+      return raw.trim(); // already has colon or unrecognised — leave as-is
+    }
+    if (h > 23 || m > 59) return raw.trim();
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
+
+  ["cal-start-time", "cal-end-time"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("blur", () => {
+      if (el.value.trim()) el.value = normalizeTime(el.value);
+    });
+  });
+
   document.querySelectorAll(".color-swatch").forEach(btn => {
     if (btn.dataset.color === "green") btn.classList.add("is-selected");
     btn.addEventListener("click", () => {
@@ -2858,8 +2888,8 @@ function renderCalendar() {
     const form  = e.target;
     const title     = form.title.value.trim();
     const date      = form.date.value;
-    const startTime = form.startTime.value || "";
-    const endTime   = form.endTime.value || "";
+    const startTime = normalizeTime(form.startTime.value || "");
+    const endTime   = normalizeTime(form.endTime.value || "");
     const note      = form.note.value.trim();
     const color     = form.color.value || "green";
     const recurrence = form.recurrence.value || "";
