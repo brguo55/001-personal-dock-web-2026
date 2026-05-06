@@ -467,8 +467,8 @@ function createReferenceItem({ title, link = "", note = "", createdAt = new Date
   };
 }
 
-function createPromise({ text, to = "", dueDate = "" }) {
-  return { id: createId(), text, to, dueDate, done: false, createdAt: new Date().toISOString() };
+function createPromise({ text, to = "", promiseDate = "", dueDate = "" }) {
+  return { id: createId(), text, to, promiseDate, dueDate, done: false, createdAt: new Date().toISOString() };
 }
 
 function createCalendarEvent({ title, date, time = "", endTime = "", color = "green", note = "", recurrence = "" }) {
@@ -501,11 +501,16 @@ function normalizePromises(promises) {
   return promises.map(p => {
     const text = typeof p?.text === "string" ? p.text.trim() : "";
     if (!text) return null;
+    // Migration: if promiseDate field doesn't exist yet, treat the old dueDate as promiseDate
+    const hasPromiseDate = typeof p?.promiseDate === "string" && p.promiseDate !== "";
+    const promiseDate = hasPromiseDate ? p.promiseDate : (typeof p?.dueDate === "string" ? p.dueDate : "");
+    const dueDate     = hasPromiseDate ? (typeof p?.dueDate === "string" ? p.dueDate : "") : "";
     return {
       id: p.id || createId(),
       text,
       to: typeof p?.to === "string" ? p.to.trim() : "",
-      dueDate: typeof p?.dueDate === "string" ? p.dueDate : "",
+      promiseDate,
+      dueDate,
       done: Boolean(p.done),
       createdAt: normalizeTimestamp(p.createdAt) || new Date().toISOString()
     };
@@ -2551,8 +2556,12 @@ function renderPromise() {
           <input id="promiseToInput" type="text" maxlength="80" placeholder="Person's name" />
         </div>
         <div class="field">
-          <label for="promiseDateInput">Due date</label>
+          <label for="promiseDateInput">Promise Date</label>
           <input id="promiseDateInput" type="date" />
+        </div>
+        <div class="field">
+          <label for="promiseDueDateInput">Due Date <span style="font-weight:400;color:var(--muted);">(optional)</span></label>
+          <input id="promiseDueDateInput" type="date" />
         </div>
         <button type="submit" class="primary-btn" style="align-self:end">Add promise</button>
       </form>
@@ -2572,10 +2581,13 @@ function renderPromise() {
 
     const sortedPromises = [...promises].sort((a, b) => {
       if (a.done !== b.done) return Number(a.done) - Number(b.done);
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return a.dueDate.localeCompare(b.dueDate);
+      // Sort open items by due date (deadline) first, then by promise date
+      const aSort = a.dueDate || a.promiseDate || "";
+      const bSort = b.dueDate || b.promiseDate || "";
+      if (!aSort && !bSort) return 0;
+      if (!aSort) return 1;
+      if (!bSort) return -1;
+      return aSort.localeCompare(bSort);
     });
 
     sortedPromises.forEach(promise => {
@@ -2606,6 +2618,7 @@ function renderPromise() {
       meta.className = "promise-item__meta";
       const parts = [];
       if (promise.to) parts.push(`To: ${promise.to}`);
+      if (promise.promiseDate) parts.push(`Promised: ${formatWaitingDate(promise.promiseDate)}`);
       if (promise.dueDate) parts.push(`Due: ${formatWaitingDate(promise.dueDate)}`);
       parts.push(`Added ${formatShortDate(promise.createdAt)}`);
       meta.textContent = parts.join(" · ");
@@ -2643,9 +2656,15 @@ function renderPromise() {
     const textInput = document.getElementById("promiseTextInput");
     const toInput = document.getElementById("promiseToInput");
     const dateInput = document.getElementById("promiseDateInput");
+    const dueDateInput = document.getElementById("promiseDueDateInput");
     const text = textInput.value.trim();
     if (!text) return;
-    appState.promises.unshift(createPromise({ text, to: toInput.value.trim(), dueDate: dateInput.value }));
+    appState.promises.unshift(createPromise({
+      text,
+      to: toInput.value.trim(),
+      promiseDate: dateInput.value,
+      dueDate: dueDateInput.value
+    }));
     event.target.reset();
     saveState();
     renderApp();
