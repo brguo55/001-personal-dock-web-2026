@@ -795,6 +795,12 @@ h1 {
 .budget-form__actions { display: flex; gap: 10px; align-items: center; }
 .budget-form__actions button { padding: 11px 18px; }
 
+/* ── Planner ──────────────────────────────────────────── */
+.planner-form { display: flex; gap: 10px; margin-top: 18px; align-items: flex-end; flex-wrap: wrap; }
+.planner-form .field { flex: 1; min-width: 160px; }
+.planner-sidebar-row { display: flex; align-items: center; gap: 6px; }
+.planner-sidebar-row .sidebar-btn { flex: 1; }
+
 /* ── Budget category select ──────────────────────────── */
 #budgetCategorySelect {
   appearance: none;

@@ -9,10 +9,17 @@ const VIEW_DETAILS = {
   actionBoard: "Organize tasks by energy, urgency, and life context.",
   waitingFor: "Run your GTD capture, context lists, waiting items, projects, reference, and someday lists from one place.",
   budgetPlanner: "Track personal budget items so income, spending, and progress stay visible.",
+  planner: "Plan your day, set goals, capture notes, and track short-term plans in one place.",
   promise: "Record commitments and promises you have made to other people.",
   calendar: "View and manage your schedule in a monthly calendar.",
   settings: "Manage backups, import data, and adjust app preferences."
 };
+
+const PLANNER_SECTION_DEFINITIONS = [
+  { id: "daily-plan", title: "Daily Plan" },
+  { id: "goals", title: "Goals" },
+  { id: "notes", title: "Notes" }
+];
 
 const WAITING_STATUSES = ["Waiting", "Follow Up", "Received", "Done"];
 const GTD_CONTEXT_OPTIONS = ["", "@Mac", "@Phone", "@Home", "@Errands", "@Work"];
@@ -317,7 +324,8 @@ let uiState = {
   calendarWeekStart: null,  // ISO date string for Monday of displayed week; null = use today's week
   calendarViewMode: "week",  // "week" | "day"
   justCompletedTaskId: null,  // task id for the fade-in animation in the completed panel
-  expandedTaskIds: new Set()  // task ids whose details panel is open
+  expandedTaskIds: new Set(),  // task ids whose details panel is open
+  selectedPlannerSection: "all"  // planner section filter
 };
 let backupUiState = {
   message: "Export a JSON backup or import one to restore your current data.",
@@ -532,6 +540,11 @@ function buildDefaultState() {
       title: category.title,
       items: category.sampleItems.map(item => createBudgetItem(item.title, item.amount, item.checked))
     })),
+    plannerSections: PLANNER_SECTION_DEFINITIONS.map(def => ({
+      id: def.id,
+      title: def.title,
+      items: []
+    })),
     notes: DEFAULT_NOTES.map(note => createNote(note)),
     waitingItems: DEFAULT_WAITING_ITEMS.map(item => createWaitingItem(item)),
     inboxItems: DEFAULT_INBOX_ITEMS.map(item => createInboxItem(item)),
@@ -596,6 +609,7 @@ function normalizeState(rawState) {
     lastSavedAt: normalizeTimestamp(rawState?.lastSavedAt),
     actionSections: mergeActionSections(rawState?.actionSections),
     budgetCategories,
+    plannerSections: normalizePlannerSections(rawState?.plannerSections),
     notes: normalizeNotes(rawState?.notes),
     waitingItems: normalizeWaitingItems(rawState?.waitingItems),
     inboxItems: normalizeInboxItems(rawState?.inboxItems),
@@ -938,6 +952,77 @@ function normalizeTrashItems(items) {
     .filter(Boolean);
 }
 
+function createPlannerItem(title, note = "") {
+  return {
+    id: createId(),
+    title,
+    done: false,
+    note,
+    createdAt: new Date().toISOString()
+  };
+}
+
+function normalizePlannerItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map(item => {
+    const title = typeof item?.title === "string" ? item.title.trim() : "";
+    if (!title) return null;
+    return {
+      id: item.id || createId(),
+      title,
+      done: Boolean(item.done),
+      note: typeof item?.note === "string" ? item.note : "",
+      createdAt: normalizeTimestamp(item.createdAt) || new Date().toISOString()
+    };
+  }).filter(Boolean);
+}
+
+function normalizePlannerSections(sections) {
+  if (!Array.isArray(sections)) {
+    return PLANNER_SECTION_DEFINITIONS.map(def => ({
+      id: def.id,
+      title: def.title,
+      items: []
+    }));
+  }
+  return sections.map(section => {
+    const id = typeof section?.id === "string" && section.id ? section.id : null;
+    const title = typeof section?.title === "string" && section.title.trim() ? section.title.trim() : null;
+    if (!id || !title) return null;
+    return {
+      id,
+      title,
+      items: normalizePlannerItems(section?.items)
+    };
+  }).filter(Boolean);
+}
+
+function createPlannerSection(title) {
+  const base = title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "planner-section";
+  let id = base;
+  let suffix = 2;
+  while (appState.plannerSections.some(s => s.id === id)) {
+    id = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return { id, title, items: [] };
+}
+
+function getPlannerSectionById(sectionId) {
+  return appState.plannerSections.find(s => s.id === sectionId);
+}
+
+function getPlannerItems(selectedSection) {
+  if (selectedSection === "all") {
+    return appState.plannerSections.flatMap(section =>
+      section.items.map(item => ({ section, item }))
+    );
+  }
+  const section = getPlannerSectionById(selectedSection);
+  if (!section) return [];
+  return section.items.map(item => ({ section, item }));
+}
+
 function getStateSnapshot(lastSavedAt = appState.lastSavedAt ?? null) {
   return {
     activeView: uiState.activeView,
@@ -945,6 +1030,7 @@ function getStateSnapshot(lastSavedAt = appState.lastSavedAt ?? null) {
     lastSavedAt,
     actionSections: appState.actionSections,
     budgetCategories: appState.budgetCategories,
+    plannerSections: appState.plannerSections,
     notes: appState.notes,
     waitingItems: appState.waitingItems,
     inboxItems: appState.inboxItems,
@@ -1776,7 +1862,8 @@ async function importJsonBackup(file) {
     budgetEditorId: null,
     showBudgetCategoryManager: false,
     calendarYear: new Date().getFullYear(),
-    calendarMonth: new Date().getMonth()
+    calendarMonth: new Date().getMonth(),
+    selectedPlannerSection: "all"
   };
   saveState({ touch: false, lastSavedAt: importedState.lastSavedAt });
   renderApp();
@@ -1839,6 +1926,11 @@ function renderApp() {
 
   if (uiState.activeView === "settings") {
     renderSettings();
+    return;
+  }
+
+  if (uiState.activeView === "planner") {
+    renderPlanner();
     return;
   }
 
@@ -2943,6 +3035,272 @@ function renderCalendar() {
     if (!ev) return;
     if (!confirm(`Delete "${ev.title}"?`)) return;
     appState.calendarEvents = appState.calendarEvents.filter(ev => ev.id !== btn.dataset.id);
+    saveState();
+    renderApp();
+  });
+}
+
+function renderPlanner() {
+  const selectedSection = uiState.selectedPlannerSection || "all";
+  const visibleItems = getPlannerItems(selectedSection);
+  const selectedSectionData = selectedSection === "all" ? null : getPlannerSectionById(selectedSection);
+  const hasNoSections = appState.plannerSections.length === 0;
+
+  viewRoot.innerHTML = `
+    <section class="budget-layout">
+      <aside class="budget-sidebar">
+        <div class="budget-sidebar__header">
+          <span class="budget-sidebar__heading">Sections</span>
+        </div>
+
+        <form class="budget-category-form" id="plannerSectionForm">
+          <div class="budget-category-form__row">
+            <input
+              id="plannerSectionNameInput"
+              type="text"
+              maxlength="60"
+              placeholder="New section name\u2026"
+              required
+            />
+            <button type="submit" class="budget-cat-create-btn">Add</button>
+          </div>
+          <p class="budget-category-form__message" id="plannerSectionFormMsg"></p>
+        </form>
+
+        <ul class="sidebar-list" id="plannerSectionList"></ul>
+      </aside>
+
+      <div class="budget-main">
+        <div class="budget-main__top">
+          <div>
+            <h2 class="panel-title">${selectedSection === "all" ? "All Plans" : selectedSectionData.title}</h2>
+            <p class="panel-subtitle">
+              ${selectedSection === "all"
+                ? "Review everything across all planner sections."
+                : `Manage items inside ${selectedSectionData.title}.`}
+            </p>
+          </div>
+          <div class="budget-total">
+            <span>Items</span>
+            <strong>${visibleItems.length}</strong>
+          </div>
+        </div>
+
+        <form class="planner-form" id="plannerItemForm">
+          <div class="field">
+            <label for="plannerItemTitleInput">Title</label>
+            <input
+              id="plannerItemTitleInput"
+              type="text"
+              maxlength="200"
+              placeholder="Add a task, note, or goal\u2026"
+              ${hasNoSections ? "disabled" : ""}
+              required
+            />
+          </div>
+          ${selectedSection === "all" ? `
+          <div class="field">
+            <label for="plannerItemSectionSelect">Section</label>
+            <select id="plannerItemSectionSelect" ${hasNoSections ? "disabled" : ""}></select>
+          </div>
+          ` : ""}
+          <div class="budget-form__actions">
+            <button type="submit" class="primary-btn" ${hasNoSections ? "disabled" : ""}>Add</button>
+          </div>
+        </form>
+
+        <ul class="promise-list" id="plannerItemList"></ul>
+      </div>
+    </section>
+  `;
+
+  // ── Sidebar ───────────────────────────────────────────────────────────────
+  const sidebarList = document.getElementById("plannerSectionList");
+
+  const allLi = document.createElement("li");
+  allLi.className = "sidebar-list__item";
+  const allBtn = document.createElement("button");
+  allBtn.type = "button";
+  allBtn.className = `sidebar-btn ${selectedSection === "all" ? "is-active" : ""}`;
+  const totalCount = appState.plannerSections.reduce((sum, s) => sum + s.items.length, 0);
+  allBtn.innerHTML = `<strong>All Plans</strong><span>${totalCount} items</span>`;
+  allBtn.addEventListener("click", () => {
+    uiState.selectedPlannerSection = "all";
+    renderApp();
+  });
+  allLi.appendChild(allBtn);
+  sidebarList.appendChild(allLi);
+
+  appState.plannerSections.forEach(section => {
+    const li = document.createElement("li");
+    li.className = "sidebar-list__item";
+
+    const row = document.createElement("div");
+    row.className = "planner-sidebar-row";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `sidebar-btn ${section.id === selectedSection ? "is-active" : ""}`;
+    btn.innerHTML = `<strong>${section.title}</strong><span>${section.items.length} items</span>`;
+    btn.addEventListener("click", () => {
+      uiState.selectedPlannerSection = section.id;
+      renderApp();
+    });
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "icon-btn";
+    delBtn.textContent = "\u00d7";
+    delBtn.setAttribute("title", `Delete \u201c${section.title}\u201d`);
+    delBtn.setAttribute("aria-label", `Delete section ${section.title}`);
+    delBtn.addEventListener("click", () => {
+      const itemCount = section.items.length;
+      const msg = itemCount > 0
+        ? `Delete "${section.title}" and its ${itemCount} item${itemCount !== 1 ? "s" : ""}?`
+        : `Delete "${section.title}"?`;
+      if (!confirm(msg)) return;
+      appState.plannerSections = appState.plannerSections.filter(s => s.id !== section.id);
+      if (uiState.selectedPlannerSection === section.id) {
+        uiState.selectedPlannerSection = "all";
+      }
+      saveState();
+      renderApp();
+    });
+
+    row.appendChild(btn);
+    row.appendChild(delBtn);
+    li.appendChild(row);
+    sidebarList.appendChild(li);
+  });
+
+  // ── Section select when "all" is active ───────────────────────────────────
+  if (selectedSection === "all" && !hasNoSections) {
+    const sectionSelect = document.getElementById("plannerItemSectionSelect");
+    appState.plannerSections.forEach(section => {
+      const opt = document.createElement("option");
+      opt.value = section.id;
+      opt.textContent = section.title;
+      sectionSelect.appendChild(opt);
+    });
+  }
+
+  // ── Item list ─────────────────────────────────────────────────────────────
+  const plannerItemList = document.getElementById("plannerItemList");
+
+  if (visibleItems.length === 0) {
+    plannerItemList.appendChild(createEmptyState(
+      hasNoSections
+        ? "Create a section first, then add tasks, notes, or goals to it."
+        : "This section is empty. Add an item above to get started."
+    ));
+  } else {
+    visibleItems.forEach(({ section, item }) => {
+      const li = document.createElement("li");
+      li.className = `promise-item${item.done ? " is-done" : ""}`;
+
+      const main = document.createElement("label");
+      main.className = "promise-item__main";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "promise-item__check";
+      checkbox.checked = item.done;
+      checkbox.addEventListener("change", () => {
+        item.done = checkbox.checked;
+        saveState();
+        renderApp();
+      });
+
+      const copy = document.createElement("div");
+      copy.className = "promise-item__copy";
+
+      const titleEl = document.createElement("strong");
+      titleEl.className = "promise-item__text";
+      titleEl.textContent = item.title;
+
+      const meta = document.createElement("span");
+      meta.className = "promise-item__meta";
+      const metaParts = [];
+      if (selectedSection === "all") metaParts.push(section.title);
+      if (item.note) metaParts.push(item.note);
+      else metaParts.push(formatShortDate(item.createdAt));
+      meta.textContent = metaParts.join(" \u00b7 ");
+
+      copy.appendChild(titleEl);
+      copy.appendChild(meta);
+      main.appendChild(checkbox);
+      main.appendChild(copy);
+
+      const actions = document.createElement("div");
+      actions.className = "promise-item__actions";
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "tiny-btn is-danger";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", () => {
+        if (!confirm(`Delete \u201c${item.title}\u201d?`)) return;
+        section.items = section.items.filter(i => i.id !== item.id);
+        saveState();
+        renderApp();
+      });
+
+      actions.appendChild(deleteBtn);
+      li.appendChild(main);
+      li.appendChild(actions);
+      plannerItemList.appendChild(li);
+    });
+  }
+
+  // ── Section form ──────────────────────────────────────────────────────────
+  const plannerSectionForm = document.getElementById("plannerSectionForm");
+  const plannerSectionNameInput = document.getElementById("plannerSectionNameInput");
+  const plannerSectionFormMsg = document.getElementById("plannerSectionFormMsg");
+
+  plannerSectionNameInput.addEventListener("input", () => {
+    plannerSectionFormMsg.textContent = "";
+  });
+
+  plannerSectionForm.addEventListener("submit", event => {
+    event.preventDefault();
+    const title = plannerSectionNameInput.value.trim();
+    if (!title) return;
+    const isDuplicate = appState.plannerSections.some(
+      s => s.title.trim().toLowerCase() === title.toLowerCase()
+    );
+    if (isDuplicate) {
+      plannerSectionFormMsg.textContent = "That section already exists.";
+      plannerSectionFormMsg.dataset.tone = "error";
+      return;
+    }
+    const newSection = createPlannerSection(title);
+    appState.plannerSections.push(newSection);
+    uiState.selectedPlannerSection = newSection.id;
+    plannerSectionNameInput.value = "";
+    saveState();
+    renderApp();
+  });
+
+  // ── Add item form ─────────────────────────────────────────────────────────
+  const plannerItemForm = document.getElementById("plannerItemForm");
+
+  plannerItemForm.addEventListener("submit", event => {
+    event.preventDefault();
+    const titleInput = document.getElementById("plannerItemTitleInput");
+    const title = titleInput.value.trim();
+    if (!title) return;
+
+    let targetSectionId = selectedSection;
+    if (selectedSection === "all") {
+      const select = document.getElementById("plannerItemSectionSelect");
+      targetSectionId = select ? select.value : null;
+    }
+
+    const targetSection = getPlannerSectionById(targetSectionId);
+    if (!targetSection) return;
+
+    targetSection.items.unshift(createPlannerItem(title));
+    titleInput.value = "";
     saveState();
     renderApp();
   });
@@ -4571,6 +4929,7 @@ function renderSettings() {
         tasks: []
       })),
       budgetCategories: [],
+      plannerSections: [],
       notes: [],
       waitingItems: [],
       inboxItems: [],
@@ -4591,7 +4950,8 @@ function renderSettings() {
       calendarWeekStart: null,
       calendarViewMode: "week",
       justCompletedTaskId: null,
-      expandedTaskIds: new Set()
+      expandedTaskIds: new Set(),
+      selectedPlannerSection: "all"
     };
     saveState();
     renderApp();
