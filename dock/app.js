@@ -10,7 +10,8 @@ const VIEW_DETAILS = {
   waitingFor: "Run your GTD capture, context lists, waiting items, projects, reference, and someday lists from one place.",
   budgetPlanner: "Track personal budget items so income, spending, and progress stay visible.",
   promise: "Record commitments and promises you have made to other people.",
-  calendar: "View and manage your schedule in a monthly calendar."
+  calendar: "View and manage your schedule in a monthly calendar.",
+  settings: "Manage backups, import data, and adjust app preferences."
 };
 
 const WAITING_STATUSES = ["Waiting", "Follow Up", "Received", "Done"];
@@ -301,12 +302,7 @@ const viewRoot = document.getElementById("viewRoot");
 const actionTemplate = document.getElementById("actionSectionTemplate");
 const budgetItemTemplate = document.getElementById("budgetItemTemplate");
 const viewNav = document.getElementById("viewNav");
-const resetDataButton = document.getElementById("resetDataBtn");
-const exportJsonButton = document.getElementById("exportJsonBtn");
-const importJsonButton = document.getElementById("importJsonBtn");
 const importJsonInput = document.getElementById("importJsonInput");
-const backupStatus = document.getElementById("backupStatus");
-const lastSavedStamp = document.getElementById("lastSavedStamp");
 const viewDescription = document.getElementById("viewDescription");
 const todayStamp = document.getElementById("todayStamp");
 
@@ -388,11 +384,19 @@ function createBudgetItem(title, amount, checked = false) {
   };
 }
 
-function createBudgetCategory(title) {
+function createBudgetCategory(title, note = "", todos = []) {
   return {
     id: createBudgetCategoryId(title),
     title,
-    items: []
+    items: [],
+    note: typeof note === "string" ? note.trim() : "",
+    todos: Array.isArray(todos)
+      ? todos.map(t => ({
+          id: t.id || createId(),
+          title: (typeof t.title === "string" ? t.title : String(t)).trim(),
+          done: Boolean(t.done)
+        })).filter(t => t.title)
+      : []
   };
 }
 
@@ -663,7 +667,17 @@ function normalizeBudgetCategoryRecord(category) {
     title: typeof category.title === "string" && category.title.trim()
       ? category.title.trim()
       : fallbackDefinition?.title || category.id,
-    items
+    items,
+    note: typeof category?.note === "string" ? category.note.trim() : "",
+    todos: Array.isArray(category?.todos)
+      ? category.todos
+          .map(t => {
+            const title = typeof t?.title === "string" ? t.title.trim() : "";
+            if (!title) return null;
+            return { id: t.id || createId(), title, done: Boolean(t.done) };
+          })
+          .filter(Boolean)
+      : []
   };
 }
 
@@ -1606,6 +1620,9 @@ function setBackupStatus(message, tone = "info") {
 }
 
 function updateStorageBackupPanel() {
+  const backupStatus = document.getElementById("backupStatus");
+  const lastSavedStamp = document.getElementById("lastSavedStamp");
+
   if (!backupStatus || !lastSavedStamp) {
     return;
   }
@@ -1795,6 +1812,11 @@ function renderApp() {
 
   if (uiState.activeView === "calendar") {
     renderCalendar();
+    return;
+  }
+
+  if (uiState.activeView === "settings") {
+    renderSettings();
     return;
   }
 
@@ -2357,6 +2379,8 @@ function renderActionBoard() {
     completedPanel.appendChild(box);
 
     document.getElementById("clearAllCompletedBtn").addEventListener("click", () => {
+      const count = getAllActionTaskEntries().filter(entry => entry.task.done).length;
+      if (!confirm(`Move ${count} completed task${count !== 1 ? "s" : ""} to Trash?`)) return;
       getAllActionTaskEntries()
         .filter(entry => entry.task.done)
         .map(entry => entry.task.id)
@@ -2370,6 +2394,9 @@ function renderActionBoard() {
     const completedTaskIds = getAllActionTaskEntries()
       .filter(entry => entry.task.done)
       .map(entry => entry.task.id);
+
+    if (!completedTaskIds.length) return;
+    if (!confirm(`Move ${completedTaskIds.length} completed task${completedTaskIds.length !== 1 ? "s" : ""} to Trash?`)) return;
 
     completedTaskIds.forEach(taskId => {
       discardActionTask(taskId);
@@ -2477,6 +2504,7 @@ function renderPromise() {
       deleteButton.className = "tiny-btn is-danger";
       deleteButton.textContent = "Delete";
       deleteButton.addEventListener("click", () => {
+        if (!confirm(`Delete this promise?`)) return;
         appState.promises = appState.promises.filter(p => p.id !== promise.id);
         saveState();
         renderApp();
@@ -2849,6 +2877,9 @@ function renderCalendar() {
   document.getElementById("cal-week-grid").addEventListener("click", e => {
     const btn = e.target.closest(".cal-del-btn");
     if (!btn) return;
+    const ev = appState.calendarEvents.find(ev => ev.id === btn.dataset.id);
+    if (!ev) return;
+    if (!confirm(`Delete "${ev.title}"?`)) return;
     appState.calendarEvents = appState.calendarEvents.filter(ev => ev.id !== btn.dataset.id);
     saveState();
     renderApp();
@@ -2857,10 +2888,58 @@ function renderCalendar() {
   document.getElementById("cal-upcoming").addEventListener("click", e => {
     const btn = e.target.closest(".cal-del-btn");
     if (!btn) return;
+    const ev = appState.calendarEvents.find(ev => ev.id === btn.dataset.id);
+    if (!ev) return;
+    if (!confirm(`Delete "${ev.title}"?`)) return;
     appState.calendarEvents = appState.calendarEvents.filter(ev => ev.id !== btn.dataset.id);
     saveState();
     renderApp();
   });
+}
+
+function renderBudgetCategoryInfo(category, container) {
+  container.className = "budget-cat-info";
+
+  if (category.note) {
+    const noteEl = document.createElement("p");
+    noteEl.className = "budget-cat-info__note";
+    noteEl.textContent = category.note;
+    container.appendChild(noteEl);
+  }
+
+  if (Array.isArray(category.todos) && category.todos.length > 0) {
+    const label = document.createElement("span");
+    label.className = "budget-cat-details__label";
+    label.textContent = "Checklist";
+    container.appendChild(label);
+
+    const todoList = document.createElement("ul");
+    todoList.className = "budget-cat-info__todos subtask-list";
+
+    category.todos.forEach(todo => {
+      const li = document.createElement("li");
+      li.className = "subtask-item";
+
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "subtask-title" + (todo.done ? " is-done" : "");
+      titleSpan.textContent = todo.title;
+
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.checked = todo.done;
+      check.addEventListener("change", () => {
+        todo.done = check.checked;
+        titleSpan.className = "subtask-title" + (todo.done ? " is-done" : "");
+        saveState();
+      });
+
+      li.appendChild(check);
+      li.appendChild(titleSpan);
+      todoList.appendChild(li);
+    });
+
+    container.appendChild(todoList);
+  }
 }
 
 function renderBudgetPlanner() {
@@ -2900,6 +2979,21 @@ function renderBudgetPlanner() {
               maxlength="60"
               required
             />
+          </div>
+          <button type="button" class="budget-cat-more-btn" id="budgetCatMoreBtn">+ Add details</button>
+          <div class="budget-cat-details" id="budgetCatDetails" hidden>
+            <div class="budget-cat-details__group">
+              <label class="budget-cat-details__label" for="budgetCatNoteInput">Note</label>
+              <textarea id="budgetCatNoteInput" class="task-note-input" rows="2" maxlength="400" placeholder="Optional note for this category\u2026"></textarea>
+            </div>
+            <div class="budget-cat-details__group">
+              <span class="budget-cat-details__label">Checklist</span>
+              <ul class="subtask-list" id="budgetCatTodoList"></ul>
+              <div class="subtask-add-form">
+                <input type="text" id="budgetCatTodoInput" placeholder="Add checklist item\u2026" maxlength="120" />
+                <button type="button" id="budgetCatTodoAddBtn">Add</button>
+              </div>
+            </div>
           </div>
           <button type="submit" class="secondary-btn">Create category</button>
           <p class="budget-category-form__message" id="budgetCategoryFormMessage">
@@ -2941,6 +3035,8 @@ function renderBudgetPlanner() {
           </div>
         </div>
 
+        <div id="budgetCatInfoBlock"></div>
+
         <form class="budget-form" id="budgetForm">
           <div class="field">
             <label for="budgetTitleInput">Title</label>
@@ -2973,12 +3069,86 @@ function renderBudgetPlanner() {
   populateBudgetForm(editorTarget);
   renderBudgetList(visibleEntries);
 
+  // ── Category details info block (main area) ─────────────────────────────
+  if (selectedCategory !== "all" && selectedCategoryData) {
+    const infoBlock = document.getElementById("budgetCatInfoBlock");
+    const hasNote = Boolean(selectedCategoryData.note);
+    const hasTodos = Array.isArray(selectedCategoryData.todos) && selectedCategoryData.todos.length > 0;
+    if ((hasNote || hasTodos) && infoBlock) {
+      renderBudgetCategoryInfo(selectedCategoryData, infoBlock);
+    }
+  }
+
   const budgetForm = document.getElementById("budgetForm");
   const categorySelect = document.getElementById("budgetCategorySelect");
   const budgetCategoryForm = document.getElementById("budgetCategoryForm");
   const budgetCategoryNameInput = document.getElementById("budgetCategoryNameInput");
   const budgetCategoryFormMessage = document.getElementById("budgetCategoryFormMessage");
   const toggleBudgetCategoryManagerButton = document.getElementById("toggleBudgetCategoryManagerBtn");
+
+  // ── "Add details" for create-category form ──────────────────────────────
+  let pendingCatTodos = [];
+  const budgetCatMoreBtn = document.getElementById("budgetCatMoreBtn");
+  const budgetCatDetails = document.getElementById("budgetCatDetails");
+
+  function refreshPendingCatTodos() {
+    const list = document.getElementById("budgetCatTodoList");
+    if (!list) return;
+    list.innerHTML = "";
+    pendingCatTodos.forEach((todo, index) => {
+      const li = document.createElement("li");
+      li.className = "subtask-item";
+
+      const fakeCheck = document.createElement("input");
+      fakeCheck.type = "checkbox";
+      fakeCheck.disabled = true;
+
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "subtask-title";
+      titleSpan.textContent = todo.title;
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "icon-btn";
+      delBtn.textContent = "x";
+      delBtn.setAttribute("aria-label", `Remove ${todo.title}`);
+      delBtn.addEventListener("click", () => {
+        pendingCatTodos.splice(index, 1);
+        refreshPendingCatTodos();
+      });
+
+      li.appendChild(fakeCheck);
+      li.appendChild(titleSpan);
+      li.appendChild(delBtn);
+      list.appendChild(li);
+    });
+  }
+
+  if (budgetCatMoreBtn) {
+    budgetCatMoreBtn.addEventListener("click", () => {
+      const opening = budgetCatDetails.hidden;
+      budgetCatDetails.hidden = !opening;
+      budgetCatMoreBtn.textContent = opening ? "\u2212 Hide details" : "+ Add details";
+      budgetCatMoreBtn.classList.toggle("is-open", opening);
+      if (opening) document.getElementById("budgetCatNoteInput")?.focus();
+    });
+
+    const budgetCatTodoAddBtn = document.getElementById("budgetCatTodoAddBtn");
+    const budgetCatTodoInput = document.getElementById("budgetCatTodoInput");
+
+    budgetCatTodoAddBtn.addEventListener("click", () => {
+      const val = budgetCatTodoInput.value.trim();
+      if (!val) return;
+      pendingCatTodos.push({ id: createId(), title: val, done: false });
+      budgetCatTodoInput.value = "";
+      refreshPendingCatTodos();
+      budgetCatTodoInput.focus();
+    });
+
+    budgetCatTodoInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); budgetCatTodoAddBtn.click(); }
+    });
+  }
 
   toggleBudgetCategoryManagerButton.addEventListener("click", () => {
     uiState.showBudgetCategoryManager = !uiState.showBudgetCategoryManager;
@@ -3009,7 +3179,9 @@ function renderBudgetPlanner() {
       return;
     }
 
-    const newCategory = createBudgetCategory(categoryTitle);
+    const catNote = (document.getElementById("budgetCatNoteInput")?.value || "").trim();
+    const newCategory = createBudgetCategory(categoryTitle, catNote, pendingCatTodos);
+    pendingCatTodos = [];
 
     appState.budgetCategories.push(newCategory);
     uiState.selectedBudgetCategory = newCategory.id;
@@ -3091,6 +3263,97 @@ function getReferenceHref(link) {
   }
 
   return /^[a-z][a-z\d+\-.]*:/i.test(link) ? link : `https://${link}`;
+}
+
+function buildGtdCustomSelect(nativeSelect) {
+  if (nativeSelect.dataset.cselect === "1") return;
+  nativeSelect.dataset.cselect = "1";
+
+  // Keep the native select functional but invisible — value reads and change events still work.
+  nativeSelect.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "gtd-cselect";
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "gtd-cselect__trigger";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "gtd-cselect__label";
+
+  const arrowEl = document.createElement("span");
+  arrowEl.className = "gtd-cselect__arrow";
+  arrowEl.textContent = "\u25be";
+
+  trigger.appendChild(labelEl);
+  trigger.appendChild(arrowEl);
+
+  const dropdown = document.createElement("div");
+  dropdown.className = "gtd-cselect__dropdown";
+  dropdown.hidden = true;
+
+  function currentLabel() {
+    const opt = Array.from(nativeSelect.options).find(o => o.value === nativeSelect.value);
+    return opt ? opt.text : (nativeSelect.options[0]?.text || "\u2014");
+  }
+
+  function buildOptions() {
+    dropdown.innerHTML = "";
+    Array.from(nativeSelect.options).forEach(opt => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gtd-cselect__option" + (opt.value === nativeSelect.value ? " is-selected" : "");
+      btn.textContent = opt.text;
+      btn.addEventListener("click", e => {
+        e.stopPropagation();
+        nativeSelect.value = opt.value;
+        nativeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        labelEl.textContent = currentLabel();
+        buildOptions();
+        close();
+      });
+      dropdown.appendChild(btn);
+    });
+  }
+
+  let outsideHandler = null;
+
+  function open() {
+    buildOptions();
+    dropdown.hidden = false;
+    trigger.classList.add("is-open");
+    outsideHandler = e => { if (!wrapper.contains(e.target)) close(); };
+    requestAnimationFrame(() => document.addEventListener("click", outsideHandler));
+  }
+
+  function close() {
+    dropdown.hidden = true;
+    trigger.classList.remove("is-open");
+    if (outsideHandler) {
+      document.removeEventListener("click", outsideHandler);
+      outsideHandler = null;
+    }
+  }
+
+  trigger.addEventListener("click", e => {
+    e.stopPropagation();
+    dropdown.hidden ? open() : close();
+  });
+
+  // Keep label in sync when value is changed externally (e.g. form reset, direct assignment).
+  nativeSelect.addEventListener("change", () => { labelEl.textContent = currentLabel(); });
+
+  labelEl.textContent = currentLabel();
+  wrapper.appendChild(trigger);
+  wrapper.appendChild(dropdown);
+  nativeSelect.parentNode.insertBefore(wrapper, nativeSelect.nextSibling);
+}
+
+function upgradeGtdSelects(container) {
+  container.querySelectorAll("select").forEach(sel => {
+    if (!sel.dataset.cselect) buildGtdCustomSelect(sel);
+  });
 }
 
 function renderWaitingFor() {
@@ -4198,6 +4461,75 @@ function renderWaitingFor() {
     saveState();
     renderApp();
   });
+
+  upgradeGtdSelects(viewRoot);
+}
+
+function renderSettings() {
+  viewRoot.innerHTML = `
+    <section class="settings-view">
+      <div class="settings-section">
+        <div class="settings-section__header">
+          <p class="eyebrow">Storage</p>
+          <h2 class="panel-title">Backup &amp; Restore</h2>
+          <p class="panel-subtitle">Export all PersonalDock data to a dated JSON file, or import a previous backup to restore your saved state.</p>
+        </div>
+        <div class="settings-meta-row">
+          <p class="storage-panel__last-saved" id="lastSavedStamp">No local save timestamp yet</p>
+          <p class="storage-panel__status" id="backupStatus" data-tone="info">Export a JSON backup or import one to restore your current data.</p>
+        </div>
+        <div class="settings-actions">
+          <button type="button" id="settingsExportBtn" class="primary-btn">Export JSON backup</button>
+          <button type="button" id="settingsImportBtn" class="secondary-btn">Import JSON backup</button>
+        </div>
+      </div>
+      <div class="settings-section settings-section--danger">
+        <div class="settings-section__header">
+          <p class="eyebrow">Danger Zone</p>
+          <h2 class="panel-title">Reset Data</h2>
+          <p class="panel-subtitle">Replace everything with the original sample data set. All your current tasks, budget items, notes, and other data will be overwritten.</p>
+        </div>
+        <div class="settings-actions">
+          <button type="button" id="settingsResetBtn" class="ghost-btn">Reset to sample data</button>
+        </div>
+      </div>
+    </section>
+  `;
+
+  updateStorageBackupPanel();
+
+  document.getElementById("settingsExportBtn").addEventListener("click", () => {
+    downloadJsonBackup();
+  });
+
+  document.getElementById("settingsImportBtn").addEventListener("click", () => {
+    importJsonInput.click();
+  });
+
+  document.getElementById("settingsResetBtn").addEventListener("click", () => {
+    const confirmed = confirm("Reset to the sample data? Your current saved tasks, notes, and budget items will be replaced.");
+
+    if (!confirmed) {
+      return;
+    }
+
+    const defaultState = buildDefaultState();
+    appState = defaultState;
+    uiState = {
+      activeView: DEFAULT_VIEW,
+      selectedBudgetCategory: defaultState.selectedBudgetCategory,
+      budgetEditorId: null,
+      showBudgetCategoryManager: false,
+      calendarYear: new Date().getFullYear(),
+      calendarMonth: new Date().getMonth(),
+      calendarWeekStart: null,
+      calendarViewMode: "week",
+      justCompletedTaskId: null,
+      expandedTaskIds: new Set()
+    };
+    saveState();
+    renderApp();
+  });
 }
 
 function renderBudgetSidebar() {
@@ -4386,6 +4718,7 @@ function renderBudgetList(entries) {
     });
 
     deleteButton.addEventListener("click", () => {
+      if (!confirm(`Delete "${item.title}"?`)) return;
       category.items = category.items.filter(entry => entry.id !== item.id);
 
       if (uiState.budgetEditorId === item.id) {
@@ -4437,32 +4770,6 @@ viewNav.addEventListener("click", event => {
   }
 
   setActiveView(button.dataset.view);
-});
-
-resetDataButton.addEventListener("click", () => {
-  const confirmed = confirm("Reset to the sample data? Your current saved tasks, notes, and budget items will be replaced.");
-
-  if (!confirmed) {
-    return;
-  }
-
-  appState = buildDefaultState();
-  uiState = {
-    activeView: appState.activeView,
-    selectedBudgetCategory: appState.selectedBudgetCategory,
-    budgetEditorId: null,
-    showBudgetCategoryManager: false
-  };
-  saveState();
-  renderApp();
-});
-
-exportJsonButton.addEventListener("click", () => {
-  downloadJsonBackup();
-});
-
-importJsonButton.addEventListener("click", () => {
-  importJsonInput.click();
 });
 
 importJsonInput.addEventListener("change", async event => {

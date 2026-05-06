@@ -33,35 +33,12 @@
           <button type="button" class="nav-btn" data-view="waitingFor">GTD</button>
           <button type="button" class="nav-btn" data-view="budgetPlanner">Budget Planner</button>
           <button type="button" class="nav-btn" data-view="promise">Promise</button>
+          <button type="button" class="nav-btn" data-view="settings">Settings</button>
         </nav>
-
-        <button type="button" id="resetDataBtn" class="ghost-btn">Reset sample data</button>
       </div>
     </header>
 
-    <section class="storage-panel" aria-labelledby="storagePanelTitle">
-      <div class="storage-panel__copy">
-        <p class="eyebrow">Storage &amp; Backup</p>
-        <h2 class="panel-title" id="storagePanelTitle">Storage &amp; Backup</h2>
-        <p class="panel-subtitle">
-          Export all current PersonalDock data to JSON or import a previous backup to restore your saved state.
-        </p>
-      </div>
-
-      <div class="storage-panel__meta">
-        <p class="storage-panel__last-saved" id="lastSavedStamp">No local save timestamp yet</p>
-        <p class="storage-panel__status" id="backupStatus" data-tone="info">
-          Export a JSON backup or import one to restore your current data.
-        </p>
-      </div>
-
-      <div class="storage-panel__actions">
-        <button type="button" id="exportJsonBtn" class="secondary-btn">Export JSON</button>
-        <button type="button" id="importJsonBtn" class="ghost-btn">Import JSON</button>
-      </div>
-
-      <input type="file" id="importJsonInput" accept=".json,application/json" hidden />
-    </section>
+    <input type="file" id="importJsonInput" accept=".json,application/json" hidden />
 
     <main id="viewRoot" class="view-root"></main>
   </div>

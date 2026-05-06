@@ -587,6 +587,90 @@ h1 {
 .gtd-item__controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .gtd-item__controls select { min-width: 130px; padding: 7px 10px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: #fff; color: var(--text); font-size: .84rem; }
 
+/* ── GTD Custom Select ────────────────────────────────── */
+.gtd-cselect {
+  position: relative;
+  display: inline-block;
+  min-width: 130px;
+  vertical-align: middle;
+}
+.gtd-cselect__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 11px;
+  background: #fff;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: .84rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  letter-spacing: .02em;
+  transition: border-color .15s ease, background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.gtd-cselect__trigger:hover {
+  border-color: rgba(10,191,83,.38);
+  background: var(--green-dim);
+  color: var(--dark-green);
+}
+.gtd-cselect__trigger.is-open {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.gtd-cselect__label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gtd-cselect__arrow {
+  font-size: .6rem;
+  flex-shrink: 0;
+  opacity: .75;
+  transition: transform .18s ease;
+}
+.gtd-cselect__trigger.is-open .gtd-cselect__arrow { transform: rotate(180deg); opacity: 1; }
+.gtd-cselect__dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 100%;
+  z-index: 200;
+  background: #fff;
+  border: 1px solid var(--green);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0,0,0,.10), 0 2px 8px rgba(10,191,83,.08);
+  overflow: hidden;
+}
+.gtd-cselect__option {
+  display: block;
+  width: 100%;
+  padding: 9px 13px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line-faint);
+  color: var(--text);
+  font-size: .84rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  transition: background .1s ease, color .1s ease;
+}
+.gtd-cselect__option:last-child { border-bottom: 0; }
+.gtd-cselect__option:hover { background: var(--green-dim); color: var(--dark-green); }
+.gtd-cselect__option.is-selected { background: var(--green); color: #fff; }
+.gtd-cselect__option.is-selected:hover { background: var(--dark-green); color: #fff; }
+.waiting-status-field .gtd-cselect { width: 100%; }
+
 .gtd-task-row { grid-template-columns: minmax(0,1fr) auto; align-items: center; }
 .gtd-task-row__main { display: flex; align-items: flex-start; gap: 12px; }
 .gtd-task-row__main input[type="checkbox"] { margin-top: 4px; accent-color: var(--green); }
@@ -629,6 +713,34 @@ h1 {
 .budget-category-form__message { color: var(--muted); font-size: .8rem; line-height: 1.45; }
 .budget-category-form__message[data-tone="success"] { color: var(--green); }
 .budget-category-form__message[data-tone="error"] { color: var(--danger); }
+
+/* ── "Add details" toggle (create-category form) ─────── */
+.budget-cat-more-btn {
+  justify-self: start;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.budget-cat-more-btn:hover, .budget-cat-more-btn.is-open {
+  color: var(--dark-green);
+  border-color: rgba(10,191,83,.28);
+  background: var(--green-dim);
+}
+.budget-cat-details { display: grid; gap: 10px; padding-top: 8px; border-top: 1px solid var(--line-faint); }
+.budget-cat-details__group { display: grid; gap: 5px; }
+.budget-cat-details__label { font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+
+/* ── Category info card (main area, when details exist) ── */
+.budget-cat-info { display: grid; gap: 8px; margin-bottom: 14px; padding: 12px 14px; background: var(--green-dim); border: 1px solid var(--line-faint); border-radius: var(--radius-md); }
+.budget-cat-info__note { margin: 0; color: var(--muted); font-size: .88rem; line-height: 1.55; }
+.budget-cat-info__todos { display: grid; gap: 4px; list-style: none; margin: 0; padding: 0; }
 
 .sidebar-list { display: grid; gap: 8px; margin-top: 14px; }
 .sidebar-list__item { display: block; }
@@ -988,6 +1100,16 @@ h1 {
 .calendar-event-item__meta { font-size: .76rem; color: var(--muted); letter-spacing: .04em; }
 .calendar-event-item__actions { flex: 0 0 auto; }
 
+/* ── Settings view ───────────────────────────────────── */
+.settings-view { display: grid; gap: 16px; max-width: 680px; }
+.settings-section { padding: 24px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius-xl); box-shadow: var(--shadow-sm); }
+.settings-section--danger { border-color: var(--danger-dim, #fde8e8); border-left: 3px solid var(--danger); }
+.settings-section__header { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line-faint); }
+.settings-section__header .eyebrow { margin-bottom: 6px; }
+.settings-section__header .panel-subtitle { margin-top: 6px; }
+.settings-meta-row { display: grid; gap: 5px; padding: 12px 14px; margin-bottom: 16px; background: var(--green-dim); border: 1px solid var(--line-faint); border-radius: var(--radius-md); }
+.settings-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
 /* ── Responsive ──────────────────────────────────────── */
 @media (max-width: 1160px) {
   .storage-panel { grid-template-columns: 1fr; align-items: start; }
@@ -1019,7 +1141,7 @@ h1 {
   .budget-item,.budget-item__side,.section-form,.gtd-task-row__main { grid-template-columns: 1fr; flex-direction: column; }
   .budget-item__side,.budget-item__actions,.gtd-item__controls,.waiting-item__side,.view-actions,.view-nav,.shortcut-row,.inline-stats,.storage-panel__actions { width: 100%; }
   .budget-item__amount,.today-stamp { text-align: left; }
-  .nav-btn,.ghost-btn,.shortcut-btn,.primary-btn,.secondary-btn,.gtd-item__controls select,.gtd-item__controls button { width: 100%; justify-content: center; }
+  .nav-btn,.ghost-btn,.shortcut-btn,.primary-btn,.secondary-btn,.gtd-item__controls select,.gtd-item__controls button,.gtd-item__controls .gtd-cselect { width: 100%; justify-content: center; }
   .budget-category-form button { width: 100%; justify-self: stretch; }
   .budget-manage-btn,.budget-category-manager__header .tiny-btn,.budget-category-manager__actions .tiny-btn { width: 100%; }
   .sidebar-btn { padding-block: 12px; }
