@@ -365,6 +365,82 @@ h1 {
 
 /* ── Action board ────────────────────────────────────── */
 .action-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+/* ── Action Board week nav ─────────────────────────────────────────────── */
+.ab-week-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.ab-week-nav__arrow {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  width: 28px;
+  height: 28px;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background .15s, border-color .15s;
+}
+.ab-week-nav__arrow:hover { background: var(--surface-2); border-color: var(--green); }
+.ab-day-tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.ab-day-tab {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: .72rem;
+  line-height: 1.3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 46px;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.ab-day-tab:hover { border-color: var(--green); color: var(--text); }
+.ab-day-tab.is-today { border-color: var(--green); color: var(--green); }
+.ab-day-tab.is-active { background: var(--green); border-color: var(--green); color: #000; }
+.ab-day-tab.is-today.is-active { background: var(--green); color: #000; }
+.ab-day-tab__label { font-weight: 700; text-transform: uppercase; font-size: .65rem; }
+.ab-day-tab__num   { font-size: .7rem; }
+
+/* ── Action Board copy row ────────────────────────────────────────────── */
+.ab-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.ab-copy-row__label {
+  font-size: .75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ab-copy-row__select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font-size: .75rem;
+}
+.ab-copy-row__btn { font-size: .75rem; padding: 4px 10px; }
+
 .action-board-layout { display: grid; grid-template-columns: 320px minmax(0,1fr); gap: 14px; align-items: start; }
 .action-board-layout__left,.action-board-layout__main,.action-secondary-grid,.quadrant-grid { display: grid; gap: 14px; }
 

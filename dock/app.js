@@ -1,5 +1,6 @@
 const STORAGE_KEY = "northstar-planner-v1";
 const LEGACY_ACTION_STORAGE_KEY = "actionboard-v1";
+const ACTION_DAILY_STORAGE_KEY = "dockActionDailyBoards";
 const DEFAULT_VIEW = "actionBoard";
 const BACKUP_FORMAT = "personaldock-backup";
 const BACKUP_VERSION = 1;
@@ -346,13 +347,45 @@ let uiState = {
   calendarViewMode: "week",  // "week" | "day"
   justCompletedTaskId: null,  // task id for the fade-in animation in the completed panel
   expandedTaskIds: new Set(),  // task ids whose details panel is open
-  selectedPlannerSection: "all"  // planner section filter
+  selectedPlannerSection: "all",  // planner section filter
+  actionBoardDate: null,       // ISO date string; null = today
+  actionBoardWeekStart: null   // ISO date string for Monday of the displayed ab week; null = this week
 };
 let backupUiState = {
   message: "Export a JSON backup or import one to restore your current data.",
   tone: "info"
 };
 let _calendarDragAbort = null;
+
+// Active Action Board daily sections — set when the action board is rendered,
+// cleared when navigating away. All board mutations operate on this reference.
+let _activeDailySections = null;
+let _activeDailyDate = null;
+
+function getTodayIso() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`;
+}
+
+function getActiveSections() {
+  return _activeDailySections || appState.actionSections;
+}
+
+function saveActiveDailyBoard() {
+  if (_activeDailySections && _activeDailyDate) {
+    setDailyBoard(_activeDailyDate, _activeDailySections);
+  }
+}
+
+function setActiveDailyBoard(dateStr) {
+  _activeDailyDate = dateStr;
+  _activeDailySections = getDailyBoard(dateStr);
+}
+
+function clearActiveDailyBoard() {
+  _activeDailySections = null;
+  _activeDailyDate = null;
+}
 
 function createId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -677,6 +710,61 @@ function mergeActionSections(storedSections) {
       tasks
     };
   });
+}
+
+// ── Action Board daily storage ─────────────────────────────────────────────
+
+function loadDailyBoards() {
+  try {
+    const raw = localStorage.getItem(ACTION_DAILY_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function saveDailyBoards(boards) {
+  localStorage.setItem(ACTION_DAILY_STORAGE_KEY, JSON.stringify(boards));
+}
+
+// Returns a fully normalised copy of sections for the given date.
+// If no board exists yet for that date and it's today, seeds from appState.actionSections.
+// For any other date, returns empty sections.
+function getDailyBoard(dateStr) {
+  const boards = loadDailyBoards();
+  if (boards[dateStr]) {
+    return mergeActionSections(boards[dateStr]);
+  }
+  // Seed today's board from the global actionSections (migration / first use)
+  if (dateStr === getTodayIso()) {
+    return mergeActionSections(appState.actionSections);
+  }
+  return mergeActionSections([]);
+}
+
+function setDailyBoard(dateStr, sections) {
+  const boards = loadDailyBoards();
+  boards[dateStr] = sections;
+  saveDailyBoards(boards);
+}
+
+// Copies all section tasks (deep) from source date to target date, merging with existing structure.
+function copyDailyBoard(srcDateStr, destDateStr) {
+  const src  = getDailyBoard(srcDateStr);
+  const dest = getDailyBoard(destDateStr);
+  dest.forEach(destSection => {
+    const srcSection = src.find(s => s.id === destSection.id);
+    if (!srcSection) return;
+    destSection.tasks = srcSection.tasks.map(t => ({
+      ...t,
+      id: createId(),
+      subtasks: (t.subtasks || []).map(s => ({ ...s, id: createId() }))
+    }));
+  });
+  setDailyBoard(destDateStr, dest);
 }
 
 function normalizeBudgetCategoryRecord(category) {
@@ -1179,7 +1267,7 @@ function getBudgetCategoryIds(categories = null) {
 }
 
 function getSectionById(sectionId) {
-  return appState.actionSections.find(section => section.id === sectionId);
+  return getActiveSections().find(section => section.id === sectionId);
 }
 
 function getProjectById(projectId) {
@@ -1193,7 +1281,7 @@ function getTaskContextLabel(context) {
 function getAvailableContexts() {
   const contextSet = new Set(GTD_CONTEXT_OPTIONS);
 
-  appState.actionSections.forEach(section => {
+  getActiveSections().forEach(section => {
     section.tasks.forEach(task => {
       if (task.context) {
         contextSet.add(task.context);
@@ -1210,7 +1298,7 @@ function getAvailableContexts() {
 }
 
 function getAllActionTaskEntries() {
-  return appState.actionSections.flatMap(section =>
+  return getActiveSections().flatMap(section =>
     section.tasks.map(task => ({
       section,
       task
@@ -1223,7 +1311,7 @@ function getOpenActionTaskEntries() {
 }
 
 function findActionTask(taskId) {
-  for (const section of appState.actionSections) {
+  for (const section of getActiveSections()) {
     const task = section.tasks.find(entry => entry.id === taskId);
 
     if (task) {
@@ -1256,6 +1344,7 @@ function addActionTask({ title, sectionId, context = "", projectId = "" }) {
   });
 
   section.tasks.push(task);
+  saveActiveDailyBoard();
 
   return { section, task };
 }
@@ -1278,6 +1367,7 @@ function moveActionTaskToSection(taskId, nextSectionId) {
 
   taskEntry.section.tasks = taskEntry.section.tasks.filter(task => task.id !== taskId);
   nextSection.tasks.unshift(taskEntry.task);
+  saveActiveDailyBoard();
 
   return { section: nextSection, task: taskEntry.task };
 }
@@ -1290,6 +1380,7 @@ function discardActionTask(taskId) {
   }
 
   taskEntry.section.tasks = taskEntry.section.tasks.filter(task => task.id !== taskId);
+  saveActiveDailyBoard();
   addTrashItem(
     createTrashItem({
       title: taskEntry.task.title,
@@ -1652,7 +1743,7 @@ function getBudgetEntries(selectedCategory = uiState.selectedBudgetCategory) {
 }
 
 function getActionStats() {
-  const tasks = appState.actionSections.flatMap(section => section.tasks);
+  const tasks = getActiveSections().flatMap(section => section.tasks);
   const completed = tasks.filter(task => task.done).length;
   const open = tasks.length - completed;
   const urgent = getSectionById("importantUrgent")?.tasks.filter(task => !task.done).length || 0;
@@ -1932,6 +2023,9 @@ function renderApp() {
     _calendarDragAbort.abort();
     _calendarDragAbort = null;
   }
+  if (uiState.activeView !== "actionBoard" && _activeDailySections) {
+    clearActiveDailyBoard();
+  }
   todayStamp.textContent = formatDateLabel(new Date());
   viewDescription.textContent = VIEW_DETAILS[uiState.activeView];
   updateStorageBackupPanel();
@@ -2145,12 +2239,68 @@ function renderDashboard() {
 }
 
 function renderActionBoard() {
+  // ── resolve active date + week ──────────────────────────────────────────
+  const todayIso = getTodayIso();
+  const activeDate = uiState.actionBoardDate || todayIso;
+  uiState.actionBoardDate = activeDate;
+
+  function isoMonday(dateStr) {
+    const d = new Date(dateStr + "T00:00:00");
+    const dow = d.getDay();
+    const diff = (dow === 0 ? -6 : 1 - dow);
+    const mon = new Date(d);
+    mon.setDate(d.getDate() + diff);
+    return mon.toISOString().slice(0, 10);
+  }
+
+  if (!uiState.actionBoardWeekStart) {
+    uiState.actionBoardWeekStart = isoMonday(activeDate);
+  }
+  const weekStart = uiState.actionBoardWeekStart;
+
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart + "T00:00:00");
+    d.setDate(d.getDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+
+  // Load the active day's board into _activeDailySections
+  setActiveDailyBoard(activeDate);
+
   const actionStats = getActionStats();
-  const leftColumnSections = appState.actionSections.filter(section => LEFT_COLUMN_SECTION_IDS.includes(section.id));
-  const quadrantSections = appState.actionSections.filter(section => QUADRANT_SECTION_IDS.includes(section.id));
-  const secondarySections = appState.actionSections.filter(section =>
+  const activeSections = getActiveSections();
+  const leftColumnSections = activeSections.filter(section => LEFT_COLUMN_SECTION_IDS.includes(section.id));
+  const quadrantSections = activeSections.filter(section => QUADRANT_SECTION_IDS.includes(section.id));
+  const secondarySections = activeSections.filter(section =>
     ![...LEFT_COLUMN_SECTION_IDS, ...QUADRANT_SECTION_IDS].includes(section.id)
   );
+
+  // ── build week-nav day tabs HTML ──────────────────────────────────────────
+  const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const dayTabsHtml = weekDays.map((dateStr, i) => {
+    const dayNum = parseInt(dateStr.slice(8), 10);
+    const monthNum = parseInt(dateStr.slice(5, 7), 10);
+    const isToday = dateStr === todayIso;
+    const isActive = dateStr === activeDate;
+    const cls = ["ab-day-tab",
+      isToday  ? "is-today"  : "",
+      isActive ? "is-active" : ""
+    ].filter(Boolean).join(" ");
+    return `<button type="button" class="${cls}" data-date="${dateStr}">
+      <span class="ab-day-tab__label">${DAY_LABELS[i]}</span>
+      <span class="ab-day-tab__num">${monthNum}/${dayNum}</span>
+    </button>`;
+  }).join("");
+
+  // ── build copy-source options ─────────────────────────────────────────────
+  const boards = loadDailyBoards();
+  const boardDates = Object.keys(boards)
+    .filter(d => d !== activeDate)
+    .sort((a, b) => b.localeCompare(a))
+    .slice(0, 14);
+  const copyOptionsHtml = boardDates.length
+    ? boardDates.map(d => `<option value="${d}">${d === todayIso ? "Today" : d}</option>`).join("")
+    : `<option value="" disabled>No saved boards yet</option>`;
 
   viewRoot.innerHTML = `
     <section class="view-panel">
@@ -2168,6 +2318,19 @@ function renderActionBoard() {
           </div>
           <button type="button" class="secondary-btn" id="clearCompletedTasksBtn">Clear completed tasks</button>
         </div>
+      </div>
+
+      <div class="ab-week-nav">
+        <button type="button" class="ab-week-nav__arrow" id="abPrevWeek" aria-label="Previous week">&#8249;</button>
+        <div class="ab-day-tabs" id="abDayTabs">${dayTabsHtml}</div>
+        <button type="button" class="ab-week-nav__arrow" id="abNextWeek" aria-label="Next week">&#8250;</button>
+      </div>
+
+      <div class="ab-copy-row">
+        <span class="ab-copy-row__label">Copy tasks from:</span>
+        <select class="ab-copy-row__select" id="abCopySource">${copyOptionsHtml}</select>
+        <button type="button" class="secondary-btn ab-copy-row__btn" id="abCopyBtn">Copy</button>
+        <button type="button" class="ghost-btn ab-copy-row__btn" id="abCopyYesterdayBtn">Yesterday</button>
       </div>
 
       <div class="action-board-layout">
@@ -2250,6 +2413,7 @@ function renderActionBoard() {
           item.classList.add("is-completing");
           setTimeout(() => {
             task.done = true;
+            saveActiveDailyBoard();
             saveState();
             renderApp();
           }, 270);
@@ -2310,6 +2474,7 @@ function renderActionBoard() {
           task.note = noteInput.value.trim();
           const hd = Boolean(task.note) || task.subtasks.length > 0;
           expandBtn.classList.toggle("has-details", hd);
+          saveActiveDailyBoard();
           saveState();
         });
 
@@ -2344,6 +2509,7 @@ function renderActionBoard() {
             subCheck.addEventListener("change", () => {
               sub.done = subCheck.checked;
               subTitle.className = "subtask-title" + (sub.done ? " is-done" : "");
+              saveActiveDailyBoard();
               saveState();
             });
 
@@ -2354,6 +2520,7 @@ function renderActionBoard() {
             subDel.setAttribute("aria-label", `Delete ${sub.title}`);
             subDel.addEventListener("click", () => {
               task.subtasks = task.subtasks.filter(s => s.id !== sub.id);
+              saveActiveDailyBoard();
               saveState();
               refreshSubtasks();
               const hd = Boolean(task.note) || task.subtasks.length > 0;
@@ -2388,6 +2555,7 @@ function renderActionBoard() {
           if (!val) return;
           if (!Array.isArray(task.subtasks)) task.subtasks = [];
           task.subtasks.push({ id: createId(), title: val, done: false });
+          saveActiveDailyBoard();
           saveState();
           subtaskInput.value = "";
           refreshSubtasks();
@@ -2412,6 +2580,7 @@ function renderActionBoard() {
           } else {
             uiState.expandedTaskIds.delete(task.id);
             task.note = noteInput.value.trim();
+            saveActiveDailyBoard();
             saveState();
           }
         });
@@ -2510,6 +2679,7 @@ function renderActionBoard() {
       cb.checked = true;
       cb.addEventListener("change", () => {
         task.done = false;
+        saveActiveDailyBoard();
         saveState();
         renderApp();
       });
@@ -2569,6 +2739,68 @@ function renderActionBoard() {
     });
 
     saveState();
+    renderApp();
+  });
+
+  // ── week nav ────────────────────────────────────────────────────────────
+  document.getElementById("abPrevWeek").addEventListener("click", () => {
+    const d = new Date(weekStart + "T00:00:00");
+    d.setDate(d.getDate() - 7);
+    uiState.actionBoardWeekStart = d.toISOString().slice(0, 10);
+    // If active date is outside the new week, snap to Monday of new week
+    const newWeekEnd = new Date(d);
+    newWeekEnd.setDate(newWeekEnd.getDate() + 6);
+    if (activeDate < uiState.actionBoardWeekStart || activeDate > newWeekEnd.toISOString().slice(0, 10)) {
+      uiState.actionBoardDate = uiState.actionBoardWeekStart;
+    }
+    renderApp();
+  });
+
+  document.getElementById("abNextWeek").addEventListener("click", () => {
+    const d = new Date(weekStart + "T00:00:00");
+    d.setDate(d.getDate() + 7);
+    uiState.actionBoardWeekStart = d.toISOString().slice(0, 10);
+    const newWeekEnd = new Date(d);
+    newWeekEnd.setDate(newWeekEnd.getDate() + 6);
+    if (activeDate < uiState.actionBoardWeekStart || activeDate > newWeekEnd.toISOString().slice(0, 10)) {
+      uiState.actionBoardDate = uiState.actionBoardWeekStart;
+    }
+    renderApp();
+  });
+
+  document.getElementById("abDayTabs").addEventListener("click", ev => {
+    const tab = ev.target.closest(".ab-day-tab");
+    if (!tab) return;
+    uiState.actionBoardDate = tab.dataset.date;
+    renderApp();
+  });
+
+  // ── copy controls ────────────────────────────────────────────────────────
+  function confirmCopyIfNeeded(srcDate, destDate) {
+    const currentBoard = getDailyBoard(destDate);
+    const hasExisting = currentBoard.some(s => s.tasks.length > 0);
+    if (hasExisting) {
+      return confirm(`The board for ${destDate} already has tasks. Overwrite with tasks from ${srcDate}?`);
+    }
+    return true;
+  }
+
+  document.getElementById("abCopyBtn").addEventListener("click", () => {
+    const srcDate = document.getElementById("abCopySource").value;
+    if (!srcDate) return;
+    if (!confirmCopyIfNeeded(srcDate, activeDate)) return;
+    copyDailyBoard(srcDate, activeDate);
+    setActiveDailyBoard(activeDate);
+    renderApp();
+  });
+
+  document.getElementById("abCopyYesterdayBtn").addEventListener("click", () => {
+    const yesterday = new Date(activeDate + "T00:00:00");
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayIso = yesterday.toISOString().slice(0, 10);
+    if (!confirmCopyIfNeeded(yesterdayIso, activeDate)) return;
+    copyDailyBoard(yesterdayIso, activeDate);
+    setActiveDailyBoard(activeDate);
     renderApp();
   });
 }
