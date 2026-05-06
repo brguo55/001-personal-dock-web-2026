@@ -2145,8 +2145,7 @@ function renderActionBoard() {
 
         // ── details panel ─────────────────────────────────────────────────
         const detailsPanel = document.createElement("div");
-        detailsPanel.className = "task-details";
-        detailsPanel.hidden = !isExpanded;
+        detailsPanel.className = "task-details" + (isExpanded ? " is-visible" : "");
 
         // Note
         const noteGroup = document.createElement("div");
@@ -2259,8 +2258,8 @@ function renderActionBoard() {
 
         // ── expand / collapse ─────────────────────────────────────────────
         expandBtn.addEventListener("click", () => {
-          const opening = detailsPanel.hidden;
-          detailsPanel.hidden = !opening;
+          const opening = !detailsPanel.classList.contains("is-visible");
+          detailsPanel.classList.toggle("is-visible", opening);
           expandBtn.classList.toggle("is-open", opening);
           if (opening) {
             uiState.expandedTaskIds.add(task.id);
