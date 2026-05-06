@@ -4531,11 +4531,11 @@ function renderSettings() {
       <div class="settings-section settings-section--danger">
         <div class="settings-section__header">
           <p class="eyebrow">Danger Zone</p>
-          <h2 class="panel-title">Reset Data</h2>
-          <p class="panel-subtitle">Replace everything with the original sample data set. All your current tasks, budget items, notes, and other data will be overwritten.</p>
+          <h2 class="panel-title">Clear All Data</h2>
+          <p class="panel-subtitle">Permanently delete all PersonalDock data — tasks, budget items, categories, calendar events, promises, notes, and checklists. The app will return to a completely empty state. This cannot be undone unless you have exported a backup.</p>
         </div>
         <div class="settings-actions">
-          <button type="button" id="settingsResetBtn" class="ghost-btn">Reset to sample data</button>
+          <button type="button" id="settingsResetBtn" class="ghost-btn">Clear all data</button>
         </div>
       </div>
     </section>
@@ -4552,17 +4552,38 @@ function renderSettings() {
   });
 
   document.getElementById("settingsResetBtn").addEventListener("click", () => {
-    const confirmed = confirm("Reset to the sample data? Your current saved tasks, notes, and budget items will be replaced.");
+    const confirmed = confirm("Clear all PersonalDock data?\n\nThis will permanently delete all tasks, budget items, categories, calendar events, promises, notes, and checklists. This cannot be undone unless you have exported a backup.\n\nAre you sure?");
 
     if (!confirmed) {
       return;
     }
 
-    const defaultState = buildDefaultState();
-    appState = defaultState;
+    appState = {
+      activeView: DEFAULT_VIEW,
+      selectedBudgetCategory: "all",
+      lastSavedAt: null,
+      actionSections: ACTION_SECTION_DEFINITIONS.map(section => ({
+        id: section.id,
+        title: section.title,
+        emoji: section.emoji,
+        accent: section.accent,
+        size: section.size,
+        tasks: []
+      })),
+      budgetCategories: [],
+      notes: [],
+      waitingItems: [],
+      inboxItems: [],
+      projects: [],
+      somedayItems: [],
+      referenceItems: [],
+      trashItems: [],
+      promises: [],
+      calendarEvents: []
+    };
     uiState = {
       activeView: DEFAULT_VIEW,
-      selectedBudgetCategory: defaultState.selectedBudgetCategory,
+      selectedBudgetCategory: "all",
       budgetEditorId: null,
       showBudgetCategoryManager: false,
       calendarYear: new Date().getFullYear(),
