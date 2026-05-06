@@ -380,7 +380,10 @@ function createBudgetItem(title, amount, checked = false) {
     id: createId(),
     title,
     amount: Number(amount) || 0,
-    checked
+    checked,
+    itemNote: "",
+    reminders: [],
+    checklist: []
   };
 }
 
@@ -654,7 +657,26 @@ function normalizeBudgetCategoryRecord(category) {
             id: item.id || createId(),
             title,
             amount,
-            checked: Boolean(item.checked)
+            checked: Boolean(item.checked),
+            itemNote: typeof item?.itemNote === "string" ? item.itemNote : "",
+            reminders: Array.isArray(item?.reminders)
+              ? item.reminders
+                  .map(r => {
+                    const text = typeof r?.text === "string" ? r.text.trim() : "";
+                    if (!text) return null;
+                    return { id: r.id || createId(), text };
+                  })
+                  .filter(Boolean)
+              : [],
+            checklist: Array.isArray(item?.checklist)
+              ? item.checklist
+                  .map(c => {
+                    const ctitle = typeof c?.title === "string" ? c.title.trim() : "";
+                    if (!ctitle) return null;
+                    return { id: c.id || createId(), title: ctitle, done: Boolean(c.done) };
+                  })
+                  .filter(Boolean)
+              : []
           };
         })
         .filter(Boolean)
@@ -4695,6 +4717,8 @@ function renderBudgetList(entries) {
     const amount = row.querySelector(".budget-item__amount");
     const editButton = row.querySelector(".edit-item-btn");
     const deleteButton = row.querySelector(".delete-item-btn");
+    const expandButton = row.querySelector(".budget-item__expand-btn");
+    const detailsPanel = row.querySelector(".budget-item__details-panel");
 
     budgetItem.classList.toggle("is-checked", item.checked);
     checkbox.checked = item.checked;
@@ -4705,6 +4729,16 @@ function renderBudgetList(entries) {
         ? "Completed"
         : "In Progress";
     amount.textContent = formatCurrency(item.amount);
+
+    function itemHasDetails() {
+      return Boolean(item.itemNote) || (item.reminders || []).length > 0 || (item.checklist || []).length > 0;
+    }
+
+    function refreshExpandIndicator() {
+      expandButton.classList.toggle("has-details", itemHasDetails());
+    }
+
+    refreshExpandIndicator();
 
     checkbox.addEventListener("change", () => {
       item.checked = checkbox.checked;
@@ -4729,8 +4763,222 @@ function renderBudgetList(entries) {
       renderApp();
     });
 
+    expandButton.addEventListener("click", () => {
+      const opening = detailsPanel.hidden;
+      if (opening && !detailsPanel.dataset.built) {
+        buildBudgetItemDetails(detailsPanel, item, refreshExpandIndicator);
+        detailsPanel.dataset.built = "1";
+      }
+      detailsPanel.hidden = !opening;
+      expandButton.setAttribute("aria-expanded", String(opening));
+      expandButton.classList.toggle("is-open", opening);
+    });
+
     budgetList.appendChild(row);
   });
+}
+
+function buildBudgetItemDetails(panel, item, onChanged) {
+  panel.innerHTML = "";
+
+  // ── Note ─────────────────────────────────────────────
+  const noteGroup = document.createElement("div");
+  noteGroup.className = "bid-group";
+
+  const noteLabel = document.createElement("label");
+  noteLabel.className = "bid-label";
+  noteLabel.textContent = "Note";
+  noteLabel.htmlFor = `bid-note-${item.id}`;
+
+  const noteTextarea = document.createElement("textarea");
+  noteTextarea.id = `bid-note-${item.id}`;
+  noteTextarea.className = "bid-note";
+  noteTextarea.rows = 2;
+  noteTextarea.placeholder = "Add notes, extra context, or details\u2026";
+  noteTextarea.maxLength = 500;
+  noteTextarea.value = item.itemNote || "";
+
+  noteTextarea.addEventListener("input", () => {
+    item.itemNote = noteTextarea.value;
+    saveState();
+    onChanged();
+  });
+
+  noteGroup.appendChild(noteLabel);
+  noteGroup.appendChild(noteTextarea);
+  panel.appendChild(noteGroup);
+
+  // ── Reminders ─────────────────────────────────────────
+  const remGroup = document.createElement("div");
+  remGroup.className = "bid-group";
+
+  const remLabel = document.createElement("span");
+  remLabel.className = "bid-label";
+  remLabel.textContent = "Reminders";
+
+  const remList = document.createElement("ul");
+  remList.className = "bid-sublist";
+
+  function renderReminders() {
+    remList.innerHTML = "";
+    if (!Array.isArray(item.reminders)) item.reminders = [];
+    item.reminders.forEach((reminder, idx) => {
+      const li = document.createElement("li");
+      li.className = "bid-sublist__item";
+
+      const span = document.createElement("span");
+      span.className = "bid-sublist__text";
+      span.textContent = reminder.text;
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "bid-sublist__del";
+      del.textContent = "\u00d7";
+      del.setAttribute("aria-label", `Remove "${reminder.text}"`);
+      del.addEventListener("click", () => {
+        item.reminders = item.reminders.filter((_, i) => i !== idx);
+        saveState();
+        renderReminders();
+        onChanged();
+      });
+
+      li.appendChild(span);
+      li.appendChild(del);
+      remList.appendChild(li);
+    });
+  }
+
+  renderReminders();
+
+  const remAddRow = document.createElement("div");
+  remAddRow.className = "bid-addrow";
+
+  const remInput = document.createElement("input");
+  remInput.type = "text";
+  remInput.className = "bid-addrow__input";
+  remInput.placeholder = "Add reminder\u2026";
+  remInput.maxLength = 200;
+
+  const remAddBtn = document.createElement("button");
+  remAddBtn.type = "button";
+  remAddBtn.className = "bid-addrow__btn";
+  remAddBtn.textContent = "Add";
+
+  function addReminder() {
+    const val = remInput.value.trim();
+    if (!val) return;
+    if (!Array.isArray(item.reminders)) item.reminders = [];
+    item.reminders.push({ id: createId(), text: val });
+    remInput.value = "";
+    saveState();
+    renderReminders();
+    onChanged();
+    remInput.focus();
+  }
+
+  remAddBtn.addEventListener("click", addReminder);
+  remInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); addReminder(); }
+  });
+
+  remAddRow.appendChild(remInput);
+  remAddRow.appendChild(remAddBtn);
+  remGroup.appendChild(remLabel);
+  remGroup.appendChild(remList);
+  remGroup.appendChild(remAddRow);
+  panel.appendChild(remGroup);
+
+  // ── Checklist ─────────────────────────────────────────
+  const clGroup = document.createElement("div");
+  clGroup.className = "bid-group";
+
+  const clLabel = document.createElement("span");
+  clLabel.className = "bid-label";
+  clLabel.textContent = "Checklist";
+
+  const clList = document.createElement("ul");
+  clList.className = "bid-sublist";
+
+  function renderChecklist() {
+    clList.innerHTML = "";
+    if (!Array.isArray(item.checklist)) item.checklist = [];
+    item.checklist.forEach((todo, idx) => {
+      const li = document.createElement("li");
+      li.className = "bid-sublist__item";
+      li.classList.toggle("is-done", todo.done);
+
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.checked = todo.done;
+      check.className = "bid-check";
+      check.addEventListener("change", () => {
+        todo.done = check.checked;
+        li.classList.toggle("is-done", todo.done);
+        saveState();
+      });
+
+      const span = document.createElement("span");
+      span.className = "bid-sublist__text";
+      span.textContent = todo.title;
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "bid-sublist__del";
+      del.textContent = "\u00d7";
+      del.setAttribute("aria-label", `Remove "${todo.title}"`);
+      del.addEventListener("click", () => {
+        item.checklist = item.checklist.filter((_, i) => i !== idx);
+        saveState();
+        renderChecklist();
+        onChanged();
+      });
+
+      li.appendChild(check);
+      li.appendChild(span);
+      li.appendChild(del);
+      clList.appendChild(li);
+    });
+  }
+
+  renderChecklist();
+
+  const clAddRow = document.createElement("div");
+  clAddRow.className = "bid-addrow";
+
+  const clInput = document.createElement("input");
+  clInput.type = "text";
+  clInput.className = "bid-addrow__input";
+  clInput.placeholder = "Add checklist item\u2026";
+  clInput.maxLength = 200;
+
+  const clAddBtn = document.createElement("button");
+  clAddBtn.type = "button";
+  clAddBtn.className = "bid-addrow__btn";
+  clAddBtn.textContent = "Add";
+
+  function addChecklistItem() {
+    const val = clInput.value.trim();
+    if (!val) return;
+    if (!Array.isArray(item.checklist)) item.checklist = [];
+    item.checklist.push({ id: createId(), title: val, done: false });
+    clInput.value = "";
+    saveState();
+    renderChecklist();
+    onChanged();
+    clInput.focus();
+  }
+
+  clAddBtn.addEventListener("click", addChecklistItem);
+  clInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); }
+  });
+
+  clAddRow.appendChild(clInput);
+  clAddRow.appendChild(clAddBtn);
+  clGroup.appendChild(clLabel);
+  clGroup.appendChild(clList);
+  clGroup.appendChild(clAddRow);
+  panel.appendChild(clGroup);
 }
 
 function createEmptyState(message) {

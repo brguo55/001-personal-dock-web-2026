@@ -67,21 +67,25 @@
 
   <template id="budgetItemTemplate">
     <li class="budget-item">
-      <label class="budget-item__main">
-        <input type="checkbox" class="budget-item__check" />
-        <span class="budget-item__copy">
-          <strong class="budget-item__title"></strong>
-          <span class="budget-item__meta"></span>
-        </span>
-      </label>
+      <div class="budget-item__row">
+        <label class="budget-item__main">
+          <input type="checkbox" class="budget-item__check" />
+          <span class="budget-item__copy">
+            <strong class="budget-item__title"></strong>
+            <span class="budget-item__meta"></span>
+          </span>
+        </label>
 
-      <div class="budget-item__side">
-        <span class="budget-item__amount"></span>
-        <div class="budget-item__actions">
-          <button type="button" class="tiny-btn edit-item-btn">Edit</button>
-          <button type="button" class="tiny-btn delete-item-btn">Delete</button>
+        <div class="budget-item__side">
+          <span class="budget-item__amount"></span>
+          <div class="budget-item__actions">
+            <button type="button" class="tiny-btn edit-item-btn">Edit</button>
+            <button type="button" class="tiny-btn delete-item-btn">Delete</button>
+            <button type="button" class="budget-item__expand-btn" aria-label="Show details" aria-expanded="false">▾</button>
+          </div>
         </div>
       </div>
+      <div class="budget-item__details-panel" hidden></div>
     </li>
   </template>
 
