@@ -2977,30 +2977,28 @@ function renderBudgetPlanner() {
     <section class="budget-layout">
       <aside class="budget-sidebar">
         <div class="budget-sidebar__header">
-          <div>
-            <h2 class="panel-title">Budget categories</h2>
-            <p class="panel-subtitle">Choose a category on the left and manage its items on the right.</p>
-          </div>
+          <p class="eyebrow" style="margin:0">Categories</p>
           <button
             type="button"
-            class="ghost-btn budget-manage-btn"
+            class="tiny-btn budget-manage-btn"
             id="toggleBudgetCategoryManagerBtn"
             aria-expanded="${uiState.showBudgetCategoryManager ? "true" : "false"}"
             aria-controls="budgetCategoryManager"
           >
-            ${uiState.showBudgetCategoryManager ? "Close manager" : "Manage"}
+            ${uiState.showBudgetCategoryManager ? "Done" : "Manage"}
           </button>
         </div>
 
         <form class="budget-category-form" id="budgetCategoryForm">
-          <div class="field">
-            <label for="budgetCategoryNameInput">Create category</label>
+          <div class="budget-category-form__row">
             <input
               id="budgetCategoryNameInput"
               type="text"
               maxlength="60"
+              placeholder="New category name\u2026"
               required
             />
+            <button type="submit" class="budget-cat-create-btn">Create</button>
           </div>
           <button type="button" class="budget-cat-more-btn" id="budgetCatMoreBtn">+ Add details</button>
           <div class="budget-cat-details" id="budgetCatDetails" hidden>
@@ -3017,10 +3015,7 @@ function renderBudgetPlanner() {
               </div>
             </div>
           </div>
-          <button type="submit" class="secondary-btn">Create category</button>
-          <p class="budget-category-form__message" id="budgetCategoryFormMessage">
-            Categories are saved with your backup. If you delete one later, its items move to another remaining category when possible.
-          </p>
+          <p class="budget-category-form__message" id="budgetCategoryFormMessage"></p>
         </form>
 
         <ul class="sidebar-list" id="budgetCategoryList"></ul>
