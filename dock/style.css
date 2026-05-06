@@ -1210,7 +1210,7 @@ h1 {
   overflow: hidden; box-sizing: border-box;
   padding: 2px 4px 2px 5px;
   display: flex; align-items: flex-start; justify-content: space-between; gap: 2px;
-  cursor: default; z-index: 1;
+  cursor: grab; z-index: 1;
 }
 .cal-tg-event__inner { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .cal-tg-event__title { font-size: .72rem; font-weight: 700; color: var(--text-bright); line-height: 1.25; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -1219,6 +1219,15 @@ h1 {
 .cal-tg-event .icon-btn { flex-shrink: 0; opacity: 0; transition: opacity .12s; font-size: .65rem; padding: 0 1px; align-self: flex-start; margin-top: 1px; }
 .cal-tg-event:hover .icon-btn       { opacity: .7; }
 .cal-tg-event:hover .icon-btn:hover { opacity: 1; }
+
+.cal-tg-event--dragging { opacity: .6; z-index: 10; cursor: grabbing !important; }
+.cal-tg-event__resize-top,
+.cal-tg-event__resize-bottom { position: absolute; left: 0; right: 0; height: 5px; cursor: ns-resize; z-index: 2; }
+.cal-tg-event__resize-top    { top: 0; }
+.cal-tg-event__resize-bottom { bottom: 0; }
+.cal-tg-event__resize-top:hover,
+.cal-tg-event__resize-bottom:hover { background: rgba(0,0,0,.1); }
+.cal-tg-col--drop-target { background: rgba(10,191,83,.09) !important; }
 
 .cal-tg-event--green,
 .cal-tg-event--pink      { background: rgba(10,191,83,.13);   border-left-color: var(--green); }

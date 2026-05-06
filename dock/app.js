@@ -352,6 +352,7 @@ let backupUiState = {
   message: "Export a JSON backup or import one to restore your current data.",
   tone: "info"
 };
+let _calendarDragAbort = null;
 
 function createId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -1927,6 +1928,10 @@ function setBudgetCategory(categoryId) {
 }
 
 function renderApp() {
+  if (uiState.activeView !== "calendar" && _calendarDragAbort) {
+    _calendarDragAbort.abort();
+    _calendarDragAbort = null;
+  }
   todayStamp.textContent = formatDateLabel(new Date());
   viewDescription.textContent = VIEW_DETAILS[uiState.activeView];
   updateStorageBackupPanel();
@@ -2712,6 +2717,7 @@ function renderPromise() {
 
 function renderCalendar() {
   const now = new Date();
+  if (_calendarDragAbort) { _calendarDragAbort.abort(); _calendarDragAbort = null; }
 
   // ── helpers ────────────────────────────────────────────────────────────────
   function toISODateString(d) {
@@ -2913,13 +2919,16 @@ function renderCalendar() {
       const timeRange  = formatTimeRange(e.time, e.endTime);
       const recurBadge = e.recurrence ? `<span class="cal-recur-badge">↻</span>` : "";
       const notePart   = e.note ? `<span class="cal-tg-event__note">${e.note}</span>` : "";
-      return `<div class="cal-tg-event cal-tg-event--${e.color}" style="top:${pos.top}px;height:${pos.height}px" data-id="${e.id}">
+      const isDraggable = !e._virtual;
+      return `<div class="cal-tg-event cal-tg-event--${e.color}" style="top:${pos.top}px;height:${pos.height}px" data-id="${e.id}"${isDraggable ? "" : ' data-virtual="1"'}>
+        ${isDraggable ? '<div class="cal-tg-event__resize-top"></div>' : ""}
         <div class="cal-tg-event__inner">
           <span class="cal-tg-event__title">${e.title}${recurBadge}</span>
           ${timeRange ? `<span class="cal-tg-event__time">${timeRange}</span>` : ""}
           ${notePart}
         </div>
         <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
+        ${isDraggable ? '<div class="cal-tg-event__resize-bottom"></div>' : ""}
       </div>`;
     }).join("");
     return `<div class="cal-tg-col${isToday ? " is-today" : ""}" data-date="${dateStr}">
@@ -3195,6 +3204,117 @@ function renderCalendar() {
     saveState();
     renderApp();
   });
+
+  // ── Drag & resize for timed event blocks ──────────────────────────────────
+  {
+    const SNAP_MINS = 15;
+    const snapOff = off => Math.round(off * 60 / SNAP_MINS) * SNAP_MINS / 60;
+    const offToTimeStr = off => {
+      const totalMins = Math.round(off * 60);
+      let absMin = (22 * 60 + 30 + totalMins) % (24 * 60);
+      if (absMin < 0) absMin += 24 * 60;
+      return `${String(Math.floor(absMin / 60)).padStart(2, "0")}:${String(absMin % 60).padStart(2, "0")}`;
+    };
+    const getColAt = clientX => {
+      for (const col of document.querySelectorAll(".cal-tg-col")) {
+        const r = col.getBoundingClientRect();
+        if (clientX >= r.left && clientX <= r.right) return col;
+      }
+      return null;
+    };
+
+    _calendarDragAbort = new AbortController();
+    const { signal } = _calendarDragAbort;
+    let drag = null;
+    const colsEl = document.querySelector(".cal-tg-cols");
+    if (!colsEl) return;
+
+    colsEl.addEventListener("mousedown", ev => {
+      if (ev.target.closest(".cal-del-btn")) return;
+      const evEl = ev.target.closest(".cal-tg-event");
+      if (!evEl || evEl.dataset.virtual) return;
+      const id = evEl.dataset.id;
+      const calEv = appState.calendarEvents.find(e => e.id === id);
+      if (!calEv || !calEv.time) return;
+      ev.preventDefault();
+      const isResTop = ev.target.classList.contains("cal-tg-event__resize-top");
+      const isResBot = ev.target.classList.contains("cal-tg-event__resize-bottom");
+      const rawStart = timeToOffset(calEv.time);
+      let rawEnd = calEv.endTime ? timeToOffset(calEv.endTime) : rawStart + 1;
+      if (rawEnd <= rawStart) rawEnd += 24;
+      drag = {
+        type: isResTop ? "resize-top" : isResBot ? "resize-bot" : "move",
+        id, evEl,
+        startY: ev.clientY,
+        startX: ev.clientX,
+        startOff: rawStart,
+        endOff: rawEnd,
+      };
+      evEl.classList.add("cal-tg-event--dragging");
+      document.body.style.cursor = (isResTop || isResBot) ? "ns-resize" : "grabbing";
+      document.body.style.userSelect = "none";
+    }, { signal });
+
+    document.addEventListener("mousemove", ev => {
+      if (!drag) return;
+      const dOff = (ev.clientY - drag.startY) / HOUR_PX;
+      const { type, startOff, endOff, evEl } = drag;
+      if (type === "move") {
+        const dur = endOff - startOff;
+        const newStart = Math.max(0, Math.min(23.75, snapOff(startOff + dOff)));
+        evEl.style.top    = Math.round(newStart * HOUR_PX) + "px";
+        evEl.style.height = Math.max(22, Math.round(dur * HOUR_PX)) + "px";
+        const timeEl = evEl.querySelector(".cal-tg-event__time");
+        if (timeEl) timeEl.textContent = `${offToTimeStr(newStart)} \u2013 ${offToTimeStr(newStart + dur)}`;
+        document.querySelectorAll(".cal-tg-col--drop-target").forEach(c => c.classList.remove("cal-tg-col--drop-target"));
+        const targetCol = getColAt(ev.clientX);
+        if (targetCol) targetCol.classList.add("cal-tg-col--drop-target");
+      } else if (type === "resize-bot") {
+        const newEnd = Math.max(startOff + 0.25, snapOff(startOff + (endOff - startOff) + dOff));
+        evEl.style.height = Math.max(22, Math.round((newEnd - startOff) * HOUR_PX)) + "px";
+        const timeEl = evEl.querySelector(".cal-tg-event__time");
+        if (timeEl) timeEl.textContent = `${offToTimeStr(startOff)} \u2013 ${offToTimeStr(newEnd)}`;
+      } else if (type === "resize-top") {
+        let newStart = Math.max(0, snapOff(startOff + dOff));
+        newStart = Math.min(newStart, endOff - 0.25);
+        evEl.style.top    = Math.round(newStart * HOUR_PX) + "px";
+        evEl.style.height = Math.max(22, Math.round((endOff - newStart) * HOUR_PX)) + "px";
+        const timeEl = evEl.querySelector(".cal-tg-event__time");
+        if (timeEl) timeEl.textContent = `${offToTimeStr(newStart)} \u2013 ${offToTimeStr(endOff)}`;
+      }
+    }, { signal });
+
+    document.addEventListener("mouseup", ev => {
+      if (!drag) return;
+      document.querySelectorAll(".cal-tg-col--drop-target").forEach(c => c.classList.remove("cal-tg-col--drop-target"));
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      const dOff = (ev.clientY - drag.startY) / HOUR_PX;
+      const { type, id, startOff, endOff, evEl } = drag;
+      const calEv = appState.calendarEvents.find(e => e.id === id);
+      if (calEv) {
+        if (type === "move") {
+          const dur = endOff - startOff;
+          const newStart = Math.max(0, Math.min(23.75, snapOff(startOff + dOff)));
+          calEv.time    = offToTimeStr(newStart);
+          calEv.endTime = offToTimeStr(newStart + dur);
+          const targetCol = getColAt(ev.clientX);
+          if (targetCol && targetCol.dataset.date) calEv.date = targetCol.dataset.date;
+        } else if (type === "resize-bot") {
+          const newEnd = Math.max(startOff + 0.25, snapOff(startOff + (endOff - startOff) + dOff));
+          calEv.endTime = offToTimeStr(newEnd);
+        } else if (type === "resize-top") {
+          let newStart = Math.max(0, snapOff(startOff + dOff));
+          newStart = Math.min(newStart, endOff - 0.25);
+          calEv.time = offToTimeStr(newStart);
+        }
+        saveState();
+      }
+      evEl.classList.remove("cal-tg-event--dragging");
+      drag = null;
+      renderApp();
+    }, { signal });
+  }
 }
 
 function renderPlanner() {
