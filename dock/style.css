@@ -801,6 +801,124 @@ h1 {
 .planner-sidebar-row { display: flex; align-items: center; gap: 6px; }
 .planner-sidebar-row .sidebar-btn { flex: 1; }
 
+/* Planner item overrides (block layout to accommodate details panel) */
+.promise-item.planner-item { display: block; }
+.planner-item__row {
+  display: flex; align-items: center; gap: 12px;
+}
+.planner-item__row .promise-item__main { flex: 1; }
+
+/* Drag handle */
+.planner-item__drag-handle {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: grab;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: .45;
+  user-select: none;
+}
+.planner-item__drag-handle:hover { opacity: .85; color: var(--green); }
+.planner-item--dragging { opacity: .4; outline: 2px dashed var(--green); border-radius: 8px; }
+.planner-item--drag-over { outline: 2px solid var(--green); border-radius: 8px; background: rgba(10,191,83,.07); }
+
+/* Actions row inside planner item */
+.planner-item__actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+/* Expand button */
+.planner-item__expand-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex-shrink: 0;
+  border: none; border-radius: 4px;
+  background: none; cursor: pointer;
+  color: var(--muted); font-size: .85rem;
+  transition: background .12s ease, color .12s ease;
+}
+.planner-item__expand-btn:hover { background: var(--green-dim); color: var(--green); }
+
+/* Details panel */
+.planner-item__details {
+  display: none; gap: 12px;
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: var(--green-dim);
+  border-left: 3px solid var(--green);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+.planner-item__details.is-open { display: grid; }
+
+/* Field label */
+.planner-item__field-label {
+  display: block;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+/* Edit title */
+.planner-item__edit-section { display: grid; }
+.planner-item__edit-row { display: flex; gap: 8px; align-items: center; }
+.planner-item__title-input {
+  flex: 1;
+  padding: 8px 11px;
+  font-size: .9rem;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm, 4px);
+  background: #fff;
+  color: var(--text-bright);
+}
+.planner-item__title-input:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px var(--green-dim); }
+
+/* Note textarea */
+.planner-item__note-section { display: grid; }
+.planner-item__note-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 11px;
+  font-size: .875rem;
+  font-family: inherit;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm, 4px);
+  background: #fff;
+  color: var(--text);
+  resize: vertical;
+  margin-bottom: 8px;
+}
+.planner-item__note-textarea:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px var(--green-dim); }
+
+/* Checklist */
+.planner-item__checklist-section { display: grid; }
+.planner-item__checklist-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.planner-item__cl-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm, 4px);
+}
+.planner-item__cl-item.is-done .planner-item__cl-text { text-decoration: line-through; color: var(--muted); }
+.planner-item__cl-check { width: 15px; height: 15px; flex-shrink: 0; accent-color: var(--green); }
+.planner-item__cl-text-wrap { flex: 1; min-width: 0; }
+.planner-item__cl-text { font-size: .875rem; color: var(--text); word-break: break-word; }
+.planner-item__cl-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.planner-item__cl-edit-row { display: flex; gap: 6px; align-items: center; }
+.planner-item__cl-edit-input {
+  flex: 1; padding: 4px 8px; font-size: .875rem; font-family: inherit;
+  border: 1px solid var(--line-soft); border-radius: 4px; background: #fff;
+}
+.planner-item__cl-edit-input:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 2px var(--green-dim); }
+.planner-item__cl-form { display: flex; gap: 8px; align-items: center; }
+.planner-item__cl-input {
+  flex: 1; padding: 7px 10px; font-size: .875rem;
+  border: 1px solid var(--line-soft); border-radius: var(--radius-sm, 4px); background: #fff;
+}
+.planner-item__cl-input:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px var(--green-dim); }
+
 /* ── Budget category select ──────────────────────────── */
 #budgetCategorySelect {
   appearance: none;

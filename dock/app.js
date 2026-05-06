@@ -985,6 +985,7 @@ function createPlannerItem(title, note = "") {
     title,
     done: false,
     note,
+    checklist: [],
     createdAt: new Date().toISOString()
   };
 }
@@ -994,11 +995,19 @@ function normalizePlannerItems(items) {
   return items.map(item => {
     const title = typeof item?.title === "string" ? item.title.trim() : "";
     if (!title) return null;
+    const checklist = Array.isArray(item?.checklist)
+      ? item.checklist.map(c => ({
+          id: (typeof c?.id === "string" && c.id) ? c.id : createId(),
+          text: typeof c?.text === "string" ? c.text.trim() : "",
+          done: Boolean(c?.done)
+        })).filter(c => c.text)
+      : [];
     return {
       id: item.id || createId(),
       title,
       done: Boolean(item.done),
       note: typeof item?.note === "string" ? item.note : "",
+      checklist,
       createdAt: normalizeTimestamp(item.createdAt) || new Date().toISOString()
     };
   }).filter(Boolean);
@@ -3320,9 +3329,25 @@ function renderPlanner() {
     ));
   } else {
     visibleItems.forEach(({ section, item }) => {
-      const li = document.createElement("li");
-      li.className = `promise-item${item.done ? " is-done" : ""}`;
+      const checklist = Array.isArray(item.checklist) ? item.checklist : [];
 
+      const li = document.createElement("li");
+      li.className = `promise-item planner-item${item.done ? " is-done" : ""}`;
+      li.dataset.itemId = item.id;
+      li.draggable = true;
+
+      // ── Row ──────────────────────────────────────────────────────────────
+      const row = document.createElement("div");
+      row.className = "planner-item__row";
+
+      // Drag handle
+      const dragHandle = document.createElement("span");
+      dragHandle.className = "planner-item__drag-handle";
+      dragHandle.setAttribute("aria-hidden", "true");
+      dragHandle.setAttribute("title", "Drag to reorder");
+      dragHandle.textContent = "\u2807";
+
+      // Checkbox + title label
       const main = document.createElement("label");
       main.className = "promise-item__main";
 
@@ -3343,21 +3368,34 @@ function renderPlanner() {
       titleEl.className = "promise-item__text";
       titleEl.textContent = item.title;
 
-      const meta = document.createElement("span");
-      meta.className = "promise-item__meta";
+      copy.appendChild(titleEl);
+
+      // Meta line: section name (all-view) + note snippet — no timestamp
       const metaParts = [];
       if (selectedSection === "all") metaParts.push(section.title);
-      if (item.note) metaParts.push(item.note);
-      else metaParts.push(formatShortDate(item.createdAt));
-      meta.textContent = metaParts.join(" \u00b7 ");
+      if (item.note) metaParts.push(item.note.length > 60 ? item.note.slice(0, 60) + "\u2026" : item.note);
+      if (checklist.length > 0) {
+        const done = checklist.filter(c => c.done).length;
+        metaParts.push(`${done}/${checklist.length} done`);
+      }
+      if (metaParts.length > 0) {
+        const meta = document.createElement("span");
+        meta.className = "promise-item__meta";
+        meta.textContent = metaParts.join(" \u00b7 ");
+        copy.appendChild(meta);
+      }
 
-      copy.appendChild(titleEl);
-      copy.appendChild(meta);
       main.appendChild(checkbox);
       main.appendChild(copy);
 
+      // Actions
       const actions = document.createElement("div");
-      actions.className = "promise-item__actions";
+      actions.className = "planner-item__actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "tiny-btn";
+      editBtn.textContent = "Edit";
 
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
@@ -3370,10 +3408,398 @@ function renderPlanner() {
         renderApp();
       });
 
+      const expandBtn = document.createElement("button");
+      expandBtn.type = "button";
+      expandBtn.className = "planner-item__expand-btn";
+      expandBtn.setAttribute("aria-label", "Show details");
+      expandBtn.setAttribute("aria-expanded", "false");
+      expandBtn.textContent = "\u25be";
+
+      actions.appendChild(editBtn);
       actions.appendChild(deleteBtn);
-      li.appendChild(main);
-      li.appendChild(actions);
+      actions.appendChild(expandBtn);
+
+      row.appendChild(dragHandle);
+      row.appendChild(main);
+      row.appendChild(actions);
+
+      // ── Details panel ────────────────────────────────────────────────────
+      const details = document.createElement("div");
+      details.className = "planner-item__details";
+
+      // Edit title section
+      const editSection = document.createElement("div");
+      editSection.className = "planner-item__edit-section";
+
+      const editTitleLabel = document.createElement("label");
+      editTitleLabel.className = "planner-item__field-label";
+      editTitleLabel.textContent = "Title";
+
+      const editTitleRow = document.createElement("div");
+      editTitleRow.className = "planner-item__edit-row";
+
+      const titleInput = document.createElement("input");
+      titleInput.type = "text";
+      titleInput.className = "planner-item__title-input";
+      titleInput.maxLength = 200;
+      titleInput.value = item.title;
+
+      const saveTitleBtn = document.createElement("button");
+      saveTitleBtn.type = "button";
+      saveTitleBtn.className = "tiny-btn";
+      saveTitleBtn.textContent = "Save";
+      saveTitleBtn.addEventListener("click", () => {
+        const newTitle = titleInput.value.trim();
+        if (!newTitle) return;
+        item.title = newTitle;
+        titleEl.textContent = newTitle;
+        saveState();
+      });
+
+      editTitleRow.appendChild(titleInput);
+      editTitleRow.appendChild(saveTitleBtn);
+      editSection.appendChild(editTitleLabel);
+      editSection.appendChild(editTitleRow);
+
+      // Note section
+      const noteSection = document.createElement("div");
+      noteSection.className = "planner-item__note-section";
+
+      const noteLabelRow = document.createElement("label");
+      noteLabelRow.className = "planner-item__field-label";
+      noteLabelRow.textContent = "Note";
+
+      const noteArea = document.createElement("textarea");
+      noteArea.className = "planner-item__note-textarea";
+      noteArea.rows = 3;
+      noteArea.maxLength = 2000;
+      noteArea.placeholder = "Add a note\u2026";
+      noteArea.value = item.note || "";
+
+      const saveNoteBtn = document.createElement("button");
+      saveNoteBtn.type = "button";
+      saveNoteBtn.className = "tiny-btn";
+      saveNoteBtn.textContent = "Save note";
+      saveNoteBtn.addEventListener("click", () => {
+        item.note = noteArea.value;
+        saveState();
+        // Refresh the meta line without full re-render
+        const metaEl = copy.querySelector(".promise-item__meta");
+        const newParts = [];
+        if (selectedSection === "all") newParts.push(section.title);
+        if (item.note) newParts.push(item.note.length > 60 ? item.note.slice(0, 60) + "\u2026" : item.note);
+        if (checklist.length > 0) {
+          const done = checklist.filter(c => c.done).length;
+          newParts.push(`${done}/${checklist.length} done`);
+        }
+        if (newParts.length > 0) {
+          if (metaEl) {
+            metaEl.textContent = newParts.join(" \u00b7 ");
+          } else {
+            const newMeta = document.createElement("span");
+            newMeta.className = "promise-item__meta";
+            newMeta.textContent = newParts.join(" \u00b7 ");
+            copy.appendChild(newMeta);
+          }
+        } else if (metaEl) {
+          metaEl.remove();
+        }
+      });
+
+      noteSection.appendChild(noteLabelRow);
+      noteSection.appendChild(noteArea);
+      noteSection.appendChild(saveNoteBtn);
+
+      // Checklist section
+      const clSection = document.createElement("div");
+      clSection.className = "planner-item__checklist-section";
+
+      const clHeader = document.createElement("div");
+      clHeader.className = "planner-item__field-label";
+      clHeader.textContent = "Checklist";
+
+      const clList = document.createElement("ul");
+      clList.className = "planner-item__checklist-list";
+
+      function renderChecklistItems() {
+        clList.innerHTML = "";
+        checklist.forEach((ci, idx) => {
+          const clLi = document.createElement("li");
+          clLi.className = `planner-item__cl-item${ci.done ? " is-done" : ""}`;
+
+          const clCheck = document.createElement("input");
+          clCheck.type = "checkbox";
+          clCheck.className = "planner-item__cl-check";
+          clCheck.checked = ci.done;
+          clCheck.addEventListener("change", () => {
+            ci.done = clCheck.checked;
+            clLi.classList.toggle("is-done", ci.done);
+            saveState();
+            // Update meta line
+            const metaEl2 = copy.querySelector(".promise-item__meta");
+            const newParts2 = [];
+            if (selectedSection === "all") newParts2.push(section.title);
+            if (item.note) newParts2.push(item.note.length > 60 ? item.note.slice(0, 60) + "\u2026" : item.note);
+            if (checklist.length > 0) {
+              const done2 = checklist.filter(c => c.done).length;
+              newParts2.push(`${done2}/${checklist.length} done`);
+            }
+            if (newParts2.length > 0) {
+              if (metaEl2) metaEl2.textContent = newParts2.join(" \u00b7 ");
+              else {
+                const m = document.createElement("span");
+                m.className = "promise-item__meta";
+                m.textContent = newParts2.join(" \u00b7 ");
+                copy.appendChild(m);
+              }
+            } else if (metaEl2) metaEl2.remove();
+          });
+
+          const clTextWrap = document.createElement("div");
+          clTextWrap.className = "planner-item__cl-text-wrap";
+
+          const clSpan = document.createElement("span");
+          clSpan.className = "planner-item__cl-text";
+          clSpan.textContent = ci.text;
+          clTextWrap.appendChild(clSpan);
+
+          const clActions = document.createElement("div");
+          clActions.className = "planner-item__cl-actions";
+
+          const clEditBtn = document.createElement("button");
+          clEditBtn.type = "button";
+          clEditBtn.className = "tiny-btn";
+          clEditBtn.textContent = "Edit";
+          clEditBtn.addEventListener("click", () => {
+            const currentText = clSpan.textContent;
+            const editInput = document.createElement("input");
+            editInput.type = "text";
+            editInput.className = "planner-item__cl-edit-input";
+            editInput.value = currentText;
+            editInput.maxLength = 200;
+
+            const saveBtn = document.createElement("button");
+            saveBtn.type = "button";
+            saveBtn.className = "tiny-btn";
+            saveBtn.textContent = "Save";
+
+            const cancelBtn = document.createElement("button");
+            cancelBtn.type = "button";
+            cancelBtn.className = "tiny-btn";
+            cancelBtn.textContent = "Cancel";
+
+            const editRow = document.createElement("div");
+            editRow.className = "planner-item__cl-edit-row";
+            editRow.appendChild(editInput);
+            editRow.appendChild(saveBtn);
+            editRow.appendChild(cancelBtn);
+
+            clTextWrap.replaceChild(editRow, clSpan);
+            clEditBtn.disabled = true;
+
+            cancelBtn.addEventListener("click", () => {
+              clTextWrap.replaceChild(clSpan, editRow);
+              clEditBtn.disabled = false;
+            });
+            saveBtn.addEventListener("click", () => {
+              const newText = editInput.value.trim();
+              if (!newText) return;
+              ci.text = newText;
+              clSpan.textContent = newText;
+              clTextWrap.replaceChild(clSpan, editRow);
+              clEditBtn.disabled = false;
+              saveState();
+            });
+            editInput.addEventListener("keydown", e => {
+              if (e.key === "Enter") saveBtn.click();
+              if (e.key === "Escape") cancelBtn.click();
+            });
+            editInput.focus();
+          });
+
+          const clDelBtn = document.createElement("button");
+          clDelBtn.type = "button";
+          clDelBtn.className = "tiny-btn is-danger";
+          clDelBtn.textContent = "\u00d7";
+          clDelBtn.setAttribute("aria-label", "Delete checklist item");
+          clDelBtn.addEventListener("click", () => {
+            checklist.splice(idx, 1);
+            item.checklist = checklist;
+            saveState();
+            renderChecklistItems();
+            // Update meta
+            const metaElD = copy.querySelector(".promise-item__meta");
+            const pD = [];
+            if (selectedSection === "all") pD.push(section.title);
+            if (item.note) pD.push(item.note.length > 60 ? item.note.slice(0, 60) + "\u2026" : item.note);
+            if (checklist.length > 0) pD.push(`${checklist.filter(c => c.done).length}/${checklist.length} done`);
+            if (pD.length > 0) {
+              if (metaElD) metaElD.textContent = pD.join(" \u00b7 ");
+              else { const m = document.createElement("span"); m.className = "promise-item__meta"; m.textContent = pD.join(" \u00b7 "); copy.appendChild(m); }
+            } else if (metaElD) metaElD.remove();
+          });
+
+          clActions.appendChild(clEditBtn);
+          clActions.appendChild(clDelBtn);
+          clLi.appendChild(clCheck);
+          clLi.appendChild(clTextWrap);
+          clLi.appendChild(clActions);
+          clList.appendChild(clLi);
+        });
+      }
+      renderChecklistItems();
+
+      const clForm = document.createElement("form");
+      clForm.className = "planner-item__cl-form";
+
+      const clInput = document.createElement("input");
+      clInput.type = "text";
+      clInput.className = "planner-item__cl-input";
+      clInput.maxLength = 200;
+      clInput.placeholder = "Add checklist item\u2026";
+
+      const clAddBtn = document.createElement("button");
+      clAddBtn.type = "submit";
+      clAddBtn.className = "tiny-btn";
+      clAddBtn.textContent = "Add";
+
+      clForm.appendChild(clInput);
+      clForm.appendChild(clAddBtn);
+      clForm.addEventListener("submit", e => {
+        e.preventDefault();
+        const text = clInput.value.trim();
+        if (!text) return;
+        const newCi = { id: createId(), text, done: false };
+        checklist.push(newCi);
+        item.checklist = checklist;
+        clInput.value = "";
+        saveState();
+        renderChecklistItems();
+        // Update meta
+        const metaElA = copy.querySelector(".promise-item__meta");
+        const pA = [];
+        if (selectedSection === "all") pA.push(section.title);
+        if (item.note) pA.push(item.note.length > 60 ? item.note.slice(0, 60) + "\u2026" : item.note);
+        if (checklist.length > 0) pA.push(`${checklist.filter(c => c.done).length}/${checklist.length} done`);
+        if (pA.length > 0) {
+          if (metaElA) metaElA.textContent = pA.join(" \u00b7 ");
+          else { const m = document.createElement("span"); m.className = "promise-item__meta"; m.textContent = pA.join(" \u00b7 "); copy.appendChild(m); }
+        } else if (metaElA) metaElA.remove();
+      });
+
+      clSection.appendChild(clHeader);
+      clSection.appendChild(clList);
+      clSection.appendChild(clForm);
+
+      details.appendChild(editSection);
+      details.appendChild(noteSection);
+      details.appendChild(clSection);
+
+      // Toggle expand
+      expandBtn.addEventListener("click", () => {
+        const isOpen = details.classList.toggle("is-open");
+        expandBtn.setAttribute("aria-expanded", String(isOpen));
+        expandBtn.textContent = isOpen ? "\u25b4" : "\u25be";
+      });
+
+      editBtn.addEventListener("click", () => {
+        if (!details.classList.contains("is-open")) {
+          details.classList.add("is-open");
+          expandBtn.setAttribute("aria-expanded", "true");
+          expandBtn.textContent = "\u25b4";
+        }
+        titleInput.focus();
+        titleInput.select();
+      });
+
+      li.appendChild(row);
+      li.appendChild(details);
       plannerItemList.appendChild(li);
+    });
+  }
+
+  // ── Drag-and-drop reordering ───────────────────────────────────────────────
+  {
+    let dragSrcItemId = null;
+    let dragSrcSectionId = null;
+
+    function getPlannerDragLi(el) {
+      while (el && !el.classList.contains("planner-item")) el = el.parentElement;
+      return el;
+    }
+
+    plannerItemList.addEventListener("dragstart", e => {
+      const li = getPlannerDragLi(e.target);
+      if (!li) return;
+      dragSrcItemId = li.dataset.itemId;
+      // Find which section this item belongs to
+      const entry = visibleItems.find(v => v.item.id === dragSrcItemId);
+      dragSrcSectionId = entry ? entry.section.id : null;
+      li.classList.add("planner-item--dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", dragSrcItemId);
+    });
+
+    plannerItemList.addEventListener("dragend", e => {
+      const li = getPlannerDragLi(e.target);
+      if (li) li.classList.remove("planner-item--dragging");
+      plannerItemList.querySelectorAll(".planner-item--drag-over").forEach(el =>
+        el.classList.remove("planner-item--drag-over")
+      );
+      dragSrcItemId = null;
+      dragSrcSectionId = null;
+    });
+
+    plannerItemList.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const li = getPlannerDragLi(e.target);
+      if (!li || li.dataset.itemId === dragSrcItemId) return;
+      plannerItemList.querySelectorAll(".planner-item--drag-over").forEach(el =>
+        el.classList.remove("planner-item--drag-over")
+      );
+      li.classList.add("planner-item--drag-over");
+    });
+
+    plannerItemList.addEventListener("dragleave", e => {
+      const li = getPlannerDragLi(e.target);
+      if (li) li.classList.remove("planner-item--drag-over");
+    });
+
+    plannerItemList.addEventListener("drop", e => {
+      e.preventDefault();
+      const targetLi = getPlannerDragLi(e.target);
+      if (!targetLi || !dragSrcItemId) return;
+      const targetItemId = targetLi.dataset.itemId;
+      if (targetItemId === dragSrcItemId) return;
+
+      const srcEntry  = visibleItems.find(v => v.item.id === dragSrcItemId);
+      const destEntry = visibleItems.find(v => v.item.id === targetItemId);
+      if (!srcEntry || !destEntry) return;
+
+      const srcSection  = srcEntry.section;
+      const destSection = destEntry.section;
+
+      if (srcSection.id === destSection.id) {
+        // Same section — reorder in place
+        const items = srcSection.items;
+        const fromIdx = items.findIndex(it => it.id === dragSrcItemId);
+        const toIdx   = items.findIndex(it => it.id === targetItemId);
+        if (fromIdx === -1 || toIdx === -1) return;
+        items.splice(toIdx, 0, items.splice(fromIdx, 1)[0]);
+      } else {
+        // Different sections — move item to target section at target position
+        const fromItems = srcSection.items;
+        const toItems   = destSection.items;
+        const fromIdx   = fromItems.findIndex(it => it.id === dragSrcItemId);
+        const toIdx     = toItems.findIndex(it => it.id === targetItemId);
+        if (fromIdx === -1 || toIdx === -1) return;
+        const [moved] = fromItems.splice(fromIdx, 1);
+        toItems.splice(toIdx, 0, moved);
+      }
+
+      saveState();
+      renderApp();
     });
   }
 
