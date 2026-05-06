@@ -1179,12 +1179,12 @@ h1 {
 .cal-tg-allday__cell:last-child { border-right: 0; }
 
 /* scrollable time-grid body */
-.cal-tg-scroll { overflow-y: auto; max-height: min(580px, calc(100vh - 220px)); min-height: 280px; }
+.cal-tg-scroll { overflow: visible; }
 .cal-tg-body   { display: flex; }
 
 /* time gutter */
 .cal-tg-gutter { width: 52px; flex-shrink: 0; border-right: 1px solid var(--line-faint); user-select: none; }
-.cal-tg-hour-label { height: 60px; box-sizing: border-box; display: flex; align-items: flex-start; }
+.cal-tg-hour-label { height: 28px; box-sizing: border-box; display: flex; align-items: flex-start; }
 .cal-tg-hour-label span {
   font-size: .60rem; font-weight: 700; color: var(--muted);
   display: block; width: 100%;
@@ -1199,7 +1199,7 @@ h1 {
 .cal-tg-col.is-today   { background: rgba(10,191,83,.035); }
 
 /* slot rows — 48 per column (24 hours × 2 half-hour slots) */
-.cal-tg-slot        { height: 30px; box-sizing: border-box; border-bottom: 1px dashed rgba(0,0,0,.08); pointer-events: none; }
+.cal-tg-slot        { height: 14px; box-sizing: border-box; border-bottom: 1px dashed rgba(0,0,0,.08); pointer-events: none; }
 .cal-tg-slot--hour  { border-bottom-style: solid; border-bottom-color: var(--line-faint); }
 
 /* timed event blocks */
