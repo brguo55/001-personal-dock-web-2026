@@ -6272,7 +6272,7 @@ function upgradeCustomDatePickers(container) {
   });
 }
 
-
+function renderWaitingFor() {
   const waitingStats = getWaitingStats();
   const gtdStats = getGtdStats();
   const actionSectionOptions = ACTION_SECTION_DEFINITIONS.map(section => ({
