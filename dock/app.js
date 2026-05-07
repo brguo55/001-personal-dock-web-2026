@@ -7314,6 +7314,10 @@ function populateBudgetForm(editorTarget) {
   const amountInput = document.getElementById("budgetAmountInput");
   const submitButton = document.querySelector("#budgetForm button[type='submit']");
 
+  // Always upgrade the currency selector regardless of category state
+  const currencySelectEl = document.getElementById("budgetCurrencySelect");
+  if (currencySelectEl) buildGtdCustomSelect(currencySelectEl);
+
   if (appState.budgetCategories.length === 0) {
     const option = document.createElement("option");
 
@@ -7351,13 +7355,13 @@ function populateBudgetForm(editorTarget) {
     document.getElementById("budgetTitleInput").value = editorTarget.item.title;
     document.getElementById("budgetAmountInput").value = editorTarget.item.amount;
     const currSel = document.getElementById("budgetCurrencySelect");
-    if (currSel) currSel.value = editorTarget.item.currency || "USD";
+    if (currSel) {
+      currSel.value = editorTarget.item.currency || "USD";
+      // Fire change so the custom-select widget label updates
+      currSel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
     categorySelect.value = editorTarget.category.id;
   }
-
-  // Upgrade currency selector to match the GTD custom-select style
-  const currencySelectEl = document.getElementById("budgetCurrencySelect");
-  if (currencySelectEl) buildGtdCustomSelect(currencySelectEl);
 }
 
 function renderBudgetList(entries) {
