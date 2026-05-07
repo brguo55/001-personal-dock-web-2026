@@ -741,6 +741,92 @@ h1 {
 .gtd-cselect__option.is-selected:hover { background: var(--dark-green); color: #fff; }
 .waiting-status-field .gtd-cselect { width: 100%; }
 
+/* ── Custom date picker ──────────────────────────────── */
+.gtd-datepicker { position: relative; display: block; width: 100%; }
+.gtd-datepicker__trigger { width: 100%; }
+.gtd-datepicker__icon { font-style: normal; flex-shrink: 0; font-size: .9rem; opacity: .65; }
+.gtd-datepicker__popup {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 300;
+  width: 242px;
+  background: var(--surface);
+  border: 1px solid var(--green);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 28px rgba(0,0,0,.13), 0 2px 8px rgba(10,191,83,.09);
+  padding: 10px;
+  overflow: hidden;
+}
+.gtd-datepicker__header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.gtd-datepicker__nav {
+  background: none; border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  width: 26px; height: 26px; font-size: 1.1rem; line-height: 1;
+  color: var(--muted-bright); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+  transition: background .1s, border-color .1s, color .1s;
+}
+.gtd-datepicker__nav:hover { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+.gtd-datepicker__month-label {
+  font-size: .82rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-bright);
+}
+.gtd-datepicker__weekdays {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  text-align: center; margin-bottom: 4px;
+}
+.gtd-datepicker__weekdays span {
+  font-size: .65rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); padding: 2px 0;
+}
+.gtd-datepicker__grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px;
+}
+.gtd-datepicker__day {
+  background: none; border: none;
+  width: 100%; aspect-ratio: 1;
+  font-size: .8rem; font-weight: 600;
+  color: var(--text-bright); cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  transition: background .1s, color .1s;
+}
+.gtd-datepicker__day:hover { background: var(--green-dim); color: var(--green); }
+.gtd-datepicker__day.is-other-month { color: var(--muted); font-weight: 400; }
+.gtd-datepicker__day.is-other-month:hover { background: var(--green-dim); color: var(--muted-bright); }
+.gtd-datepicker__day.is-today {
+  border: 1px solid rgba(10,191,83,.45);
+  color: var(--dark-green); background: var(--green-dim);
+}
+.gtd-datepicker__day.is-selected {
+  background: var(--green); color: #fff; font-weight: 700;
+  box-shadow: var(--glow-green);
+}
+.gtd-datepicker__day.is-selected:hover { background: var(--dark-green); color: #fff; }
+.gtd-datepicker__day.is-selected.is-today { background: var(--green); border-color: var(--green); }
+.gtd-datepicker__time-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 10px; padding-top: 9px;
+  border-top: 1px solid var(--line-faint);
+}
+.gtd-datepicker__time-label {
+  font-size: .75rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); flex-shrink: 0;
+}
+.gtd-datepicker__time-input {
+  flex: 1; min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: .82rem; color: var(--text);
+}
+.gtd-datepicker__time-input:focus { outline: none; border-color: var(--green); box-shadow: var(--glow-green); }
+
 .gtd-task-row { grid-template-columns: minmax(0,1fr) auto; align-items: center; }
 .gtd-task-row__main { display: flex; align-items: flex-start; gap: 12px; }
 .gtd-task-row__main input[type="checkbox"] { margin-top: 4px; accent-color: var(--green); }

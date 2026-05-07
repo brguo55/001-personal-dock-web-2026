@@ -3010,6 +3010,8 @@ function renderPromise() {
     saveState();
     renderApp();
   });
+
+  upgradeCustomDatePickers(viewRoot);
 }
 
 function renderCalendar() {
@@ -3807,6 +3809,8 @@ function renderCalendar() {
       renderApp();
     }, { signal });
   }
+
+  upgradeCustomDatePickers(viewRoot);
 }
 
 function renderPlanner() {
@@ -5078,6 +5082,8 @@ function renderDatesBoard() {
       specialList.appendChild(card);
     });
   }
+
+  upgradeCustomDatePickers(viewRoot);
 }
 
 function renderDiary() {
@@ -5254,6 +5260,8 @@ function renderDiary() {
     }
     renderApp();
   });
+
+  upgradeCustomDatePickers(viewRoot);
 }
 
 // ── Bits ──────────────────────────────────────────────────────────────────────
@@ -6042,7 +6050,234 @@ function upgradeGtdSelects(container) {
   });
 }
 
-function renderWaitingFor() {
+// ── Custom date / datetime-local picker ─────────────────────────────────────
+const _MONTHS_LONG = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const _WEEKDAYS_SHORT = ["S","M","T","W","T","F","S"];
+
+function buildCustomDatePicker(nativeInput) {
+  if (nativeInput.dataset.cdatepicker === "1") return;
+  nativeInput.dataset.cdatepicker = "1";
+
+  const isDatetime = nativeInput.type === "datetime-local";
+
+  // Hide the native input but keep it in the form so value/required still work.
+  nativeInput.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "gtd-datepicker";
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "gtd-cselect__trigger gtd-datepicker__trigger";
+
+  const labelEl = document.createElement("span");
+  labelEl.className = "gtd-cselect__label";
+
+  const iconEl = document.createElement("span");
+  iconEl.className = "gtd-cselect__arrow gtd-datepicker__icon";
+  iconEl.innerHTML = "&#128197;";
+
+  trigger.appendChild(labelEl);
+  trigger.appendChild(iconEl);
+
+  const popup = document.createElement("div");
+  popup.className = "gtd-datepicker__popup";
+  popup.hidden = true;
+
+  let viewYear = 0, viewMonth = 0;
+  let selectedDate = null;
+  let selectedTime = "00:00";
+
+  function parseNativeValue() {
+    const v = nativeInput.value;
+    if (!v) return null;
+    if (isDatetime) {
+      const [datePart, timePart] = v.split("T");
+      if (timePart) selectedTime = timePart.slice(0, 5);
+      const [y, m, d] = datePart.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    }
+    const [y, m, d] = v.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function toIsoDate(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+
+  function formatDisplay(d) {
+    if (!d) return isDatetime ? "Pick date & time…" : "Pick a date…";
+    const wd = d.toLocaleString("en-US", { weekday: "short" });
+    const mo = d.toLocaleString("en-US", { month: "short" });
+    const str = `${wd}, ${mo} ${d.getDate()}, ${d.getFullYear()}`;
+    return isDatetime ? `${str}  ${selectedTime}` : str;
+  }
+
+  function updateNative() {
+    if (!selectedDate) { nativeInput.value = ""; }
+    else if (isDatetime) { nativeInput.value = `${toIsoDate(selectedDate)}T${selectedTime}`; }
+    else { nativeInput.value = toIsoDate(selectedDate); }
+    nativeInput.dispatchEvent(new Event("change", { bubbles: true }));
+    labelEl.textContent = formatDisplay(selectedDate);
+  }
+
+  function buildPopup() {
+    popup.innerHTML = "";
+
+    // Header row
+    const header = document.createElement("div");
+    header.className = "gtd-datepicker__header";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "gtd-datepicker__nav";
+    prevBtn.textContent = "‹";
+    prevBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+      buildPopup();
+    });
+
+    const monthLabel = document.createElement("span");
+    monthLabel.className = "gtd-datepicker__month-label";
+    monthLabel.textContent = `${_MONTHS_LONG[viewMonth]} ${viewYear}`;
+
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "gtd-datepicker__nav";
+    nextBtn.textContent = "›";
+    nextBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+      buildPopup();
+    });
+
+    header.appendChild(prevBtn);
+    header.appendChild(monthLabel);
+    header.appendChild(nextBtn);
+    popup.appendChild(header);
+
+    // Weekday row
+    const wdRow = document.createElement("div");
+    wdRow.className = "gtd-datepicker__weekdays";
+    _WEEKDAYS_SHORT.forEach(d => {
+      const el = document.createElement("span");
+      el.textContent = d;
+      wdRow.appendChild(el);
+    });
+    popup.appendChild(wdRow);
+
+    // Date grid
+    const grid = document.createElement("div");
+    grid.className = "gtd-datepicker__grid";
+
+    const today = new Date();
+    const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+    function makeDayBtn(date, otherMonth) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gtd-datepicker__day";
+      btn.textContent = date.getDate();
+      if (otherMonth) btn.classList.add("is-other-month");
+      if (date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate())
+        btn.classList.add("is-today");
+      if (selectedDate && date.getFullYear() === selectedDate.getFullYear() && date.getMonth() === selectedDate.getMonth() && date.getDate() === selectedDate.getDate())
+        btn.classList.add("is-selected");
+      btn.addEventListener("click", e => {
+        e.stopPropagation();
+        selectedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        updateNative();
+        if (isDatetime) { buildPopup(); } else { close(); }
+      });
+      return btn;
+    }
+
+    for (let i = 0; i < firstDow; i++) {
+      grid.appendChild(makeDayBtn(new Date(viewYear, viewMonth, i - firstDow + 1), true));
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      grid.appendChild(makeDayBtn(new Date(viewYear, viewMonth, d), false));
+    }
+    const totalCells = firstDow + daysInMonth;
+    const trailing = (7 - (totalCells % 7)) % 7;
+    for (let i = 1; i <= trailing; i++) {
+      grid.appendChild(makeDayBtn(new Date(viewYear, viewMonth + 1, i), true));
+    }
+
+    popup.appendChild(grid);
+
+    // Time row (datetime-local only)
+    if (isDatetime) {
+      const timeRow = document.createElement("div");
+      timeRow.className = "gtd-datepicker__time-row";
+      const timeLbl = document.createElement("label");
+      timeLbl.textContent = "Time";
+      timeLbl.className = "gtd-datepicker__time-label";
+      const timeInput = document.createElement("input");
+      timeInput.type = "time";
+      timeInput.className = "gtd-datepicker__time-input";
+      timeInput.value = selectedTime;
+      timeInput.addEventListener("click", e => e.stopPropagation());
+      timeInput.addEventListener("change", e => {
+        selectedTime = e.target.value || "00:00";
+        if (selectedDate) updateNative();
+      });
+      timeRow.appendChild(timeLbl);
+      timeRow.appendChild(timeInput);
+      popup.appendChild(timeRow);
+    }
+  }
+
+  let _outsideHandler = null;
+
+  function open() {
+    selectedDate = parseNativeValue();
+    const ref = selectedDate || new Date();
+    viewYear = ref.getFullYear();
+    viewMonth = ref.getMonth();
+    buildPopup();
+    popup.hidden = false;
+    trigger.classList.add("is-open");
+    _outsideHandler = e => { if (!wrapper.contains(e.target)) close(); };
+    requestAnimationFrame(() => document.addEventListener("click", _outsideHandler));
+  }
+
+  function close() {
+    popup.hidden = true;
+    trigger.classList.remove("is-open");
+    if (_outsideHandler) {
+      document.removeEventListener("click", _outsideHandler);
+      _outsideHandler = null;
+    }
+  }
+
+  trigger.addEventListener("click", e => {
+    e.stopPropagation();
+    popup.hidden ? open() : close();
+  });
+
+  nativeInput.addEventListener("change", () => {
+    selectedDate = parseNativeValue();
+    labelEl.textContent = formatDisplay(selectedDate);
+  });
+
+  selectedDate = parseNativeValue();
+  labelEl.textContent = formatDisplay(selectedDate);
+
+  wrapper.appendChild(trigger);
+  wrapper.appendChild(popup);
+  nativeInput.parentNode.insertBefore(wrapper, nativeInput.nextSibling);
+}
+
+function upgradeCustomDatePickers(container) {
+  container.querySelectorAll("input[type='date'], input[type='datetime-local']").forEach(inp => {
+    if (!inp.dataset.cdatepicker) buildCustomDatePicker(inp);
+  });
+}
+
+
   const waitingStats = getWaitingStats();
   const gtdStats = getGtdStats();
   const actionSectionOptions = ACTION_SECTION_DEFINITIONS.map(section => ({
@@ -7149,6 +7384,7 @@ function renderWaitingFor() {
   });
 
   upgradeGtdSelects(viewRoot);
+  upgradeCustomDatePickers(viewRoot);
 }
 
 function renderSettings() {
