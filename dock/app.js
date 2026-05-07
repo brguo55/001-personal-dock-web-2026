@@ -4710,7 +4710,9 @@ function renderDatesBoard() {
     return "";
   }
 
-  const t = uiState.dbAddingType;
+  if (!("dbActiveTab" in uiState)) uiState.dbActiveTab = "countdown";
+  const t   = uiState.dbAddingType;
+  const tab = uiState.dbActiveTab;
   viewRoot.innerHTML = `
     <div class="db-view">
       <div class="db-header">
@@ -4720,6 +4722,14 @@ function renderDatesBoard() {
         </div>
         ${!adding ? `<button type="button" class="ghost-btn" id="dbAddBtn">+ Add Item</button>` : ""}
       </div>
+
+      ${!adding ? `
+        <div class="db-tab-bar" id="dbTabBar">
+          <button type="button" class="db-tab-btn${tab === "countdown" ? " is-active" : ""}" data-tab="countdown">Countdowns <span class="db-tab-count">${countdowns.length}</span></button>
+          <button type="button" class="db-tab-btn${tab === "reminder" ? " is-active" : ""}" data-tab="reminder">Reminders <span class="db-tab-count">${reminders.length}</span></button>
+          <button type="button" class="db-tab-btn${tab === "special" ? " is-active" : ""}" data-tab="special">Special Dates <span class="db-tab-count">${specials.length}</span></button>
+        </div>
+      ` : ""}
 
       ${adding ? `
         <div class="db-add-panel">
@@ -4742,26 +4752,32 @@ function renderDatesBoard() {
         </div>
       ` : ""}
 
-      <section class="db-section">
-        <div class="db-section__header">
-          <h3 class="db-section__title">Countdowns <span class="db-section__badge">${countdowns.length}</span></h3>
-        </div>
-        ${countdowns.length === 0 ? `<p class="db-empty">No countdowns yet. Add one to start tracking a date.</p>` : `<div class="db-countdown-grid" id="dbCountdownGrid"></div>`}
-      </section>
+      ${!adding && tab === "countdown" ? `
+        <section class="db-section">
+          <div class="db-section__header">
+            <h3 class="db-section__title">Countdowns <span class="db-section__badge">${countdowns.length}</span></h3>
+          </div>
+          ${countdowns.length === 0 ? `<p class="db-empty">No countdowns yet. Add one to start tracking a date.</p>` : `<div class="db-countdown-grid" id="dbCountdownGrid"></div>`}
+        </section>
+      ` : ""}
 
-      <section class="db-section">
-        <div class="db-section__header">
-          <h3 class="db-section__title">Reminders <span class="db-section__badge">${reminders.length}</span></h3>
-        </div>
-        ${reminders.length === 0 ? `<p class="db-empty">No reminders yet. Add one to keep track of things you need to remember.</p>` : `<ul class="db-reminder-list" id="dbReminderList"></ul>`}
-      </section>
+      ${!adding && tab === "reminder" ? `
+        <section class="db-section">
+          <div class="db-section__header">
+            <h3 class="db-section__title">Reminders <span class="db-section__badge">${reminders.length}</span></h3>
+          </div>
+          ${reminders.length === 0 ? `<p class="db-empty">No reminders yet. Add one to keep track of things you need to remember.</p>` : `<ul class="db-reminder-list" id="dbReminderList"></ul>`}
+        </section>
+      ` : ""}
 
-      <section class="db-section">
-        <div class="db-section__header">
-          <h3 class="db-section__title">Special Dates <span class="db-section__badge">${specials.length}</span></h3>
-        </div>
-        ${specials.length === 0 ? `<p class="db-empty">No special dates yet. Add a birthday, anniversary, or any date worth remembering.</p>` : `<div class="db-special-list" id="dbSpecialList"></div>`}
-      </section>
+      ${!adding && tab === "special" ? `
+        <section class="db-section">
+          <div class="db-section__header">
+            <h3 class="db-section__title">Special Dates <span class="db-section__badge">${specials.length}</span></h3>
+          </div>
+          ${specials.length === 0 ? `<p class="db-empty">No special dates yet. Add a birthday, anniversary, or any date worth remembering.</p>` : `<div class="db-special-list" id="dbSpecialList"></div>`}
+        </section>
+      ` : ""}
     </div>
   `;
 
@@ -4795,6 +4811,18 @@ function renderDatesBoard() {
     });
   }
 
+  // ── Tab bar ─────────────────────────────────────────────────────────────────
+  const tabBar = document.getElementById("dbTabBar");
+  if (tabBar) {
+    tabBar.addEventListener("click", e => {
+      const btn = e.target.closest(".db-tab-btn");
+      if (!btn) return;
+      uiState.dbActiveTab = btn.dataset.tab;
+      uiState.dbEditingId = null;
+      renderApp();
+    });
+  }
+
   // ── Add form submit ─────────────────────────────────────────────────────────
   const addForm = document.getElementById("dbAddForm");
   if (addForm) {
@@ -4821,6 +4849,7 @@ function renderDatesBoard() {
       if (!newItem) return;
       saveDatesBoardItems([...items, newItem]);
       uiState.dbAddingType = null;
+      uiState.dbActiveTab = type;
       renderApp();
     });
   }

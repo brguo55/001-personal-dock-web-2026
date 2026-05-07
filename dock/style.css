@@ -1772,6 +1772,37 @@ h1 {
   box-shadow: var(--shadow-lg);
 }
 
+/* ── Dates Board tab bar ─────────────────────────────── */
+.db-tab-bar {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-xl);
+  padding: 5px;
+  box-shadow: var(--shadow-lg);
+}
+.db-tab-btn {
+  flex: 1;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--muted-bright);
+  font-size: .84rem; font-weight: 600;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  transition: background .12s, color .12s;
+}
+.db-tab-btn:hover { background: var(--surface-alt); color: var(--text); }
+.db-tab-btn.is-active { background: var(--green); color: #fff; box-shadow: var(--glow-green); }
+.db-tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 17px; padding: 0 5px;
+  border-radius: 9px; font-size: .7rem; font-weight: 700;
+  background: rgba(255,255,255,.25); color: inherit;
+}
+.db-tab-btn:not(.is-active) .db-tab-count { background: var(--green-dim); color: var(--green); }
+
 .db-type-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
 
 .db-type-btn {
