@@ -361,6 +361,7 @@ let backupUiState = {
 };
 let _calendarDragAbort = null;
 let _calendarPickerAbort = null;
+let _abCopySelectAbort = null;
 
 // Active Action Board daily sections — set when the action board is rendered,
 // cleared when navigating away. All board mutations operate on this reference.
@@ -2032,6 +2033,7 @@ function renderApp() {
     if (_calendarPickerAbort) { _calendarPickerAbort.abort(); _calendarPickerAbort = null; }
     uiState.calendarPickerOpen = false;
   }
+  if (_abCopySelectAbort) { _abCopySelectAbort.abort(); _abCopySelectAbort = null; }
   if (uiState.activeView !== "actionBoard" && _activeDailySections) {
     clearActiveDailyBoard();
   }
@@ -2312,9 +2314,28 @@ function renderActionBoard() {
     .filter(d => d !== activeDate)
     .sort((a, b) => b.localeCompare(a))
     .slice(0, 14);
-  const copyOptionsHtml = boardDates.length
-    ? boardDates.map(d => `<option value="${d}">${d === todayIso ? "Today" : d}</option>`).join("")
-    : `<option value="" disabled>No saved boards yet</option>`;
+
+  // Sync selected copy-source with available dates
+  if (!("abCopySourceDate" in uiState)) uiState.abCopySourceDate = null;
+  if (boardDates.length && !boardDates.includes(uiState.abCopySourceDate)) {
+    uiState.abCopySourceDate = boardDates[0];
+  }
+  if (!boardDates.length) uiState.abCopySourceDate = null;
+
+  const copySrcLabel = uiState.abCopySourceDate
+    ? (uiState.abCopySourceDate === todayIso ? "Today" : uiState.abCopySourceDate)
+    : "No boards yet";
+  const copySelectHtml = boardDates.length
+    ? `<div class="gtd-cselect ab-copy-cselect" id="abCopySourceWidget">
+        <button type="button" class="gtd-cselect__trigger" id="abCopySourceTrigger">
+          <span class="gtd-cselect__label" id="abCopySourceLabel">${copySrcLabel}</span>
+          <span class="gtd-cselect__arrow">&#9660;</span>
+        </button>
+        <div class="gtd-cselect__dropdown" id="abCopySourceDropdown" hidden>
+          ${boardDates.map(d => `<button type="button" class="gtd-cselect__option${d === uiState.abCopySourceDate ? " is-selected" : ""}" data-value="${d}">${d === todayIso ? "Today" : d}</button>`).join("")}
+        </div>
+      </div>`
+    : `<span class="ab-copy-row__label" style="opacity:.55">No saved boards yet</span>`;
 
   viewRoot.innerHTML = `
     <section class="view-panel">
@@ -2342,7 +2363,7 @@ function renderActionBoard() {
 
       <div class="ab-copy-row">
         <span class="ab-copy-row__label">Copy tasks from:</span>
-        <select class="ab-copy-row__select" id="abCopySource">${copyOptionsHtml}</select>
+        ${copySelectHtml}
         <button type="button" class="secondary-btn ab-copy-row__btn" id="abCopyBtn">Copy</button>
         <button type="button" class="ghost-btn ab-copy-row__btn" id="abCopyYesterdayBtn">Yesterday</button>
       </div>
@@ -2799,8 +2820,38 @@ function renderActionBoard() {
     return true;
   }
 
+  // ── custom copy-source select ────────────────────────────────────────────
+  const copyWidget   = document.getElementById("abCopySourceWidget");
+  const copyTrigger  = document.getElementById("abCopySourceTrigger");
+  const copyDropdown = document.getElementById("abCopySourceDropdown");
+  if (copyTrigger && copyDropdown && copyWidget) {
+    copyTrigger.addEventListener("click", evt => {
+      evt.stopPropagation();
+      const isOpen = !copyDropdown.hidden;
+      copyDropdown.hidden = isOpen;
+      copyTrigger.classList.toggle("is-open", !isOpen);
+    });
+    copyDropdown.addEventListener("click", e => {
+      const btn = e.target.closest(".gtd-cselect__option");
+      if (!btn) return;
+      uiState.abCopySourceDate = btn.dataset.value;
+      const lbl = document.getElementById("abCopySourceLabel");
+      if (lbl) lbl.textContent = btn.textContent;
+      copyDropdown.querySelectorAll(".gtd-cselect__option").forEach(b => b.classList.toggle("is-selected", b === btn));
+      copyDropdown.hidden = true;
+      copyTrigger.classList.remove("is-open");
+    });
+    _abCopySelectAbort = new AbortController();
+    document.addEventListener("click", e => {
+      if (!copyWidget.contains(e.target)) {
+        copyDropdown.hidden = true;
+        copyTrigger.classList.remove("is-open");
+      }
+    }, { signal: _abCopySelectAbort.signal });
+  }
+
   document.getElementById("abCopyBtn").addEventListener("click", () => {
-    const srcDate = document.getElementById("abCopySource").value;
+    const srcDate = uiState.abCopySourceDate;
     if (!srcDate) return;
     if (!confirmCopyIfNeeded(srcDate, activeDate)) return;
     copyDailyBoard(srcDate, activeDate);

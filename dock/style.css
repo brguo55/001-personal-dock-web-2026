@@ -374,9 +374,9 @@ h1 {
 }
 .ab-week-nav__arrow {
   background: none;
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: var(--radius);
+  border: 1px solid var(--line-soft);
+  color: var(--muted-bright);
+  border-radius: var(--radius-sm);
   width: 28px;
   height: 28px;
   font-size: 1.2rem;
@@ -387,9 +387,9 @@ h1 {
   align-items: center;
   justify-content: center;
   padding: 0;
-  transition: background .15s, border-color .15s;
+  transition: background .15s, border-color .15s, color .15s;
 }
-.ab-week-nav__arrow:hover { background: var(--surface-2); border-color: var(--green); }
+.ab-week-nav__arrow:hover { background: var(--green-dim); border-color: var(--green); color: var(--green); }
 .ab-day-tabs {
   display: flex;
   gap: 4px;
@@ -397,10 +397,10 @@ h1 {
   flex-wrap: wrap;
 }
 .ab-day-tab {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: #fff;
+  border: 1px solid var(--line-faint);
   color: var(--muted);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   padding: 4px 8px;
   cursor: pointer;
   font-size: .72rem;
@@ -411,7 +411,7 @@ h1 {
   min-width: 46px;
   transition: background .15s, border-color .15s, color .15s;
 }
-.ab-day-tab:hover { border-color: var(--green); color: var(--text); }
+.ab-day-tab:hover { border-color: var(--green); color: var(--text); background: var(--green-dim); }
 .ab-day-tab.is-today { border-color: var(--green); color: var(--green); }
 .ab-day-tab.is-active { background: var(--green); border-color: var(--green); color: #000; }
 .ab-day-tab.is-today.is-active { background: var(--green); color: #000; }
@@ -431,14 +431,8 @@ h1 {
   color: var(--muted);
   white-space: nowrap;
 }
-.ab-copy-row__select {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: var(--radius);
-  padding: 4px 8px;
-  font-size: .75rem;
-}
+.ab-copy-cselect { min-width: 160px; }
+.ab-copy-cselect .gtd-cselect__trigger { padding: 5px 11px; font-size: .82rem; }
 .ab-copy-row__btn { font-size: .75rem; padding: 4px 10px; }
 
 .action-board-layout { display: grid; grid-template-columns: 320px minmax(0,1fr); gap: 14px; align-items: start; }
