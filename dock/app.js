@@ -15,6 +15,7 @@ const VIEW_DETAILS = {
   diary: "Write and revisit your daily journal entries.",
   bits: "Capture small fragments, quick thoughts, and scattered everyday life details.",
   calendar: "View and manage your schedule in a monthly calendar.",
+  datesBoard: "Track countdowns, reminders, and special dates all in one place.",
   settings: "Manage backups, import data, and adjust app preferences."
 };
 
@@ -2086,6 +2087,11 @@ function renderApp() {
 
   if (uiState.activeView === "bits") {
     renderBits();
+    return;
+  }
+
+  if (uiState.activeView === "datesBoard") {
+    renderDatesBoard();
     return;
   }
 
@@ -4475,6 +4481,523 @@ function createDiaryEntry({ date, dayOfWeek, location, text }) {
     text: text.trim(),
     createdAt: new Date().toISOString()
   };
+}
+
+// ── Dates Board ───────────────────────────────────────────────────────────────
+
+const DATES_BOARD_STORAGE_KEY = "dockDatesBoardItems";
+
+function loadDatesBoardItems() {
+  try {
+    const raw = localStorage.getItem(DATES_BOARD_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(item => normalizeDatesBoardItem(item)).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function saveDatesBoardItems(items) {
+  localStorage.setItem(DATES_BOARD_STORAGE_KEY, JSON.stringify(items));
+}
+
+function normalizeDatesBoardItem(item) {
+  if (!item || typeof item !== "object") return null;
+  const id = typeof item.id === "string" && item.id ? item.id : createId();
+  const type = ["countdown", "reminder", "special"].includes(item.type) ? item.type : null;
+  if (!type) return null;
+  const title = typeof item.title === "string" ? item.title.trim() : "";
+  if (!title) return null;
+  const base = {
+    id,
+    type,
+    title,
+    note: typeof item.note === "string" ? item.note.trim() : "",
+    createdAt: normalizeTimestamp(item.createdAt) || new Date().toISOString()
+  };
+  if (type === "countdown") {
+    const targetDate = typeof item.targetDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item.targetDate)
+      ? item.targetDate : "";
+    if (!targetDate) return null;
+    return { ...base, targetDate };
+  }
+  if (type === "reminder") {
+    return {
+      ...base,
+      datetime: typeof item.datetime === "string" ? item.datetime : "",
+      done: Boolean(item.done)
+    };
+  }
+  if (type === "special") {
+    const originalDate = typeof item.originalDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item.originalDate)
+      ? item.originalDate : "";
+    if (!originalDate) return null;
+    return { ...base, originalDate };
+  }
+  return null;
+}
+
+function createCountdown({ title, targetDate, note = "" }) {
+  return { id: createId(), type: "countdown", title: title.trim(), targetDate, note: note.trim(), createdAt: new Date().toISOString() };
+}
+
+function createReminderItem({ title, datetime = "", note = "" }) {
+  return { id: createId(), type: "reminder", title: title.trim(), datetime: datetime.trim(), note: note.trim(), done: false, createdAt: new Date().toISOString() };
+}
+
+function createSpecialDate({ title, originalDate, note = "" }) {
+  return { id: createId(), type: "special", title: title.trim(), originalDate, note: note.trim(), createdAt: new Date().toISOString() };
+}
+
+function getDaysUntil(targetDateIso) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(targetDateIso + "T00:00:00");
+  return Math.round((target - today) / (1000 * 60 * 60 * 24));
+}
+
+function formatElapsedSince(originalDateIso) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const origin = new Date(originalDateIso + "T00:00:00");
+  if (isNaN(origin.getTime())) return "";
+  const diffMs = today - origin;
+  if (diffMs < 0) return "upcoming";
+  const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const years = today.getFullYear() - origin.getFullYear();
+  const monthsTotal = (today.getFullYear() - origin.getFullYear()) * 12 + (today.getMonth() - origin.getMonth());
+  if (years >= 1) {
+    const rem = monthsTotal - years * 12;
+    return rem === 0
+      ? `${years} year${years !== 1 ? "s" : ""}`
+      : `${years} year${years !== 1 ? "s" : ""}, ${rem} month${rem !== 1 ? "s" : ""}`;
+  }
+  if (monthsTotal >= 1) return `${monthsTotal} month${monthsTotal !== 1 ? "s" : ""}`;
+  return `${totalDays} day${totalDays !== 1 ? "s" : ""}`;
+}
+
+function formatDateDisplay(isoDate) {
+  if (!isoDate) return "";
+  const d = new Date(isoDate + "T00:00:00");
+  if (isNaN(d.getTime())) return isoDate;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(d);
+}
+
+function formatDateTimeDisplay(dt) {
+  if (!dt) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dt)) return formatDateDisplay(dt);
+  const d = new Date(dt);
+  if (isNaN(d.getTime())) return dt;
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(d);
+}
+
+function renderDatesBoard() {
+  const items = loadDatesBoardItems();
+  if (!("dbAddingType" in uiState)) uiState.dbAddingType = null;
+  if (!("dbEditingId" in uiState)) uiState.dbEditingId = null;
+
+  const countdowns = items.filter(i => i.type === "countdown");
+  const reminders  = items.filter(i => i.type === "reminder");
+  const specials   = items.filter(i => i.type === "special");
+  const adding     = uiState.dbAddingType !== null;
+  const editingId  = uiState.dbEditingId;
+
+  function esc(str) {
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function buildTypeFields(type) {
+    if (type === "countdown") return `
+      <div class="db-form__row">
+        <div class="field">
+          <label for="dbAddTitle">Title</label>
+          <input id="dbAddTitle" name="title" type="text" maxlength="120" placeholder="What are you counting down to?" autocomplete="off" required />
+        </div>
+        <div class="field">
+          <label for="dbAddTargetDate">Target Date</label>
+          <input id="dbAddTargetDate" name="targetDate" type="date" required />
+        </div>
+      </div>
+      <div class="field">
+        <label for="dbAddNote">Note (optional)</label>
+        <input id="dbAddNote" name="note" type="text" maxlength="200" placeholder="Short note\u2026" autocomplete="off" />
+      </div>`;
+    if (type === "reminder") return `
+      <div class="db-form__row">
+        <div class="field">
+          <label for="dbAddTitle">Title</label>
+          <input id="dbAddTitle" name="title" type="text" maxlength="120" placeholder="What do you need to remember?" autocomplete="off" required />
+        </div>
+        <div class="field">
+          <label for="dbAddDatetime">Date / Time (optional)</label>
+          <input id="dbAddDatetime" name="datetime" type="datetime-local" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="dbAddNote">Note (optional)</label>
+        <input id="dbAddNote" name="note" type="text" maxlength="200" placeholder="Short note\u2026" autocomplete="off" />
+      </div>`;
+    if (type === "special") return `
+      <div class="db-form__row">
+        <div class="field">
+          <label for="dbAddTitle">Event Name</label>
+          <input id="dbAddTitle" name="title" type="text" maxlength="120" placeholder="e.g. First meeting, Birthday\u2026" autocomplete="off" required />
+        </div>
+        <div class="field">
+          <label for="dbAddOriginalDate">Original Date</label>
+          <input id="dbAddOriginalDate" name="originalDate" type="date" required />
+        </div>
+      </div>
+      <div class="field">
+        <label for="dbAddNote">Note (optional)</label>
+        <input id="dbAddNote" name="note" type="text" maxlength="200" placeholder="Short note\u2026" autocomplete="off" />
+      </div>`;
+    return "";
+  }
+
+  const t = uiState.dbAddingType;
+  viewRoot.innerHTML = `
+    <div class="db-view">
+      <div class="db-header">
+        <div>
+          <h2 class="panel-title">Dates Board</h2>
+          <p class="panel-subtitle">Track countdowns, reminders, and special dates in one place.</p>
+        </div>
+        ${!adding ? `<button type="button" class="ghost-btn" id="dbAddBtn">+ Add Item</button>` : ""}
+      </div>
+
+      ${adding ? `
+        <div class="db-add-panel">
+          <p class="eyebrow" style="margin-bottom:14px;">Add new item — choose a type</p>
+          <div class="db-type-picker" id="dbTypePicker">
+            <button type="button" class="db-type-btn${t === "countdown" ? " is-active" : ""}" data-type="countdown">Countdown</button>
+            <button type="button" class="db-type-btn${t === "reminder" ? " is-active" : ""}" data-type="reminder">Reminder</button>
+            <button type="button" class="db-type-btn${t === "special" ? " is-active" : ""}" data-type="special">Special Date</button>
+          </div>
+          ${t ? `
+            <form class="db-form" id="dbAddForm" novalidate>
+              ${buildTypeFields(t)}
+              <div class="db-form__actions">
+                <span class="db-form__msg" id="dbAddMsg"></span>
+                <button type="button" class="tiny-btn" id="dbCancelAddBtn">Cancel</button>
+                <button type="submit" class="primary-btn">Save</button>
+              </div>
+            </form>
+          ` : `<p class="db-type-hint">Select a type above to see the form.</p>`}
+        </div>
+      ` : ""}
+
+      <section class="db-section">
+        <div class="db-section__header">
+          <h3 class="db-section__title">Countdowns <span class="db-section__badge">${countdowns.length}</span></h3>
+        </div>
+        ${countdowns.length === 0 ? `<p class="db-empty">No countdowns yet. Add one to start tracking a date.</p>` : `<div class="db-countdown-grid" id="dbCountdownGrid"></div>`}
+      </section>
+
+      <section class="db-section">
+        <div class="db-section__header">
+          <h3 class="db-section__title">Reminders <span class="db-section__badge">${reminders.length}</span></h3>
+        </div>
+        ${reminders.length === 0 ? `<p class="db-empty">No reminders yet. Add one to keep track of things you need to remember.</p>` : `<ul class="db-reminder-list" id="dbReminderList"></ul>`}
+      </section>
+
+      <section class="db-section">
+        <div class="db-section__header">
+          <h3 class="db-section__title">Special Dates <span class="db-section__badge">${specials.length}</span></h3>
+        </div>
+        ${specials.length === 0 ? `<p class="db-empty">No special dates yet. Add a birthday, anniversary, or any date worth remembering.</p>` : `<div class="db-special-list" id="dbSpecialList"></div>`}
+      </section>
+    </div>
+  `;
+
+  // ── + Add button ────────────────────────────────────────────────────────────
+  const addBtn = document.getElementById("dbAddBtn");
+  if (addBtn) {
+    addBtn.addEventListener("click", () => {
+      uiState.dbAddingType = "countdown";
+      uiState.dbEditingId = null;
+      renderApp();
+    });
+  }
+
+  // ── Type picker ─────────────────────────────────────────────────────────────
+  const typePicker = document.getElementById("dbTypePicker");
+  if (typePicker) {
+    typePicker.addEventListener("click", e => {
+      const btn = e.target.closest(".db-type-btn");
+      if (!btn) return;
+      uiState.dbAddingType = btn.dataset.type;
+      renderApp();
+    });
+  }
+
+  // ── Cancel add ──────────────────────────────────────────────────────────────
+  const cancelAddBtn = document.getElementById("dbCancelAddBtn");
+  if (cancelAddBtn) {
+    cancelAddBtn.addEventListener("click", () => {
+      uiState.dbAddingType = null;
+      renderApp();
+    });
+  }
+
+  // ── Add form submit ─────────────────────────────────────────────────────────
+  const addForm = document.getElementById("dbAddForm");
+  if (addForm) {
+    addForm.addEventListener("submit", evt => {
+      evt.preventDefault();
+      const msg = document.getElementById("dbAddMsg");
+      const type = uiState.dbAddingType;
+      const title = (document.getElementById("dbAddTitle")?.value || "").trim();
+      const note  = (document.getElementById("dbAddNote")?.value || "").trim();
+      if (!title) { msg.textContent = "Please enter a title."; return; }
+      let newItem;
+      if (type === "countdown") {
+        const targetDate = document.getElementById("dbAddTargetDate")?.value || "";
+        if (!targetDate) { msg.textContent = "Please pick a target date."; return; }
+        newItem = createCountdown({ title, targetDate, note });
+      } else if (type === "reminder") {
+        const datetime = document.getElementById("dbAddDatetime")?.value || "";
+        newItem = createReminderItem({ title, datetime, note });
+      } else if (type === "special") {
+        const originalDate = document.getElementById("dbAddOriginalDate")?.value || "";
+        if (!originalDate) { msg.textContent = "Please pick the original date."; return; }
+        newItem = createSpecialDate({ title, originalDate, note });
+      }
+      if (!newItem) return;
+      saveDatesBoardItems([...items, newItem]);
+      uiState.dbAddingType = null;
+      renderApp();
+    });
+  }
+
+  // ── Countdown cards ─────────────────────────────────────────────────────────
+  const countdownGrid = document.getElementById("dbCountdownGrid");
+  if (countdownGrid) {
+    countdowns.forEach(item => {
+      if (editingId === item.id) {
+        const wrap = document.createElement("div");
+        wrap.className = "db-inline-edit";
+        wrap.style.gridColumn = "1 / -1";
+        wrap.innerHTML = `
+          <form novalidate style="display:grid;gap:10px;">
+            <div class="db-inline-edit__row">
+              <div class="field">
+                <label>Title</label>
+                <input type="text" id="dbETitle_${esc(item.id)}" maxlength="120" value="${esc(item.title)}" />
+              </div>
+              <div class="field">
+                <label>Target Date</label>
+                <input type="date" id="dbEDate_${esc(item.id)}" value="${esc(item.targetDate)}" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Note (optional)</label>
+              <input type="text" id="dbENote_${esc(item.id)}" maxlength="200" value="${esc(item.note)}" />
+            </div>
+            <div class="db-inline-edit__actions">
+              <span class="db-inline-edit__msg" id="dbEMsg_${esc(item.id)}"></span>
+              <button type="button" class="tiny-btn" data-cancel>Cancel</button>
+              <button type="submit" class="primary-btn">Save</button>
+            </div>
+          </form>`;
+        wrap.querySelector("[data-cancel]").addEventListener("click", () => { uiState.dbEditingId = null; renderApp(); });
+        wrap.querySelector("form").addEventListener("submit", evt => {
+          evt.preventDefault();
+          const eMsg   = document.getElementById(`dbEMsg_${item.id}`);
+          const eTitle = (document.getElementById(`dbETitle_${item.id}`)?.value || "").trim();
+          const eDate  = document.getElementById(`dbEDate_${item.id}`)?.value || "";
+          const eNote  = (document.getElementById(`dbENote_${item.id}`)?.value || "").trim();
+          if (!eTitle) { eMsg.textContent = "Please enter a title."; return; }
+          if (!eDate)  { eMsg.textContent = "Please pick a target date."; return; }
+          saveDatesBoardItems(items.map(i => i.id === item.id ? { ...i, title: eTitle, targetDate: eDate, note: eNote } : i));
+          uiState.dbEditingId = null;
+          renderApp();
+        });
+        countdownGrid.appendChild(wrap);
+        return;
+      }
+
+      const daysLeft = getDaysUntil(item.targetDate);
+      const isPast   = daysLeft < 0;
+      const isToday  = daysLeft === 0;
+      const numDisplay = isPast ? Math.abs(daysLeft) : daysLeft;
+      const label    = isPast ? "days ago" : isToday ? "" : "days to go";
+
+      const card = document.createElement("div");
+      card.className = "db-countdown-card";
+      card.innerHTML = `
+        <div class="db-countdown-card__top-row">
+          <div class="db-countdown-card__icon">CT</div>
+          <div class="db-countdown-card__btns">
+            <button type="button" class="tiny-btn" data-edit>Edit</button>
+            <button type="button" class="tiny-btn is-danger" data-del>Del</button>
+          </div>
+        </div>
+        <div class="db-countdown-card__title">${esc(item.title)}</div>
+        <div class="db-countdown-card__days${isPast ? " is-past" : isToday ? " is-today" : ""}">
+          ${isToday ? "🎉" : numDisplay}
+        </div>
+        <div class="db-countdown-card__days-label${isPast ? " is-past" : ""}">${isToday ? "Today!" : label}</div>
+        <div class="db-countdown-card__date">${formatDateDisplay(item.targetDate)}</div>
+        ${item.note ? `<div class="db-countdown-card__note">${esc(item.note)}</div>` : ""}`;
+      card.querySelector("[data-edit]").addEventListener("click", () => { uiState.dbEditingId = item.id; uiState.dbAddingType = null; renderApp(); });
+      card.querySelector("[data-del]").addEventListener("click", () => {
+        if (!confirm(`Delete "${item.title}"?`)) return;
+        saveDatesBoardItems(items.filter(i => i.id !== item.id));
+        renderApp();
+      });
+      countdownGrid.appendChild(card);
+    });
+  }
+
+  // ── Reminder rows ───────────────────────────────────────────────────────────
+  const reminderList = document.getElementById("dbReminderList");
+  if (reminderList) {
+    reminders.forEach(item => {
+      const li = document.createElement("li");
+      if (editingId === item.id) {
+        li.innerHTML = `
+          <div class="db-inline-edit">
+            <form novalidate style="display:grid;gap:10px;">
+              <div class="db-inline-edit__row">
+                <div class="field">
+                  <label>Title</label>
+                  <input type="text" id="dbETitle_${esc(item.id)}" maxlength="120" value="${esc(item.title)}" />
+                </div>
+                <div class="field">
+                  <label>Date / Time (optional)</label>
+                  <input type="datetime-local" id="dbEDatetime_${esc(item.id)}" value="${esc(item.datetime || "")}" />
+                </div>
+              </div>
+              <div class="field">
+                <label>Note (optional)</label>
+                <input type="text" id="dbENote_${esc(item.id)}" maxlength="200" value="${esc(item.note)}" />
+              </div>
+              <div class="db-inline-edit__actions">
+                <span class="db-inline-edit__msg" id="dbEMsg_${esc(item.id)}"></span>
+                <button type="button" class="tiny-btn" data-cancel>Cancel</button>
+                <button type="submit" class="primary-btn">Save</button>
+              </div>
+            </form>
+          </div>`;
+        li.querySelector("[data-cancel]").addEventListener("click", () => { uiState.dbEditingId = null; renderApp(); });
+        li.querySelector("form").addEventListener("submit", evt => {
+          evt.preventDefault();
+          const eMsg      = document.getElementById(`dbEMsg_${item.id}`);
+          const eTitle    = (document.getElementById(`dbETitle_${item.id}`)?.value || "").trim();
+          const eDatetime = document.getElementById(`dbEDatetime_${item.id}`)?.value || "";
+          const eNote     = (document.getElementById(`dbENote_${item.id}`)?.value || "").trim();
+          if (!eTitle) { eMsg.textContent = "Please enter a title."; return; }
+          saveDatesBoardItems(items.map(i => i.id === item.id ? { ...i, title: eTitle, datetime: eDatetime, note: eNote } : i));
+          uiState.dbEditingId = null;
+          renderApp();
+        });
+        reminderList.appendChild(li);
+        return;
+      }
+
+      li.className = `db-reminder-row${item.done ? " is-done" : ""}`;
+      li.innerHTML = `
+        <input type="checkbox" class="db-reminder-row__check" ${item.done ? "checked" : ""} aria-label="Mark as done" />
+        <div class="db-reminder-row__copy">
+          <div class="db-reminder-row__title">${esc(item.title)}</div>
+          ${item.datetime ? `<div class="db-reminder-row__meta">${esc(formatDateTimeDisplay(item.datetime))}</div>` : ""}
+          ${item.note ? `<div class="db-reminder-row__note">${esc(item.note)}</div>` : ""}
+        </div>
+        <div class="db-reminder-row__actions">
+          <button type="button" class="tiny-btn" data-edit>Edit</button>
+          <button type="button" class="tiny-btn is-danger" data-del>Del</button>
+        </div>`;
+      li.querySelector(".db-reminder-row__check").addEventListener("change", evt => {
+        saveDatesBoardItems(items.map(i => i.id === item.id ? { ...i, done: evt.target.checked } : i));
+        renderApp();
+      });
+      li.querySelector("[data-edit]").addEventListener("click", () => { uiState.dbEditingId = item.id; uiState.dbAddingType = null; renderApp(); });
+      li.querySelector("[data-del]").addEventListener("click", () => {
+        if (!confirm(`Delete "${item.title}"?`)) return;
+        saveDatesBoardItems(items.filter(i => i.id !== item.id));
+        renderApp();
+      });
+      reminderList.appendChild(li);
+    });
+  }
+
+  // ── Special date cards ──────────────────────────────────────────────────────
+  const specialList = document.getElementById("dbSpecialList");
+  if (specialList) {
+    specials.forEach(item => {
+      if (editingId === item.id) {
+        const wrap = document.createElement("div");
+        wrap.className = "db-inline-edit";
+        wrap.innerHTML = `
+          <form novalidate style="display:grid;gap:10px;">
+            <div class="db-inline-edit__row">
+              <div class="field">
+                <label>Event Name</label>
+                <input type="text" id="dbETitle_${esc(item.id)}" maxlength="120" value="${esc(item.title)}" />
+              </div>
+              <div class="field">
+                <label>Original Date</label>
+                <input type="date" id="dbEDate_${esc(item.id)}" value="${esc(item.originalDate)}" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Note (optional)</label>
+              <input type="text" id="dbENote_${esc(item.id)}" maxlength="200" value="${esc(item.note)}" />
+            </div>
+            <div class="db-inline-edit__actions">
+              <span class="db-inline-edit__msg" id="dbEMsg_${esc(item.id)}"></span>
+              <button type="button" class="tiny-btn" data-cancel>Cancel</button>
+              <button type="submit" class="primary-btn">Save</button>
+            </div>
+          </form>`;
+        wrap.querySelector("[data-cancel]").addEventListener("click", () => { uiState.dbEditingId = null; renderApp(); });
+        wrap.querySelector("form").addEventListener("submit", evt => {
+          evt.preventDefault();
+          const eMsg   = document.getElementById(`dbEMsg_${item.id}`);
+          const eTitle = (document.getElementById(`dbETitle_${item.id}`)?.value || "").trim();
+          const eDate  = document.getElementById(`dbEDate_${item.id}`)?.value || "";
+          const eNote  = (document.getElementById(`dbENote_${item.id}`)?.value || "").trim();
+          if (!eTitle) { eMsg.textContent = "Please enter a name."; return; }
+          if (!eDate)  { eMsg.textContent = "Please pick the original date."; return; }
+          saveDatesBoardItems(items.map(i => i.id === item.id ? { ...i, title: eTitle, originalDate: eDate, note: eNote } : i));
+          uiState.dbEditingId = null;
+          renderApp();
+        });
+        specialList.appendChild(wrap);
+        return;
+      }
+
+      const elapsed = formatElapsedSince(item.originalDate);
+      const elapsedLabel = elapsed === "upcoming" ? "Upcoming" : elapsed ? `${elapsed} ago` : "";
+
+      const card = document.createElement("div");
+      card.className = "db-special-card";
+      card.innerHTML = `
+        <div class="db-special-card__icon" aria-hidden="true">★</div>
+        <div class="db-special-card__copy">
+          <div class="db-special-card__title">${esc(item.title)}</div>
+          ${elapsedLabel ? `<div class="db-special-card__elapsed">${esc(elapsedLabel)}</div>` : ""}
+          <div class="db-special-card__date">${esc(formatDateDisplay(item.originalDate))}</div>
+          ${item.note ? `<div class="db-special-card__note">${esc(item.note)}</div>` : ""}
+        </div>
+        <div class="db-special-card__actions">
+          <button type="button" class="tiny-btn" data-edit>Edit</button>
+          <button type="button" class="tiny-btn is-danger" data-del>Del</button>
+        </div>`;
+      card.querySelector("[data-edit]").addEventListener("click", () => { uiState.dbEditingId = item.id; uiState.dbAddingType = null; renderApp(); });
+      card.querySelector("[data-del]").addEventListener("click", () => {
+        if (!confirm(`Delete "${item.title}"?`)) return;
+        saveDatesBoardItems(items.filter(i => i.id !== item.id));
+        renderApp();
+      });
+      specialList.appendChild(card);
+    });
+  }
 }
 
 function renderDiary() {
