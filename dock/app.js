@@ -4912,22 +4912,17 @@ function renderDatesBoard() {
       const label    = isPast ? "days ago" : isToday ? "" : "days to go";
 
       const card = document.createElement("div");
-      card.className = "db-countdown-card";
+      card.className = `db-countdown-card${isPast ? " is-past" : isToday ? " is-today" : ""}`;
       card.innerHTML = `
-        <div class="db-countdown-card__top-row">
-          <div class="db-countdown-card__icon">CT</div>
-          <div class="db-countdown-card__btns">
-            <button type="button" class="tiny-btn" data-edit>Edit</button>
-            <button type="button" class="tiny-btn is-danger" data-del>Del</button>
-          </div>
-        </div>
+        <div class="db-countdown-card__days">${isToday ? "🎉" : numDisplay}</div>
+        <div class="db-countdown-card__days-label">${isToday ? "Today!" : label}</div>
         <div class="db-countdown-card__title">${esc(item.title)}</div>
-        <div class="db-countdown-card__days${isPast ? " is-past" : isToday ? " is-today" : ""}">
-          ${isToday ? "🎉" : numDisplay}
-        </div>
-        <div class="db-countdown-card__days-label${isPast ? " is-past" : ""}">${isToday ? "Today!" : label}</div>
         <div class="db-countdown-card__date">${formatDateDisplay(item.targetDate)}</div>
-        ${item.note ? `<div class="db-countdown-card__note">${esc(item.note)}</div>` : ""}`;
+        ${item.note ? `<div class="db-countdown-card__note">${esc(item.note)}</div>` : ""}
+        <div class="db-countdown-card__btns">
+          <button type="button" class="tiny-btn" data-edit>Edit</button>
+          <button type="button" class="tiny-btn is-danger" data-del>Del</button>
+        </div>`;
       card.querySelector("[data-edit]").addEventListener("click", () => { uiState.dbEditingId = item.id; uiState.dbAddingType = null; renderApp(); });
       card.querySelector("[data-del]").addEventListener("click", () => {
         if (!confirm(`Delete "${item.title}"?`)) return;
