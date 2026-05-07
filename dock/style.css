@@ -393,7 +393,6 @@ h1 {
 .ab-day-tabs {
   display: flex;
   gap: 4px;
-  flex: 1;
   flex-wrap: wrap;
 }
 .ab-day-tab {
