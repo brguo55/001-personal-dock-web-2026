@@ -944,6 +944,22 @@ h1 {
 .budget-total span { display: block; color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 4px; }
 .budget-total strong { display: block; margin-top: 4px; font-size: 1.5rem; font-weight: 700; color: var(--green); }
 
+/* Expense Tracker period selector */
+.expense-period-header { margin-bottom: 16px; }
+.expense-period-selector {
+  flex-wrap: nowrap;
+  padding: 4px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-md);
+}
+.expense-period-selector .expense-period-btn {
+  min-width: 106px;
+  text-align: center;
+}
+.expense-period-total { min-width: 220px; }
+.expense-category-entries { margin-top: 10px; }
+
 .budget-form { display: grid; grid-template-columns: 1.3fr .8fr .9fr auto; gap: 10px; margin-top: 18px; align-items: end; }
 .field { display: grid; gap: 5px; }
 .field label { color: var(--muted); font-size: .76rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
@@ -2075,6 +2091,8 @@ h1 {
   .budget-item__side,.budget-item__actions,.gtd-item__controls,.waiting-item__side,.view-actions,.view-nav,.shortcut-row,.inline-stats,.storage-panel__actions { width: 100%; }
   .budget-item__amount,.today-stamp { text-align: left; }
   .nav-btn,.ghost-btn,.shortcut-btn,.primary-btn,.secondary-btn,.gtd-item__controls select,.gtd-item__controls button,.gtd-item__controls .gtd-cselect { width: 100%; justify-content: center; }
+  .expense-period-selector { width: 100%; }
+  .expense-period-selector .expense-period-btn { width: auto; flex: 1; }
   .budget-category-form__row { flex-direction: column; }
   .budget-cat-create-btn { width: 100%; padding: 9px; }
   .budget-manage-btn,.budget-category-manager__header .tiny-btn,.budget-category-manager__actions .tiny-btn { width: 100%; }

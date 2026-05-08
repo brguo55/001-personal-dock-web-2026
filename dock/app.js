@@ -6,14 +6,18 @@ const BACKUP_FORMAT = "personaldock-backup";
 const BACKUP_VERSION = 1;
 const EXPENSE_TRACKER_STORAGE_KEY = "personaldock-expense-tracker-v1";
 const EXPENSE_TRACKER_DEFAULT_CATEGORY = "Groceries";
-const EXPENSE_TRACKER_STARTER_MERCHANTS = ["Whole Foods", "Trader Joe's"];
+const EXPENSE_TRACKER_CATEGORIES = ["Groceries", "Household"];
+const EXPENSE_TRACKER_STARTER_MERCHANTS = {
+  Groceries: ["Whole Foods", "Trader Joe's"],
+  Household: ["Walmart"]
+};
 
 const VIEW_DETAILS = {
   dashboard: "Quickly review today's priorities, budget snapshot, and recent notes.",
   actionBoard: "Organize tasks by energy, urgency, and life context.",
   waitingFor: "Run your GTD capture, context lists, waiting items, projects, reference, and someday lists from one place.",
   budgetPlanner: "Track personal budget items so income, spending, and progress stay visible.",
-  expenseTracker: "Log expenses quickly with weekly and monthly totals split by currency.",
+  expenseTracker: "Log expenses quickly with weekly, monthly, and yearly totals split by currency.",
   planner: "Plan your day, set goals, capture notes, and track short-term plans in one place.",
   promise: "Record commitments and promises you have made to other people.",
   diary: "Write and revisit your daily journal entries.",
@@ -5974,6 +5978,16 @@ function renderBudgetPlanner() {
 }
 
 function renderExpenseTracker() {
+  const EXPENSE_PERIODS = [
+    { id: "week", label: "This Week" },
+    { id: "month", label: "This Month" },
+    { id: "year", label: "This Year" }
+  ];
+
+  function normalizeExpenseCategory(value) {
+    return EXPENSE_TRACKER_CATEGORIES.includes(value) ? value : EXPENSE_TRACKER_DEFAULT_CATEGORY;
+  }
+
   function buildDefaultExpenseTrackerState() {
     return {
       entries: []
@@ -5988,7 +6002,7 @@ function renderExpenseTracker() {
       currency,
       date,
       note,
-      category,
+      category: normalizeExpenseCategory(category),
       createdAt: new Date().toISOString()
     };
   }
@@ -5999,8 +6013,8 @@ function renderExpenseTracker() {
     const currency = entry?.currency === "RMB" ? "RMB" : "USD";
     const date = typeof entry?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) ? entry.date : getTodayIso();
     const note = typeof entry?.note === "string" ? entry.note.trim() : "";
-    const category = entry?.category === EXPENSE_TRACKER_DEFAULT_CATEGORY
-      ? EXPENSE_TRACKER_DEFAULT_CATEGORY
+    const category = typeof entry?.category === "string" && entry.category.trim()
+      ? entry.category.trim()
       : EXPENSE_TRACKER_DEFAULT_CATEGORY;
 
     if (!merchant || Number.isNaN(amount) || amount < 0) {
@@ -6116,9 +6130,13 @@ function renderExpenseTracker() {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const nextYear = new Date(now.getFullYear() + 1, 0, 1);
+
     return {
       week: getTotalsForRange(entries, weekStart, nextWeek),
-      month: getTotalsForRange(entries, monthStart, nextMonth)
+      month: getTotalsForRange(entries, monthStart, nextMonth),
+      year: getTotalsForRange(entries, yearStart, nextYear)
     };
   }
 
@@ -6126,39 +6144,99 @@ function renderExpenseTracker() {
     return `${formatExpenseAmount(totals.USD, "USD")} + ${formatExpenseAmount(totals.RMB, "RMB")}`;
   }
 
-  const expenseState = loadExpenseTrackerState();
-  const groceryEntries = expenseState.entries
-    .filter(entry => entry.category === EXPENSE_TRACKER_DEFAULT_CATEGORY)
-    .sort((left, right) => {
+  function isStarterPlaceholderEntry(entry) {
+    const starterMerchants = EXPENSE_TRACKER_STARTER_MERCHANTS[entry.category] || [];
+    const note = typeof entry.note === "string" ? entry.note.trim().toLowerCase() : "";
+    const isStarterNote = note === "starter merchant" || note === "starter";
+    return entry.amount === 0 && isStarterNote && starterMerchants.includes(entry.merchant);
+  }
+
+  function sortExpenseEntries(entries) {
+    return [...entries].sort((left, right) => {
       if (left.date !== right.date) {
         return right.date.localeCompare(left.date);
       }
 
       return new Date(right.createdAt) - new Date(left.createdAt);
     });
+  }
+
+  function renderExpenseEntries(listElement, entries, emptyMessage) {
+    if (entries.length === 0) {
+      listElement.appendChild(createEmptyState(emptyMessage));
+      return;
+    }
+
+    entries.forEach(entry => {
+      const item = document.createElement("li");
+      item.className = "note-item";
+
+      const copy = document.createElement("div");
+      const title = document.createElement("strong");
+      const meta = document.createElement("span");
+      title.textContent = entry.merchant;
+      meta.className = "note-meta";
+      meta.textContent = `${formatExpenseDate(entry.date)}${entry.note ? ` \u00b7 ${entry.note}` : ""}`;
+      copy.append(title, meta);
+
+      const amountWrap = document.createElement("div");
+      amountWrap.style.textAlign = "right";
+      const amountValue = document.createElement("strong");
+      amountValue.textContent = formatExpenseAmount(entry.amount, entry.currency);
+      amountWrap.appendChild(amountValue);
+
+      item.append(copy, amountWrap);
+      listElement.appendChild(item);
+    });
+  }
+
+  function renderStarterMerchants(listElement, merchants) {
+    merchants.forEach(merchant => {
+      const item = document.createElement("li");
+      item.className = "note-item";
+      const title = document.createElement("strong");
+      title.textContent = merchant;
+      item.appendChild(title);
+      listElement.appendChild(item);
+    });
+  }
+
+  const expenseState = loadExpenseTrackerState();
+  const entriesByCategory = EXPENSE_TRACKER_CATEGORIES.reduce((acc, category) => {
+    acc[category] = sortExpenseEntries(
+      expenseState.entries.filter(entry => entry.category === category && !isStarterPlaceholderEntry(entry))
+    );
+    return acc;
+  }, {});
   const summaries = getExpenseSummaries(expenseState.entries);
+
+  const periodButtonsHtml = EXPENSE_PERIODS
+    .map(period => `<button type="button" class="nav-btn expense-period-btn${period.id === "week" ? " is-active" : ""}" data-period="${period.id}">${period.label}</button>`)
+    .join("");
+  const categoryOptionsHtml = EXPENSE_TRACKER_CATEGORIES
+    .map(category => `<option value="${category}">${category}</option>`)
+    .join("");
 
   viewRoot.innerHTML = `
     <section class="view-panel">
       <div class="view-panel__top">
         <div>
           <h2 class="panel-title">Expense Tracker</h2>
-          <p class="panel-subtitle">A lightweight spending log with weekly and monthly totals.</p>
+          <p class="panel-subtitle">A lightweight spending log with flexible period views.</p>
         </div>
       </div>
 
-      <div class="budget-summary-cards">
-        <article class="budget-summary-card">
-          <p>This week</p>
-          <strong id="expenseWeekTotal"></strong>
-        </article>
-        <article class="budget-summary-card">
-          <p>This month</p>
-          <strong id="expenseMonthTotal"></strong>
-        </article>
+      <div class="header-controls expense-period-header">
+        <nav class="view-nav expense-period-selector" id="expensePeriodSelector" aria-label="Expense period selector">
+          ${periodButtonsHtml}
+        </nav>
+        <div class="budget-total expense-period-total">
+          <span id="expensePeriodSummaryLabel">This Week</span>
+          <strong id="expensePeriodSummaryTotal"></strong>
+        </div>
       </div>
 
-      <article class="panel" style="margin-top: 16px;">
+      <article class="panel" style="margin-bottom: 16px;">
         <h3 class="panel-title">Quick Add Expense</h3>
         <p class="panel-subtitle">Capture merchant, amount, currency, date, note, and category.</p>
 
@@ -6189,7 +6267,7 @@ function renderExpenseTracker() {
           <div class="field">
             <label for="expenseCategorySelect">Category</label>
             <select id="expenseCategorySelect">
-              <option value="${EXPENSE_TRACKER_DEFAULT_CATEGORY}">${EXPENSE_TRACKER_DEFAULT_CATEGORY}</option>
+              ${categoryOptionsHtml}
             </select>
           </div>
 
@@ -6203,72 +6281,71 @@ function renderExpenseTracker() {
         </form>
       </article>
 
-      <article class="panel" style="margin-top: 16px;">
-        <h3 class="panel-title">Groceries</h3>
-        <p class="panel-subtitle">Starter places and logged entries.</p>
+      <div class="gtd-grid">
+        <article class="panel">
+          <h3 class="panel-title">Groceries</h3>
+          <p class="panel-subtitle">Food and grocery purchases.</p>
+          <ul class="notes-list" id="expenseGroceriesStarterList"></ul>
+          <ul class="notes-list expense-category-entries" id="expenseGroceriesList"></ul>
+        </article>
 
-        <ul class="notes-list" id="expenseStarterMerchantList"></ul>
-        <ul class="notes-list" id="expenseGroceriesList" style="margin-top: 10px;"></ul>
-      </article>
+        <article class="panel">
+          <h3 class="panel-title">Household</h3>
+          <p class="panel-subtitle">General household and daily miscellaneous purchases.</p>
+          <ul class="notes-list" id="expenseHouseholdStarterList"></ul>
+          <ul class="notes-list expense-category-entries" id="expenseHouseholdList"></ul>
+        </article>
+      </div>
     </section>
   `;
 
-  document.getElementById("expenseWeekTotal").textContent = formatSummaryTotals(summaries.week);
-  document.getElementById("expenseMonthTotal").textContent = formatSummaryTotals(summaries.month);
-
   upgradeGtdSelects(viewRoot);
 
-  const starterMerchantList = document.getElementById("expenseStarterMerchantList");
-  EXPENSE_TRACKER_STARTER_MERCHANTS.forEach(merchant => {
-    const item = document.createElement("li");
-    item.className = "note-item";
+  const periodSelector = document.getElementById("expensePeriodSelector");
+  const periodSummaryLabel = document.getElementById("expensePeriodSummaryLabel");
+  const periodSummaryTotal = document.getElementById("expensePeriodSummaryTotal");
+  let activePeriod = "week";
 
-    const copy = document.createElement("div");
-    const title = document.createElement("strong");
-    const meta = document.createElement("span");
-    title.textContent = merchant;
-    meta.className = "note-meta";
-    meta.textContent = "Starter merchant";
-    copy.append(title, meta);
+  function updatePeriodSummary(nextPeriod) {
+    activePeriod = EXPENSE_PERIODS.some(period => period.id === nextPeriod) ? nextPeriod : "week";
+    const activeOption = EXPENSE_PERIODS.find(period => period.id === activePeriod) || EXPENSE_PERIODS[0];
 
-    const badge = document.createElement("span");
-    badge.className = "pill";
-    badge.textContent = "Groceries";
+    periodSelector.querySelectorAll(".expense-period-btn").forEach(button => {
+      button.classList.toggle("is-active", button.dataset.period === activePeriod);
+      button.setAttribute("aria-pressed", button.dataset.period === activePeriod ? "true" : "false");
+    });
 
-    item.append(copy, badge);
-    starterMerchantList.appendChild(item);
+    periodSummaryLabel.textContent = activeOption.label;
+    periodSummaryTotal.textContent = formatSummaryTotals(summaries[activePeriod]);
+  }
+
+  periodSelector.addEventListener("click", event => {
+    const button = event.target.closest(".expense-period-btn");
+    if (!button) return;
+    updatePeriodSummary(button.dataset.period);
   });
 
-  const groceryList = document.getElementById("expenseGroceriesList");
+  updatePeriodSummary("week");
 
-  if (groceryEntries.length === 0) {
-    groceryList.appendChild(createEmptyState("No expense entries yet. Use Quick Add Expense to log your first item."));
-  } else {
-    groceryEntries.forEach(entry => {
-      const item = document.createElement("li");
-      item.className = "note-item";
+  const groceriesStarterList = document.getElementById("expenseGroceriesStarterList");
+  renderStarterMerchants(groceriesStarterList, EXPENSE_TRACKER_STARTER_MERCHANTS.Groceries);
 
-      const copy = document.createElement("div");
-      const title = document.createElement("strong");
-      const meta = document.createElement("span");
-      title.textContent = entry.merchant;
-      meta.className = "note-meta";
-      meta.textContent = `${formatExpenseDate(entry.date)}${entry.note ? ` \u00b7 ${entry.note}` : ""}`;
-      copy.append(title, meta);
+  const groceriesList = document.getElementById("expenseGroceriesList");
+  renderExpenseEntries(
+    groceriesList,
+    entriesByCategory.Groceries,
+    "No grocery expenses yet. Use Quick Add Expense to log your first item."
+  );
 
-      const amountWrap = document.createElement("div");
-      amountWrap.style.textAlign = "right";
-      const amountValue = document.createElement("strong");
-      amountValue.textContent = formatExpenseAmount(entry.amount, entry.currency);
-      const amountMeta = document.createElement("span");
-      amountMeta.className = "note-meta";
-      amountMeta.textContent = entry.category;
-      amountWrap.append(amountValue, amountMeta);
+  const householdStarterList = document.getElementById("expenseHouseholdStarterList");
+  renderStarterMerchants(householdStarterList, EXPENSE_TRACKER_STARTER_MERCHANTS.Household);
 
-      item.append(copy, amountWrap);
-      groceryList.appendChild(item);
-    });
-  }
+  const householdList = document.getElementById("expenseHouseholdList");
+  renderExpenseEntries(
+    householdList,
+    entriesByCategory.Household,
+    "No household expenses yet. Add one from Quick Add Expense."
+  );
 
   document.getElementById("expenseQuickAddForm").addEventListener("submit", event => {
     event.preventDefault();
@@ -6286,9 +6363,7 @@ function renderExpenseTracker() {
     const currency = currencySelect.value === "RMB" ? "RMB" : "USD";
     const date = dateInput.value;
     const note = noteInput.value.trim();
-    const category = categorySelect.value === EXPENSE_TRACKER_DEFAULT_CATEGORY
-      ? EXPENSE_TRACKER_DEFAULT_CATEGORY
-      : EXPENSE_TRACKER_DEFAULT_CATEGORY;
+    const category = normalizeExpenseCategory(categorySelect.value);
 
     if (!merchant || Number.isNaN(amount) || amount < 0 || !date) {
       message.textContent = "Please fill merchant, amount, and date with valid values.";
