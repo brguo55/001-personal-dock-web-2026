@@ -3320,9 +3320,14 @@ function renderCalendar() {
   if (typeof uiState.calendarYear  !== "number") uiState.calendarYear  = now.getFullYear();
   if (typeof uiState.calendarMonth !== "number") uiState.calendarMonth = now.getMonth();
   if (!uiState.calendarViewMode) uiState.calendarViewMode = "week";
+  if (!Object.prototype.hasOwnProperty.call(uiState, "calendarSelectedEventId")) uiState.calendarSelectedEventId = null;
+  if (typeof uiState.calendarSelectedEventDate !== "string") uiState.calendarSelectedEventDate = "";
+  if (!Object.prototype.hasOwnProperty.call(uiState, "calendarEditingEventId")) uiState.calendarEditingEventId = null;
+  if (typeof uiState.calendarCopyTargetDate !== "string") uiState.calendarCopyTargetDate = "";
 
   const viewMode = uiState.calendarViewMode;  // "week" | "day"
   const todayStr = toISODateString(now);
+  const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
   // ── constants ─────────────────────────────────────────────────────────────
   const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -3510,6 +3515,43 @@ function renderCalendar() {
   const rangeTitle  = formatRangeTitle(displayDays);
   const numCols     = displayDays.length;
 
+  let selectedEvent = null;
+  if (uiState.calendarSelectedEventId) {
+    selectedEvent = appState.calendarEvents.find(eventItem => eventItem.id === uiState.calendarSelectedEventId) || null;
+  }
+  if (!selectedEvent) {
+    uiState.calendarSelectedEventId = null;
+    uiState.calendarSelectedEventDate = "";
+    uiState.calendarCopyTargetDate = "";
+  }
+
+  const selectedEventDate = selectedEvent && ISO_DATE_PATTERN.test(uiState.calendarSelectedEventDate)
+    ? uiState.calendarSelectedEventDate
+    : (selectedEvent ? selectedEvent.date : "");
+
+  if (selectedEvent && uiState.calendarSelectedEventDate !== selectedEventDate) {
+    uiState.calendarSelectedEventDate = selectedEventDate;
+  }
+
+  let editingEvent = null;
+  if (uiState.calendarEditingEventId) {
+    editingEvent = appState.calendarEvents.find(eventItem => eventItem.id === uiState.calendarEditingEventId) || null;
+    if (!editingEvent) {
+      uiState.calendarEditingEventId = null;
+    }
+  }
+
+  if (selectedEvent && !ISO_DATE_PATTERN.test(uiState.calendarCopyTargetDate)) {
+    uiState.calendarCopyTargetDate = selectedEventDate || selectedEvent.date;
+  }
+
+  const isRecurringOccurrenceSelection = Boolean(
+    selectedEvent &&
+    selectedEvent.recurrence &&
+    selectedEventDate &&
+    selectedEventDate !== selectedEvent.date
+  );
+
   const headDaysHtml = displayDays.map(dateStr => {
     const d       = new Date(dateStr + "T12:00:00");
     const isToday = dateStr === todayStr;
@@ -3530,7 +3572,9 @@ function renderCalendar() {
             ${evts.map(e => {
               const recurBadge = e.recurrence ? `<span class="cal-recur-badge">↻</span>` : "";
               const typeLabel = getCalendarColorTypeLabel(e.color);
-              return `<div class="cal-week-event cal-week-event--${e.color}" title="${typeLabel}">
+              const displayDate = e._virtual || e.date;
+              const isSelected = selectedEvent && selectedEvent.id === e.id && selectedEventDate === displayDate;
+              return `<div class="cal-week-event cal-week-event--${e.color}${isSelected ? " is-selected" : ""}" data-id="${e.id}" data-display-date="${displayDate}" title="${typeLabel}"${e._virtual ? ' data-virtual="1"' : ""}>
                 <div class="cal-week-event__top">
                   <span class="cal-week-event__title">${e.title}${recurBadge}</span>
                   <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
@@ -3566,7 +3610,9 @@ function renderCalendar() {
       const notePart   = e.note ? `<span class="cal-tg-event__note">${e.note}</span>` : "";
       const isDraggable = !e._virtual;
       const typeLabel = getCalendarColorTypeLabel(e.color);
-      return `<div class="cal-tg-event cal-tg-event--${e.color}" style="top:${pos.top}px;height:${pos.height}px" data-id="${e.id}" title="${typeLabel}"${isDraggable ? "" : ' data-virtual="1"'}>
+      const displayDate = e._virtual || e.date;
+      const isSelected = selectedEvent && selectedEvent.id === e.id && selectedEventDate === displayDate;
+      return `<div class="cal-tg-event cal-tg-event--${e.color}${isSelected ? " is-selected" : ""}" style="top:${pos.top}px;height:${pos.height}px" data-id="${e.id}" data-display-date="${displayDate}" title="${typeLabel}"${isDraggable ? "" : ' data-virtual="1"'}>
         ${isDraggable ? '<div class="cal-tg-event__resize-top"></div>' : ""}
         <div class="cal-tg-event__inner">
           <span class="cal-tg-event__title">${e.title}${recurBadge}</span>
@@ -3594,12 +3640,13 @@ function renderCalendar() {
         const typeLabel = getCalendarColorTypeLabel(e.color);
         const timeRange = formatTimeRange(e.time, e.endTime);
         const displayDate = e._virtual || e.date;
+        const isSelected = selectedEvent && selectedEvent.id === e.id && selectedEventDate === displayDate;
         const originDate = new Date(e.date + "T12:00:00");
         const recurLabel = e.recurrence === "weekly"  ? ` · Weekly on ${DAY_FULL[originDate.getDay()]}`
                          : e.recurrence === "monthly" ? ` · Monthly on the ${originDate.getDate()}${[,"st","nd","rd"][((originDate.getDate()%100-20)%10)||originDate.getDate()%100] || "th"}`
                          : "";
         const meta = [typeLabel, displayDate, timeRange].filter(Boolean).join(" · ") + recurLabel;
-        return `<li class="calendar-event-item">
+        return `<li class="calendar-event-item${isSelected ? " is-selected" : ""}" data-id="${e.id}" data-display-date="${displayDate}">
           <span class="calendar-event-item__dot" style="background:${dotColor(e.color)}" title="${typeLabel}" aria-label="${typeLabel}"></span>
           <div class="calendar-event-item__copy">
             <span class="calendar-event-item__title">${e.title}</span>
@@ -3622,6 +3669,42 @@ function renderCalendar() {
       <button type="button" class="cal-toggle-btn${viewMode === "week" ? " is-active" : ""}" data-mode="week">Week</button>
       <button type="button" class="cal-toggle-btn${viewMode === "day"  ? " is-active" : ""}" data-mode="day">Day</button>
     </div>`;
+
+  const calendarFormTitle = editingEvent ? "Edit Event" : "Add Event";
+  const calendarSubmitLabel = editingEvent ? "Save Changes" : "Add Event";
+  const calendarCopyTargetDateValue = selectedEvent
+    ? (ISO_DATE_PATTERN.test(uiState.calendarCopyTargetDate) ? uiState.calendarCopyTargetDate : selectedEventDate)
+    : "";
+
+  const calendarEventActionsHtml = selectedEvent
+    ? `<section class="calendar-event-actions" id="cal-event-actions">
+        <div class="calendar-event-actions__header">
+          <div>
+            <div class="calendar-event-actions__eyebrow">Selected Event</div>
+            <div class="calendar-event-actions__title">${selectedEvent.title}</div>
+            <div class="calendar-event-actions__meta">${[getCalendarColorTypeLabel(selectedEvent.color), selectedEventDate, formatTimeRange(selectedEvent.time, selectedEvent.endTime)].filter(Boolean).join(" · ")}</div>
+          </div>
+          <button type="button" class="icon-btn calendar-event-actions__close" id="cal-action-close" title="Clear selection">✕</button>
+        </div>
+        ${selectedEvent.note ? `<p class="calendar-event-actions__note">${selectedEvent.note}</p>` : ""}
+        ${isRecurringOccurrenceSelection ? `<p class="calendar-event-actions__hint">This is a recurring occurrence from ${selectedEvent.date}. Edit and delete will affect the original event.</p>` : ""}
+        <div class="calendar-event-actions__buttons">
+          <button type="button" class="tiny-btn" id="cal-action-edit">Edit</button>
+          <button type="button" class="tiny-btn" id="cal-action-duplicate">Duplicate</button>
+          <button type="button" class="tiny-btn is-danger" id="cal-action-delete">Delete</button>
+        </div>
+        <form class="calendar-event-actions__copy" id="cal-copy-form" novalidate>
+          <label for="cal-copy-date">Copy to another date</label>
+          <div class="calendar-event-actions__copy-row">
+            <input id="cal-copy-date" name="copyDate" type="date" value="${calendarCopyTargetDateValue}">
+            <button type="submit" class="tiny-btn">Copy</button>
+          </div>
+          <p class="calendar-event-actions__msg" id="cal-action-msg" style="display:none"></p>
+        </form>
+      </section>`
+    : `<section class="calendar-event-actions calendar-event-actions--empty" id="cal-event-actions">
+        <div class="calendar-event-actions__empty">Click any event to edit, duplicate, copy to another date, or delete it.</div>
+      </section>`;
 
   // ── render ────────────────────────────────────────────────────────────────
   viewRoot.innerHTML = `
@@ -3652,8 +3735,10 @@ function renderCalendar() {
       </div>
 
       <div class="calendar-sidebar-panel">
+        ${calendarEventActionsHtml}
+
         <form class="calendar-add-form" id="cal-add-form" novalidate>
-          <div class="calendar-add-form__title">Add Event</div>
+          <div class="calendar-add-form__title">${calendarFormTitle}</div>
           <div class="field">
             <label for="cal-title">Title</label>
             <input id="cal-title" name="title" type="text" placeholder="Event title" required maxlength="120">
@@ -3691,7 +3776,10 @@ function renderCalendar() {
             <div class="calendar-color-row__type" id="cal-color-type-label">Type: ${getCalendarColorTypeLabel("green")}</div>
           </div>
           <div class="section-form__message" id="cal-form-msg" style="display:none"></div>
-          <button type="submit" class="primary-btn">Add Event</button>
+          <div class="calendar-add-form__actions">
+            <button type="submit" class="primary-btn">${calendarSubmitLabel}</button>
+            ${editingEvent ? '<button type="button" class="tiny-btn" id="cal-edit-cancel">Cancel</button>' : ""}
+          </div>
         </form>
 
         <div class="calendar-event-list-section">
@@ -3801,8 +3889,13 @@ function renderCalendar() {
     });
   });
 
+  const initialFormColor = editingEvent && COLOR_OPTIONS.includes(editingEvent.color)
+    ? editingEvent.color
+    : "green";
+  calColorInput.value = initialFormColor;
+
   document.querySelectorAll(".color-swatch").forEach(btn => {
-    if (btn.dataset.color === "green") btn.classList.add("is-selected");
+    if (btn.dataset.color === initialFormColor) btn.classList.add("is-selected");
     btn.addEventListener("click", () => {
       document.querySelectorAll(".color-swatch").forEach(b => b.classList.remove("is-selected"));
       btn.classList.add("is-selected");
@@ -3810,66 +3903,261 @@ function renderCalendar() {
       updateSelectedColorTypeLabel(btn.dataset.color);
     });
   });
-  updateSelectedColorTypeLabel(calColorInput.value || "green");
+  updateSelectedColorTypeLabel(calColorInput.value || initialFormColor);
 
-  // ── add event form ────────────────────────────────────────────────────────
-  document.getElementById("cal-add-form").addEventListener("submit", e => {
+  if (editingEvent) {
+    const calAddForm = document.getElementById("cal-add-form");
+    if (calAddForm) {
+      calAddForm.title.value = editingEvent.title;
+      calAddForm.date.value = editingEvent.date;
+      calAddForm.startTime.value = editingEvent.time || "";
+      calAddForm.endTime.value = editingEvent.endTime || "";
+      calAddForm.note.value = editingEvent.note || "";
+      calAddForm.recurrence.value = editingEvent.recurrence || "";
+    }
+  }
+
+  function navigateCalendarToDate(dateStr) {
+    if (!ISO_DATE_PATTERN.test(dateStr)) return;
+    if (viewMode === "day") {
+      uiState.calendarWeekStart = dateStr;
+    } else {
+      uiState.calendarWeekStart = mondayOfWeek(new Date(dateStr + "T12:00:00"));
+    }
+  }
+
+  function setCalendarSelection(eventId, displayDate = "") {
+    const eventRecord = appState.calendarEvents.find(entry => entry.id === eventId);
+    if (!eventRecord) return;
+    uiState.calendarSelectedEventId = eventRecord.id;
+    const normalizedDate = ISO_DATE_PATTERN.test(displayDate) ? displayDate : eventRecord.date;
+    uiState.calendarSelectedEventDate = normalizedDate;
+    uiState.calendarCopyTargetDate = normalizedDate;
+  }
+
+  function clearCalendarSelection() {
+    uiState.calendarSelectedEventId = null;
+    uiState.calendarSelectedEventDate = "";
+    uiState.calendarCopyTargetDate = "";
+  }
+
+  function cloneCalendarEvent(sourceEvent, targetDate) {
+    return createCalendarEvent({
+      title: sourceEvent.title,
+      date: targetDate,
+      time: sourceEvent.time || "",
+      endTime: sourceEvent.endTime || "",
+      note: sourceEvent.note || "",
+      color: sourceEvent.color || "green",
+      // Duplicate/copy should create a standalone event copy by default.
+      recurrence: ""
+    });
+  }
+
+  function deleteCalendarEventById(eventId, displayDate = "") {
+    const eventRecord = appState.calendarEvents.find(entry => entry.id === eventId);
+    if (!eventRecord) return;
+    const recurringOccurrence = eventRecord.recurrence && ISO_DATE_PATTERN.test(displayDate) && displayDate !== eventRecord.date;
+    const message = recurringOccurrence
+      ? `Delete "${eventRecord.title}"?\n\nThis is a recurring occurrence. Deleting will remove the original event from ${eventRecord.date}.`
+      : `Delete "${eventRecord.title}"?`;
+    if (!confirm(message)) return;
+    appState.calendarEvents = appState.calendarEvents.filter(entry => entry.id !== eventId);
+    if (uiState.calendarSelectedEventId === eventId) {
+      clearCalendarSelection();
+    }
+    if (uiState.calendarEditingEventId === eventId) {
+      uiState.calendarEditingEventId = null;
+    }
+    saveState();
+    renderApp();
+  }
+
+  // ── add/edit event form ───────────────────────────────────────────────────
+  const calAddForm = document.getElementById("cal-add-form");
+  const calEditCancelBtn = document.getElementById("cal-edit-cancel");
+
+  if (calEditCancelBtn) {
+    calEditCancelBtn.addEventListener("click", () => {
+      uiState.calendarEditingEventId = null;
+      renderApp();
+    });
+  }
+
+  calAddForm.addEventListener("submit", e => {
     e.preventDefault();
-    const form  = e.target;
-    const title     = form.title.value.trim();
-    const date      = form.date.value;
+    const form = e.target;
+    const title = form.title.value.trim();
+    const date = form.date.value;
     const startTime = normalizeTime(form.startTime.value || "");
-    const endTime   = normalizeTime(form.endTime.value || "");
-    const note      = form.note.value.trim();
-    const color     = form.color.value || "green";
+    const endTime = normalizeTime(form.endTime.value || "");
+    const note = form.note.value.trim();
+    const color = form.color.value || "green";
     const recurrence = form.recurrence.value || "";
-    const msg       = document.getElementById("cal-form-msg");
+    const msg = document.getElementById("cal-form-msg");
 
     if (!title) { msg.textContent = "Please enter a title."; msg.style.display = ""; return; }
     if (!date)  { msg.textContent = "Please pick a date.";   msg.style.display = ""; return; }
 
     const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
     if (startTime && !timePattern.test(startTime)) {
-      msg.textContent = "Start time must be in HH:MM format (e.g. 09:00 or 14:30)."; msg.style.display = ""; return;
+      msg.textContent = "Start time must be in HH:MM format (e.g. 09:00 or 14:30).";
+      msg.style.display = "";
+      return;
     }
     if (endTime && !timePattern.test(endTime)) {
-      msg.textContent = "End time must be in HH:MM format (e.g. 09:00 or 14:30)."; msg.style.display = ""; return;
+      msg.textContent = "End time must be in HH:MM format (e.g. 09:00 or 14:30).";
+      msg.style.display = "";
+      return;
     }
-    // Overnight events (endTime < startTime) are valid — no rejection here.
     msg.style.display = "none";
 
-    // navigate to the week/day containing the new event
-    if (viewMode === "day") {
-      uiState.calendarWeekStart = date;
-    } else {
-      uiState.calendarWeekStart = mondayOfWeek(new Date(date + "T12:00:00"));
+    const editingId = uiState.calendarEditingEventId;
+    if (editingId) {
+      const eventRecord = appState.calendarEvents.find(entry => entry.id === editingId);
+      if (!eventRecord) {
+        uiState.calendarEditingEventId = null;
+        msg.textContent = "This event no longer exists.";
+        msg.style.display = "";
+        renderApp();
+        return;
+      }
+      eventRecord.title = title;
+      eventRecord.date = date;
+      eventRecord.time = startTime;
+      eventRecord.endTime = endTime;
+      eventRecord.note = note;
+      eventRecord.color = color;
+      eventRecord.recurrence = recurrence;
+      uiState.calendarEditingEventId = null;
+      setCalendarSelection(eventRecord.id, date);
+      navigateCalendarToDate(date);
+      saveState();
+      renderApp();
+      return;
     }
 
-    appState.calendarEvents.push(createCalendarEvent({ title, date, time: startTime, endTime, note, color, recurrence }));
+    const newEvent = createCalendarEvent({ title, date, time: startTime, endTime, note, color, recurrence });
+    appState.calendarEvents.push(newEvent);
+    setCalendarSelection(newEvent.id, date);
+    navigateCalendarToDate(date);
     saveState();
     renderApp();
   });
 
-  // ── delete event (grid + upcoming list) ──────────────────────────────────
+  // ── selected event actions panel ──────────────────────────────────────────
+  function setCalendarActionMessage(text, tone = "error") {
+    const msg = document.getElementById("cal-action-msg");
+    if (!msg) return;
+    msg.textContent = text;
+    msg.dataset.tone = tone;
+    msg.style.display = text ? "" : "none";
+  }
+
+  if (selectedEvent) {
+    const selectedDate = selectedEventDate || selectedEvent.date;
+    const closeBtn = document.getElementById("cal-action-close");
+    const editBtn = document.getElementById("cal-action-edit");
+    const duplicateBtn = document.getElementById("cal-action-duplicate");
+    const deleteBtn = document.getElementById("cal-action-delete");
+    const copyForm = document.getElementById("cal-copy-form");
+    const copyDateInput = document.getElementById("cal-copy-date");
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        uiState.calendarEditingEventId = null;
+        clearCalendarSelection();
+        renderApp();
+      });
+    }
+
+    if (editBtn) {
+      editBtn.addEventListener("click", () => {
+        uiState.calendarEditingEventId = selectedEvent.id;
+        setCalendarSelection(selectedEvent.id, selectedDate);
+        renderApp();
+      });
+    }
+
+    if (duplicateBtn) {
+      duplicateBtn.addEventListener("click", () => {
+        const duplicatedEvent = cloneCalendarEvent(selectedEvent, selectedDate);
+        appState.calendarEvents.push(duplicatedEvent);
+        uiState.calendarEditingEventId = null;
+        setCalendarSelection(duplicatedEvent.id, duplicatedEvent.date);
+        navigateCalendarToDate(duplicatedEvent.date);
+        saveState();
+        renderApp();
+      });
+    }
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", () => {
+        deleteCalendarEventById(selectedEvent.id, selectedDate);
+      });
+    }
+
+    if (copyDateInput) {
+      copyDateInput.addEventListener("change", () => {
+        uiState.calendarCopyTargetDate = copyDateInput.value || "";
+        setCalendarActionMessage("");
+      });
+    }
+
+    if (copyForm) {
+      copyForm.addEventListener("submit", event => {
+        event.preventDefault();
+        const copyDate = copyDateInput ? copyDateInput.value : "";
+        if (!ISO_DATE_PATTERN.test(copyDate)) {
+          setCalendarActionMessage("Please choose a valid date.");
+          return;
+        }
+        const copiedEvent = cloneCalendarEvent(selectedEvent, copyDate);
+        appState.calendarEvents.push(copiedEvent);
+        uiState.calendarEditingEventId = null;
+        setCalendarSelection(copiedEvent.id, copiedEvent.date);
+        navigateCalendarToDate(copiedEvent.date);
+        saveState();
+        renderApp();
+      });
+    }
+  }
+
+  // ── event click actions + delete shortcuts ───────────────────────────────
+  let suppressCalendarEventSelectionUntil = 0;
+
   document.getElementById("cal-week-grid").addEventListener("click", e => {
-    const btn = e.target.closest(".cal-del-btn");
-    if (!btn) return;
-    const ev = appState.calendarEvents.find(ev => ev.id === btn.dataset.id);
-    if (!ev) return;
-    if (!confirm(`Delete "${ev.title}"?`)) return;
-    appState.calendarEvents = appState.calendarEvents.filter(ev => ev.id !== btn.dataset.id);
-    saveState();
+    const deleteButton = e.target.closest(".cal-del-btn");
+    if (deleteButton) {
+      const eventEl = deleteButton.closest("[data-display-date]");
+      const displayDate = eventEl?.dataset.displayDate || "";
+      deleteCalendarEventById(deleteButton.dataset.id, displayDate);
+      return;
+    }
+
+    if (Date.now() < suppressCalendarEventSelectionUntil) return;
+
+    const eventEl = e.target.closest(".cal-tg-event, .cal-week-event");
+    if (!eventEl || !eventEl.dataset.id) return;
+    const displayDate = eventEl.dataset.displayDate || eventEl.closest(".cal-tg-col")?.dataset.date || "";
+    setCalendarSelection(eventEl.dataset.id, displayDate);
+    uiState.calendarEditingEventId = null;
     renderApp();
   });
 
   document.getElementById("cal-upcoming").addEventListener("click", e => {
-    const btn = e.target.closest(".cal-del-btn");
-    if (!btn) return;
-    const ev = appState.calendarEvents.find(ev => ev.id === btn.dataset.id);
-    if (!ev) return;
-    if (!confirm(`Delete "${ev.title}"?`)) return;
-    appState.calendarEvents = appState.calendarEvents.filter(ev => ev.id !== btn.dataset.id);
-    saveState();
+    const deleteButton = e.target.closest(".cal-del-btn");
+    if (deleteButton) {
+      const row = deleteButton.closest(".calendar-event-item");
+      const displayDate = row?.dataset.displayDate || "";
+      deleteCalendarEventById(deleteButton.dataset.id, displayDate);
+      return;
+    }
+
+    const row = e.target.closest(".calendar-event-item");
+    if (!row || !row.dataset.id) return;
+    setCalendarSelection(row.dataset.id, row.dataset.displayDate || "");
+    uiState.calendarEditingEventId = null;
     renderApp();
   });
 
@@ -4069,6 +4357,8 @@ function renderCalendar() {
         startX: ev.clientX,
         startOff: rawStart,
         endOff: rawEnd,
+        displayDate: evEl.dataset.displayDate || calEv.date,
+        didMove: false,
       };
       evEl.classList.add("cal-tg-event--dragging");
       document.body.style.cursor = (isResTop || isResBot) ? "ns-resize" : "grabbing";
@@ -4077,6 +4367,9 @@ function renderCalendar() {
 
     document.addEventListener("mousemove", ev => {
       if (!drag) return;
+      if (Math.abs(ev.clientY - drag.startY) > 3 || Math.abs(ev.clientX - drag.startX) > 3) {
+        drag.didMove = true;
+      }
       const dOff = (ev.clientY - drag.startY) / HOUR_PX;
       const { type, startOff, endOff, evEl } = drag;
       if (type === "move") {
@@ -4110,25 +4403,46 @@ function renderCalendar() {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       const dOff = (ev.clientY - drag.startY) / HOUR_PX;
-      const { type, id, startOff, endOff, evEl } = drag;
+      const { type, id, startOff, endOff, evEl, displayDate, didMove } = drag;
       const calEv = appState.calendarEvents.find(e => e.id === id);
+      let didChange = false;
       if (calEv) {
-        if (type === "move") {
+        if (type === "move" && !didMove) {
+          setCalendarSelection(id, displayDate || calEv.date);
+          uiState.calendarEditingEventId = null;
+          suppressCalendarEventSelectionUntil = Date.now() + 220;
+        } else if (type === "move") {
           const dur = endOff - startOff;
           const newStart = Math.max(0, Math.min(23.75, snapOff(startOff + dOff)));
-          calEv.time    = offToTimeStr(newStart);
-          calEv.endTime = offToTimeStr(newStart + dur);
+          const nextStart = offToTimeStr(newStart);
+          const nextEnd = offToTimeStr(newStart + dur);
           const targetCol = getColAt(ev.clientX);
-          if (targetCol && targetCol.dataset.date) calEv.date = targetCol.dataset.date;
+          const nextDate = (targetCol && targetCol.dataset.date) ? targetCol.dataset.date : calEv.date;
+          if (calEv.time !== nextStart || calEv.endTime !== nextEnd || calEv.date !== nextDate) {
+            calEv.time = nextStart;
+            calEv.endTime = nextEnd;
+            calEv.date = nextDate;
+            didChange = true;
+          }
         } else if (type === "resize-bot") {
           const newEnd = Math.max(startOff + 0.25, snapOff(startOff + (endOff - startOff) + dOff));
-          calEv.endTime = offToTimeStr(newEnd);
+          const nextEnd = offToTimeStr(newEnd);
+          if (calEv.endTime !== nextEnd) {
+            calEv.endTime = nextEnd;
+            didChange = true;
+          }
         } else if (type === "resize-top") {
           let newStart = Math.max(0, snapOff(startOff + dOff));
           newStart = Math.min(newStart, endOff - 0.25);
-          calEv.time = offToTimeStr(newStart);
+          const nextStart = offToTimeStr(newStart);
+          if (calEv.time !== nextStart) {
+            calEv.time = nextStart;
+            didChange = true;
+          }
         }
-        saveState();
+        if (didChange) {
+          saveState();
+        }
       }
       evEl.classList.remove("cal-tg-event--dragging");
       drag = null;
