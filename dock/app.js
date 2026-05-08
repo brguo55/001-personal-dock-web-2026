@@ -3335,7 +3335,7 @@ function renderCalendar() {
   const DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const COLOR_OPTIONS = [
     "green", "rose", "purple", "blue", "teal",
-    "lime", "teal-blue", "brown", "slate", "gray"
+    "lime", "teal-blue", "brown", "slate", "apricot", "gray"
   ];
 
   const COLOR_TYPE_LABELS = (() => {
@@ -3346,18 +3346,12 @@ function renderCalendar() {
       ])
     );
 
-    const setByFromEnd = (positionFromEnd, label) => {
-      const colorKey = COLOR_OPTIONS[COLOR_OPTIONS.length - positionFromEnd];
-      if (colorKey) {
-        labels[colorKey] = label;
-      }
-    };
-
-    // Keep color circle order unchanged; only map meaning by existing positions.
-    setByFromEnd(1, "Schlafen");
-    setByFromEnd(5, "Fitness");
-    setByFromEnd(4, "Besprechung");
-    setByFromEnd(6, "Verabredung");
+    labels.teal = "Verabredung";
+    labels.lime = "Fitness";
+    labels["teal-blue"] = "Besprechung";
+    labels.slate = "Part-Time";
+    labels.apricot = "Full-Time";
+    labels.gray = "Schlafen";
 
     // Backward compatibility for older events stored with "pink".
     labels.pink = labels.green || "Green";
@@ -3366,6 +3360,8 @@ function renderCalendar() {
   })();
 
   function getCalendarColorTypeLabel(color) {
+    if (color === "slate") return "Slate / Part-Time";
+    if (color === "apricot") return "Apricot / Full-Time";
     return COLOR_TYPE_LABELS[color] || "General";
   }
 
@@ -3454,6 +3450,7 @@ function renderCalendar() {
          : color === "teal-blue" ? "#1b8fa8"
          : color === "brown"     ? "#8b5e3c"
          : color === "slate"     ? "#4a6eaa"
+      : color === "apricot"   ? "#f2b784"
          : color === "gray"      ? "#7a8a9a"
          : "var(--green)";
   }
@@ -3467,6 +3464,41 @@ function renderCalendar() {
   function formatTimeRange(startTime, endTime) {
     if (!startTime) return "";
     return endTime ? `${formatTime(startTime)} – ${formatTime(endTime)}` : formatTime(startTime);
+  }
+
+  function occurrenceDateTime(eventItem, occurrenceDate) {
+    const [year, month, day] = occurrenceDate.split("-").map(Number);
+    const timeMatch = /^([01][0-9]|2[0-3]):([0-5][0-9])$/.exec(formatTime(eventItem.time || ""));
+    const hour = timeMatch ? Number(timeMatch[1]) : 0;
+    const minute = timeMatch ? Number(timeMatch[2]) : 0;
+    return new Date(year, month - 1, day, hour, minute, 0, 0);
+  }
+
+  function getNextUpcomingOccurrence() {
+    const LOOKAHEAD_DAYS = 548;
+    const searchAnchor = new Date(now);
+    searchAnchor.setHours(12, 0, 0, 0);
+
+    for (let offset = 0; offset <= LOOKAHEAD_DAYS; offset += 1) {
+      const cursor = new Date(searchAnchor);
+      cursor.setDate(searchAnchor.getDate() + offset);
+      const dateStr = toISODateString(cursor);
+
+      const dayCandidates = eventsForDate(dateStr)
+        .map(eventItem => {
+          const startsAt = occurrenceDateTime(eventItem, dateStr);
+          if (startsAt <= now) return null;
+          return { eventItem, displayDate: dateStr, startsAt };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.startsAt - b.startsAt || a.eventItem.title.localeCompare(b.eventItem.title));
+
+      if (dayCandidates.length) {
+        return dayCandidates[0];
+      }
+    }
+
+    return null;
   }
 
   // ── time-grid constants & helpers ─────────────────────────────────────────
@@ -3629,17 +3661,15 @@ function renderCalendar() {
   }).join("");
 
   // ── upcoming events sidebar ───────────────────────────────────────────────
-  const upcomingEvents = appState.calendarEvents
-    .filter(e => e.date >= todayStr)
-    .sort((a, b) => a.date !== b.date ? (a.date < b.date ? -1 : 1) : (a.time || "99:99") < (b.time || "99:99") ? -1 : 1)
-    .slice(0, 15);
+  const nextUpcoming = getNextUpcomingOccurrence();
 
-  const upcomingHtml = upcomingEvents.length === 0
+  const upcomingHtml = !nextUpcoming
     ? `<li><div class="empty-state">No upcoming events.</div></li>`
-    : upcomingEvents.map(e => {
+    : (() => {
+        const e = nextUpcoming.eventItem;
+        const displayDate = nextUpcoming.displayDate;
         const typeLabel = getCalendarColorTypeLabel(e.color);
         const timeRange = formatTimeRange(e.time, e.endTime);
-        const displayDate = e._virtual || e.date;
         const isSelected = selectedEvent && selectedEvent.id === e.id && selectedEventDate === displayDate;
         const originDate = new Date(e.date + "T12:00:00");
         const recurLabel = e.recurrence === "weekly"  ? ` · Weekly on ${DAY_FULL[originDate.getDay()]}`
@@ -3656,7 +3686,7 @@ function renderCalendar() {
             <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
           </div>
         </li>`;
-      }).join("");
+      })();
 
   const colorSwatches = COLOR_OPTIONS.map(c => {
     const typeLabel = getCalendarColorTypeLabel(c);
