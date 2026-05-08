@@ -5984,6 +5984,17 @@ function renderExpenseTracker() {
     { id: "year", label: "This Year" }
   ];
 
+  const EXPENSE_CATEGORY_DETAILS = {
+    Groceries: {
+      description: "Food and grocery shopping, including daily essentials.",
+      examples: EXPENSE_TRACKER_STARTER_MERCHANTS.Groceries
+    },
+    Household: {
+      description: "Household supplies, Walmart-style purchases, and misc daily items.",
+      examples: EXPENSE_TRACKER_STARTER_MERCHANTS.Household
+    }
+  };
+
   function normalizeExpenseCategory(value) {
     return EXPENSE_TRACKER_CATEGORIES.includes(value) ? value : EXPENSE_TRACKER_DEFAULT_CATEGORY;
   }
@@ -6096,6 +6107,13 @@ function renderExpenseTracker() {
     return `R${fixed}`;
   }
 
+  function formatSummaryTotals(totals) {
+    const safeUsd = Number.isFinite(totals.USD) ? totals.USD : 0;
+    const safeRmb = Number.isFinite(totals.RMB) ? totals.RMB : 0;
+    const usdText = safeUsd === 0 ? "$0" : `$${safeUsd.toFixed(2)}`;
+    return `${usdText} + ${formatExpenseAmount(safeRmb, "RMB")}`;
+  }
+
   function getWeekStart(dateObj) {
     const weekStart = new Date(dateObj);
     weekStart.setHours(0, 0, 0, 0);
@@ -6105,43 +6123,36 @@ function renderExpenseTracker() {
     return weekStart;
   }
 
-  function getTotalsForRange(entries, startDate, endDate) {
+  function getPeriodRange(periodId) {
+    const now = new Date();
+
+    if (periodId === "month") {
+      const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return { startDate, endDate };
+    }
+
+    if (periodId === "year") {
+      const startDate = new Date(now.getFullYear(), 0, 1);
+      const endDate = new Date(now.getFullYear() + 1, 0, 1);
+      return { startDate, endDate };
+    }
+
+    const startDate = getWeekStart(now);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 7);
+    return { startDate, endDate };
+  }
+
+  function getTotalsForEntries(entries) {
     return entries.reduce(
       (totals, entry) => {
-        const date = parseExpenseDate(entry.date);
-
-        if (!date || date < startDate || date >= endDate) {
-          return totals;
-        }
-
-        totals[entry.currency] += entry.amount;
+        const currency = entry.currency === "RMB" ? "RMB" : "USD";
+        totals[currency] += entry.amount;
         return totals;
       },
       { USD: 0, RMB: 0 }
     );
-  }
-
-  function getExpenseSummaries(entries) {
-    const now = new Date();
-    const weekStart = getWeekStart(now);
-    const nextWeek = new Date(weekStart);
-    nextWeek.setDate(nextWeek.getDate() + 7);
-
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-    const yearStart = new Date(now.getFullYear(), 0, 1);
-    const nextYear = new Date(now.getFullYear() + 1, 0, 1);
-
-    return {
-      week: getTotalsForRange(entries, weekStart, nextWeek),
-      month: getTotalsForRange(entries, monthStart, nextMonth),
-      year: getTotalsForRange(entries, yearStart, nextYear)
-    };
-  }
-
-  function formatSummaryTotals(totals) {
-    return `${formatExpenseAmount(totals.USD, "USD")} + ${formatExpenseAmount(totals.RMB, "RMB")}`;
   }
 
   function isStarterPlaceholderEntry(entry) {
@@ -6161,9 +6172,11 @@ function renderExpenseTracker() {
     });
   }
 
-  function renderExpenseEntries(listElement, entries, emptyMessage) {
+  function renderRecentExpenseEntries(listElement, entries) {
+    listElement.innerHTML = "";
+
     if (entries.length === 0) {
-      listElement.appendChild(createEmptyState(emptyMessage));
+      listElement.appendChild(createEmptyState("No expenses logged yet. Add your first expense above."));
       return;
     }
 
@@ -6176,8 +6189,15 @@ function renderExpenseTracker() {
       const meta = document.createElement("span");
       title.textContent = entry.merchant;
       meta.className = "note-meta";
-      meta.textContent = `${formatExpenseDate(entry.date)}${entry.note ? ` \u00b7 ${entry.note}` : ""}`;
+      meta.textContent = `${entry.category || EXPENSE_TRACKER_DEFAULT_CATEGORY} \u00b7 ${formatExpenseDate(entry.date)}`;
       copy.append(title, meta);
+
+      if (entry.note) {
+        const note = document.createElement("p");
+        note.className = "expense-history-note";
+        note.textContent = entry.note;
+        copy.appendChild(note);
+      }
 
       const amountWrap = document.createElement("div");
       amountWrap.style.textAlign = "right";
@@ -6190,31 +6210,54 @@ function renderExpenseTracker() {
     });
   }
 
-  function renderStarterMerchants(listElement, merchants) {
-    merchants.forEach(merchant => {
-      const item = document.createElement("li");
-      item.className = "note-item";
-      const title = document.createElement("strong");
-      title.textContent = merchant;
-      item.appendChild(title);
-      listElement.appendChild(item);
+  function getEntriesForPeriod(entries, periodId) {
+    const { startDate, endDate } = getPeriodRange(periodId);
+    return entries.filter(entry => {
+      const date = parseExpenseDate(entry.date);
+      return Boolean(date) && date >= startDate && date < endDate;
     });
   }
 
   const expenseState = loadExpenseTrackerState();
-  const entriesByCategory = EXPENSE_TRACKER_CATEGORIES.reduce((acc, category) => {
-    acc[category] = sortExpenseEntries(
-      expenseState.entries.filter(entry => entry.category === category && !isStarterPlaceholderEntry(entry))
-    );
-    return acc;
-  }, {});
-  const summaries = getExpenseSummaries(expenseState.entries);
+  const cleanedEntries = expenseState.entries.filter(entry => !isStarterPlaceholderEntry(entry));
 
   const periodButtonsHtml = EXPENSE_PERIODS
     .map(period => `<button type="button" class="nav-btn expense-period-btn${period.id === "week" ? " is-active" : ""}" data-period="${period.id}">${period.label}</button>`)
     .join("");
   const categoryOptionsHtml = EXPENSE_TRACKER_CATEGORIES
     .map(category => `<option value="${category}">${category}</option>`)
+    .join("");
+  const categoryCardsHtml = EXPENSE_TRACKER_CATEGORIES
+    .map(category => {
+      const details = EXPENSE_CATEGORY_DETAILS[category] || { description: "", examples: [] };
+      const exampleChips = details.examples
+        .map(merchant => `<span class="expense-chip">${merchant}</span>`)
+        .join("");
+
+      return `
+        <article class="panel expense-category-card">
+          <div>
+            <h3 class="panel-title">${category}</h3>
+            <p class="panel-subtitle">${details.description}</p>
+          </div>
+
+          <div class="expense-category-metrics">
+            <div class="expense-category-metric">
+              <span>Selected period total</span>
+              <strong data-category-total="${category}">$0 + R0</strong>
+            </div>
+            <div class="expense-category-metric">
+              <span>Entries</span>
+              <strong data-category-count="${category}">0</strong>
+            </div>
+          </div>
+
+          <div class="expense-chip-row" aria-label="${category} example merchants">
+            ${exampleChips}
+          </div>
+        </article>
+      `;
+    })
     .join("");
 
   viewRoot.innerHTML = `
@@ -6232,18 +6275,19 @@ function renderExpenseTracker() {
         </nav>
         <div class="budget-total expense-period-total">
           <span id="expensePeriodSummaryLabel">This Week</span>
-          <strong id="expensePeriodSummaryTotal"></strong>
+          <strong id="expensePeriodSummaryTotal">$0 + R0</strong>
+          <small class="expense-period-summary-note" id="expensePeriodSummaryHint">No expenses logged yet</small>
         </div>
       </div>
 
-      <article class="panel" style="margin-bottom: 16px;">
+      <article class="panel expense-quick-add-panel">
         <h3 class="panel-title">Quick Add Expense</h3>
-        <p class="panel-subtitle">Capture merchant, amount, currency, date, note, and category.</p>
+        <p class="panel-subtitle">Capture daily spending in seconds: merchant, amount, currency, date, category, and optional note.</p>
 
         <form class="gtd-form" id="expenseQuickAddForm">
           <div class="field">
             <label for="expenseMerchantInput">Merchant / Place</label>
-            <input id="expenseMerchantInput" type="text" maxlength="120" placeholder="Where did you spend?" required />
+            <input id="expenseMerchantInput" type="text" maxlength="120" placeholder="Whole Foods, Trader Joe's, Walmart" required />
           </div>
 
           <div class="field">
@@ -6281,21 +6325,15 @@ function renderExpenseTracker() {
         </form>
       </article>
 
-      <div class="gtd-grid">
-        <article class="panel">
-          <h3 class="panel-title">Groceries</h3>
-          <p class="panel-subtitle">Food and grocery purchases.</p>
-          <ul class="notes-list" id="expenseGroceriesStarterList"></ul>
-          <ul class="notes-list expense-category-entries" id="expenseGroceriesList"></ul>
-        </article>
+      <section class="gtd-grid expense-category-grid">
+        ${categoryCardsHtml}
+      </section>
 
-        <article class="panel">
-          <h3 class="panel-title">Household</h3>
-          <p class="panel-subtitle">General household and daily miscellaneous purchases.</p>
-          <ul class="notes-list" id="expenseHouseholdStarterList"></ul>
-          <ul class="notes-list expense-category-entries" id="expenseHouseholdList"></ul>
-        </article>
-      </div>
+      <article class="panel expense-history-panel">
+        <h3 class="panel-title">Recent Expenses</h3>
+        <p class="panel-subtitle">Spending history for the selected period.</p>
+        <ul class="notes-list expense-history-list" id="expenseRecentList"></ul>
+      </article>
     </section>
   `;
 
@@ -6304,11 +6342,32 @@ function renderExpenseTracker() {
   const periodSelector = document.getElementById("expensePeriodSelector");
   const periodSummaryLabel = document.getElementById("expensePeriodSummaryLabel");
   const periodSummaryTotal = document.getElementById("expensePeriodSummaryTotal");
+  const periodSummaryHint = document.getElementById("expensePeriodSummaryHint");
+  const recentList = document.getElementById("expenseRecentList");
   let activePeriod = "week";
+
+  function updateCategoryOverview(entries) {
+    EXPENSE_TRACKER_CATEGORIES.forEach(category => {
+      const categoryEntries = entries.filter(entry => entry.category === category);
+      const totals = getTotalsForEntries(categoryEntries);
+      const totalElement = viewRoot.querySelector(`[data-category-total="${category}"]`);
+      const countElement = viewRoot.querySelector(`[data-category-count="${category}"]`);
+
+      if (totalElement) {
+        totalElement.textContent = formatSummaryTotals(totals);
+      }
+
+      if (countElement) {
+        countElement.textContent = String(categoryEntries.length);
+      }
+    });
+  }
 
   function updatePeriodSummary(nextPeriod) {
     activePeriod = EXPENSE_PERIODS.some(period => period.id === nextPeriod) ? nextPeriod : "week";
     const activeOption = EXPENSE_PERIODS.find(period => period.id === activePeriod) || EXPENSE_PERIODS[0];
+    const periodEntries = sortExpenseEntries(getEntriesForPeriod(cleanedEntries, activePeriod));
+    const summaryTotals = getTotalsForEntries(periodEntries);
 
     periodSelector.querySelectorAll(".expense-period-btn").forEach(button => {
       button.classList.toggle("is-active", button.dataset.period === activePeriod);
@@ -6316,7 +6375,13 @@ function renderExpenseTracker() {
     });
 
     periodSummaryLabel.textContent = activeOption.label;
-    periodSummaryTotal.textContent = formatSummaryTotals(summaries[activePeriod]);
+    periodSummaryTotal.textContent = formatSummaryTotals(summaryTotals);
+    periodSummaryHint.textContent = periodEntries.length > 0
+      ? "Total spending for selected period"
+      : "No expenses logged yet";
+
+    updateCategoryOverview(periodEntries);
+    renderRecentExpenseEntries(recentList, periodEntries);
   }
 
   periodSelector.addEventListener("click", event => {
@@ -6326,26 +6391,6 @@ function renderExpenseTracker() {
   });
 
   updatePeriodSummary("week");
-
-  const groceriesStarterList = document.getElementById("expenseGroceriesStarterList");
-  renderStarterMerchants(groceriesStarterList, EXPENSE_TRACKER_STARTER_MERCHANTS.Groceries);
-
-  const groceriesList = document.getElementById("expenseGroceriesList");
-  renderExpenseEntries(
-    groceriesList,
-    entriesByCategory.Groceries,
-    "No grocery expenses yet. Use Quick Add Expense to log your first item."
-  );
-
-  const householdStarterList = document.getElementById("expenseHouseholdStarterList");
-  renderStarterMerchants(householdStarterList, EXPENSE_TRACKER_STARTER_MERCHANTS.Household);
-
-  const householdList = document.getElementById("expenseHouseholdList");
-  renderExpenseEntries(
-    householdList,
-    entriesByCategory.Household,
-    "No household expenses yet. Add one from Quick Add Expense."
-  );
 
   document.getElementById("expenseQuickAddForm").addEventListener("submit", event => {
     event.preventDefault();
