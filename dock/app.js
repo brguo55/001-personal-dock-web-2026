@@ -322,14 +322,67 @@ const cnyFormatter = new Intl.NumberFormat("zh-CN", {
 // Update this value manually to change the exchange rate used for totals.
 const CNY_TO_USD_RATE = 0.138;
 
+function normalizeBudgetCurrency(value) {
+  if (typeof value !== "string") {
+    return "USD";
+  }
+
+  const normalized = value.trim().toUpperCase();
+
+  if (normalized === "CNY" || normalized === "RMB" || normalized === "\u00a5" || normalized === "R") {
+    return "CNY";
+  }
+
+  return "USD";
+}
+
+function formatBudgetUsdAmount(amount) {
+  const safeAmount = Number(amount);
+  return `$${(Number.isFinite(safeAmount) ? safeAmount : 0).toFixed(2)}`;
+}
+
+function formatBudgetRmbAmount(amount) {
+  const safeAmount = Number(amount);
+  const fixed = (Number.isFinite(safeAmount) ? safeAmount : 0)
+    .toFixed(2)
+    .replace(/\.00$/, "")
+    .replace(/(\.\d)0$/, "$1");
+
+  return `R${fixed}`;
+}
+
+function formatBudgetSplitTotalDisplay(totals) {
+  const hasUsd = Boolean(totals.hasUsd);
+  const hasRmb = Boolean(totals.hasRmb);
+
+  if (!hasUsd && !hasRmb) {
+    return "$0 + R0";
+  }
+
+  if (hasUsd && hasRmb) {
+    return `${formatBudgetUsdAmount(totals.usd)} + ${formatBudgetRmbAmount(totals.rmb)}`;
+  }
+
+  if (hasUsd) {
+    return formatBudgetUsdAmount(totals.usd);
+  }
+
+  return formatBudgetRmbAmount(totals.rmb);
+}
+
 function itemAmountInUSD(item) {
-  const currency = item.currency || "USD";
+  const currency = normalizeBudgetCurrency(item?.currency);
   return currency === "CNY" ? item.amount * CNY_TO_USD_RATE : item.amount;
 }
 
 function formatBudgetAmount(amount, currency) {
-  if (currency === "CNY") return cnyFormatter.format(amount || 0);
-  return currencyFormatter.format(amount || 0);
+  const normalizedCurrency = normalizeBudgetCurrency(currency);
+
+  if (normalizedCurrency === "CNY") {
+    return formatBudgetRmbAmount(amount);
+  }
+
+  return formatBudgetUsdAmount(amount);
 }
 
 const viewRoot = document.getElementById("viewRoot");
@@ -453,7 +506,7 @@ function createBudgetItem(title, amount, checked = false, currency = "USD") {
     id: createId(),
     title,
     amount: Number(amount) || 0,
-    currency: currency === "CNY" ? "CNY" : "USD",
+    currency: normalizeBudgetCurrency(currency),
     checked,
     itemNote: "",
     reminders: [],
@@ -797,7 +850,7 @@ function normalizeBudgetCategoryRecord(category) {
             id: item.id || createId(),
             title,
             amount,
-            currency: item?.currency === "CNY" ? "CNY" : "USD",
+            currency: normalizeBudgetCurrency(item?.currency),
             checked: Boolean(item.checked),
             itemNote: typeof item?.itemNote === "string" ? item.itemNote : "",
             reminders: Array.isArray(item?.reminders)
@@ -5605,10 +5658,23 @@ function renderBudgetPlanner() {
     ? null
     : getBudgetCategoryById(selectedCategory);
   const editorTarget = uiState.budgetEditorId ? findBudgetItem(uiState.budgetEditorId) : null;
-  const currentTotal = visibleEntries.reduce((sum, entry) => sum + itemAmountInUSD(entry.item), 0);
-  // CNY-only subtotal for the secondary display
-  const cnySub = visibleEntries.filter(e => (e.item.currency || "USD") === "CNY").reduce((s, e) => s + e.item.amount, 0);
-  const hasCNY  = visibleEntries.some(e => (e.item.currency || "USD") === "CNY");
+  const totalInView = visibleEntries.reduce(
+    (totals, entry) => {
+      const amount = Number(entry.item.amount) || 0;
+      const currency = normalizeBudgetCurrency(entry.item.currency);
+
+      if (currency === "CNY") {
+        totals.hasRmb = true;
+        totals.rmb += amount;
+      } else {
+        totals.hasUsd = true;
+        totals.usd += amount;
+      }
+
+      return totals;
+    },
+    { usd: 0, rmb: 0, hasUsd: false, hasRmb: false }
+  );
 
   viewRoot.innerHTML = `
     <section class="budget-layout">
@@ -5685,8 +5751,7 @@ function renderBudgetPlanner() {
 
           <div class="budget-total">
             <span>Total in view</span>
-            <strong>${formatCurrency(currentTotal)}</strong>
-            ${hasCNY ? `<small style="font-size:.72rem;color:var(--muted);display:block;margin-top:2px;">incl. ${cnyFormatter.format(cnySub)} CNY @ ${CNY_TO_USD_RATE}</small>` : ""}
+            <strong>${formatBudgetSplitTotalDisplay(totalInView)}</strong>
           </div>
         </div>
 
@@ -5706,8 +5771,8 @@ function renderBudgetPlanner() {
           <div class="field">
             <label for="budgetCurrencySelect">Currency</label>
             <select id="budgetCurrencySelect">
-              <option value="USD">USD</option>
-              <option value="CNY">CNY</option>
+              <option value="USD">$</option>
+              <option value="CNY">R</option>
             </select>
           </div>
 
@@ -5868,7 +5933,7 @@ function renderBudgetPlanner() {
     const currencySelect = document.getElementById("budgetCurrencySelect");
     const title = titleInput.value.trim();
     const amount = Number(amountInput.value);
-    const currency = currencySelect?.value === "CNY" ? "CNY" : "USD";
+    const currency = normalizeBudgetCurrency(currencySelect?.value);
     const categoryId = categorySelect.value;
 
     if (!title || Number.isNaN(amount) || amount < 0) {
@@ -7931,7 +7996,7 @@ function populateBudgetForm(editorTarget) {
     document.getElementById("budgetAmountInput").value = editorTarget.item.amount;
     const currSel = document.getElementById("budgetCurrencySelect");
     if (currSel) {
-      currSel.value = editorTarget.item.currency || "USD";
+      currSel.value = normalizeBudgetCurrency(editorTarget.item.currency || "USD");
       // Fire change so the custom-select widget label updates
       currSel.dispatchEvent(new Event("change", { bubbles: true }));
     }
@@ -8024,7 +8089,7 @@ function renderBudgetList(entries) {
       const toIdx     = toItems.findIndex(it => it.id === targetId);
       if (fromIdx === -1 || toIdx === -1) return;
       const [movedItem] = fromItems.splice(fromIdx, 1);
-      movedItem.currency = movedItem.currency || "USD"; // keep field intact
+      movedItem.currency = normalizeBudgetCurrency(movedItem.currency || "USD");
       toItems.splice(toIdx, 0, movedItem);
     }
 
