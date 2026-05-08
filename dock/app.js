@@ -5673,246 +5673,228 @@ function createBitsEntry({ title, content }) {
 function renderBits() {
   const entries = loadBitsEntries();
 
-  if (!("bitsEditingId" in uiState)) uiState.bitsEditingId = null;
-  if (!("bitsAdding" in uiState)) uiState.bitsAdding = false;
+  if (!("bitsActiveId" in uiState)) uiState.bitsActiveId = null;
+  if (!("bitsIsCreating" in uiState)) uiState.bitsIsCreating = false;
 
-  const editing = uiState.bitsEditingId;
-  const adding  = uiState.bitsAdding;
+  // Backward compatibility with previous Bits editor session flags.
+  if (uiState.bitsEditingId && !uiState.bitsActiveId) {
+    uiState.bitsActiveId = uiState.bitsEditingId;
+  }
+  if (uiState.bitsAdding) {
+    uiState.bitsIsCreating = true;
+  }
+  uiState.bitsEditingId = null;
+  uiState.bitsAdding = false;
+
+  if (entries.length === 0) {
+    uiState.bitsActiveId = null;
+    uiState.bitsIsCreating = true;
+  } else if (!uiState.bitsIsCreating && !entries.some(entry => entry.id === uiState.bitsActiveId)) {
+    uiState.bitsActiveId = entries[0].id;
+  }
+
+  const activeEntry = entries.find(entry => entry.id === uiState.bitsActiveId) || null;
+  const isCreating = uiState.bitsIsCreating || !activeEntry;
+
+  function previewText(text, maxLength = 88) {
+    const cleaned = (text || "").replace(/\s+/g, " ").trim();
+
+    if (!cleaned) {
+      return "No note yet.";
+    }
+
+    return cleaned.length <= maxLength ? cleaned : `${cleaned.slice(0, maxLength)}...`;
+  }
 
   viewRoot.innerHTML = `
-    <div class="bits-view">
-      <div class="bits-header">
-        <div>
-          <h2 class="panel-title">Bits</h2>
-          <p class="panel-subtitle">Small fragments, quick thoughts, scattered everyday notes.</p>
+    <div class="bits-layout">
+      <aside class="bits-sidebar">
+        <div class="bits-sidebar__header">
+          <span class="budget-sidebar__heading">Saved Bits</span>
+          <button type="button" class="tiny-btn" id="bitsNewBtn">+ New</button>
         </div>
-        ${!adding && !editing ? `<button type="button" class="ghost-btn" id="bitsAddBtn">+ Add Bit</button>` : ""}
-      </div>
+        <ol class="bits-list bits-list--sidebar" id="bitsList"></ol>
+      </aside>
 
-      ${adding ? `
-        <form class="bits-form" id="bitsAddForm" novalidate>
+      <section class="bits-main">
+        <div class="budget-main__top">
+          <div>
+            <h2 class="panel-title">${isCreating ? "New Bit" : "Edit Bit"}</h2>
+            <p class="panel-subtitle">${isCreating
+              ? "Capture a new idea, fragment, or quick note."
+              : "Edit the selected Bit from the left list."}</p>
+          </div>
+          ${!isCreating ? '<button type="button" class="ghost-btn" id="bitsNewFromEditorBtn">+ New Bit</button>' : ""}
+        </div>
+
+        <form class="bits-form bits-form--editor" id="bitsEditorForm" novalidate>
           <div class="field">
-            <label for="bitsTitleInput">Title</label>
-            <input id="bitsTitleInput" name="title" type="text" maxlength="120" placeholder="Give it a short title\u2026" autocomplete="off" />
+            <label for="bitsEditorTitleInput">Title</label>
+            <input id="bitsEditorTitleInput" name="title" type="text" maxlength="120" placeholder="Give it a short title..." autocomplete="off" />
           </div>
           <div class="field">
-            <label for="bitsContentInput">Note</label>
-            <textarea id="bitsContentInput" name="content" class="bits-textarea" rows="5" maxlength="10000" placeholder="Write whatever\u2026"></textarea>
+            <label for="bitsEditorContentInput">Note</label>
+            <textarea id="bitsEditorContentInput" name="content" class="bits-textarea bits-textarea--editor" rows="14" maxlength="10000" placeholder="Write whatever..."></textarea>
           </div>
           <div class="bits-form__actions">
-            <span class="bits-form__msg" id="bitsAddMsg"></span>
-            <button type="button" class="tiny-btn" id="bitsCancelAddBtn">Cancel</button>
-            <button type="submit" class="primary-btn">Save Bit</button>
+            <span class="bits-form__msg" id="bitsEditorMsg"></span>
+            <button type="button" class="tiny-btn" id="bitsEditorCancelBtn">Cancel</button>
+            <button type="submit" class="primary-btn">${isCreating ? "Save Bit" : "Save Changes"}</button>
+            ${!isCreating ? '<button type="button" class="tiny-btn is-danger" id="bitsEditorDeleteBtn">Delete</button>' : ""}
           </div>
         </form>
-      ` : ""}
-
-      <ul class="bits-list" id="bitsList">
-        ${entries.length === 0 && !adding ? `<li class="bits-empty">No bits yet. Add your first one above.</li>` : ""}
-      </ul>
+      </section>
     </div>
   `;
 
   const bitsList = document.getElementById("bitsList");
+  const titleInput = document.getElementById("bitsEditorTitleInput");
+  const contentInput = document.getElementById("bitsEditorContentInput");
+  const editorMsg = document.getElementById("bitsEditorMsg");
 
-  // ── Render each entry card ─────────────────────────────────────────────────
-  entries.forEach(entry => {
-    const li = document.createElement("li");
-    li.className = "bits-card";
-    li.draggable = true;
-    li.dataset.id = entry.id;
+  titleInput.value = isCreating ? "" : (activeEntry ? activeEntry.title : "");
+  contentInput.value = isCreating ? "" : (activeEntry ? activeEntry.content : "");
 
-    if (editing === entry.id) {
-      // Inline edit form
+  if (entries.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "bits-empty bits-empty--sidebar";
+    empty.textContent = "No bits yet. Save your first bit from the editor.";
+    bitsList.appendChild(empty);
+  } else {
+    entries.forEach(entry => {
+      const li = document.createElement("li");
+      li.className = `bits-card${!isCreating && entry.id === uiState.bitsActiveId ? " is-active" : ""}`;
+      li.draggable = true;
+      li.dataset.id = entry.id;
+
       const handle = document.createElement("div");
       handle.className = "bits-card__handle";
       handle.setAttribute("aria-hidden", "true");
       handle.setAttribute("title", "Drag to reorder");
       handle.textContent = "\u2807";
 
-      const body = document.createElement("div");
-      body.className = "bits-card__body";
+      const selectButton = document.createElement("button");
+      selectButton.type = "button";
+      selectButton.className = "bits-card__select-btn";
 
-      const form = document.createElement("form");
-      form.className = "bits-edit-form";
-      form.setAttribute("novalidate", "");
-      form.style.cssText = "display:grid;gap:10px;";
+      const titleEl = document.createElement("span");
+      titleEl.className = "bits-card__title";
+      titleEl.textContent = entry.title || "Untitled";
 
-      const titleField = document.createElement("div");
-      titleField.className = "field";
-      titleField.innerHTML = `
-        <label for="bitsEditTitle">Title</label>
-        <input id="bitsEditTitle" type="text" maxlength="120" value="${entry.title.replace(/"/g, "&quot;")}" placeholder="Give it a short title\u2026" autocomplete="off" />
-      `;
+      const previewEl = document.createElement("span");
+      previewEl.className = "bits-card__preview";
+      previewEl.textContent = previewText(entry.content, 74);
 
-      const contentField = document.createElement("div");
-      contentField.className = "field";
-      const contentLabel = document.createElement("label");
-      contentLabel.setAttribute("for", "bitsEditContent");
-      contentLabel.textContent = "Note";
-      const contentTextarea = document.createElement("textarea");
-      contentTextarea.id = "bitsEditContent";
-      contentTextarea.className = "bits-textarea";
-      contentTextarea.rows = 5;
-      contentTextarea.maxLength = 10000;
-      contentTextarea.placeholder = "Write whatever\u2026";
-      contentTextarea.textContent = entry.content;
-      contentField.appendChild(contentLabel);
-      contentField.appendChild(contentTextarea);
-
-      const actions = document.createElement("div");
-      actions.className = "bits-form__actions";
-      const msg = document.createElement("span");
-      msg.className = "bits-form__msg";
-      const cancelBtn = document.createElement("button");
-      cancelBtn.type = "button";
-      cancelBtn.className = "tiny-btn";
-      cancelBtn.textContent = "Cancel";
-      const saveBtn = document.createElement("button");
-      saveBtn.type = "submit";
-      saveBtn.className = "primary-btn";
-      saveBtn.textContent = "Save";
-      actions.appendChild(msg);
-      actions.appendChild(cancelBtn);
-      actions.appendChild(saveBtn);
-
-      form.appendChild(titleField);
-      form.appendChild(contentField);
-      form.appendChild(actions);
-      body.appendChild(form);
-      li.appendChild(handle);
-      li.appendChild(body);
-
-      form.addEventListener("submit", evt => {
-        evt.preventDefault();
-        const title   = document.getElementById("bitsEditTitle").value;
-        const content = contentTextarea.value.trim();
-        if (!content) { msg.textContent = "Please write something."; return; }
-        const updated = entries.map(e => e.id === entry.id
-          ? { ...e, title: title.trim(), content }
-          : e);
-        saveBitsEntries(updated);
-        uiState.bitsEditingId = null;
+      selectButton.append(titleEl, previewEl);
+      selectButton.addEventListener("click", () => {
+        uiState.bitsActiveId = entry.id;
+        uiState.bitsIsCreating = false;
         renderApp();
       });
 
-      cancelBtn.addEventListener("click", () => {
-        uiState.bitsEditingId = null;
-        renderApp();
-      });
-
-    } else {
-      // Display mode
-      const handle = document.createElement("div");
-      handle.className = "bits-card__handle";
-      handle.setAttribute("aria-hidden", "true");
-      handle.setAttribute("title", "Drag to reorder");
-      handle.textContent = "\u2807";
-
-      const body = document.createElement("div");
-      body.className = "bits-card__body";
-
-      if (entry.title) {
-        const titleEl = document.createElement("div");
-        titleEl.className = "bits-card__title";
-        titleEl.textContent = entry.title;
-        body.appendChild(titleEl);
-      }
-
-      const contentEl = document.createElement("div");
-      contentEl.className = "bits-card__content";
-      contentEl.textContent = entry.content;
-      body.appendChild(contentEl);
-
-      const cardActions = document.createElement("div");
-      cardActions.className = "bits-card__actions";
-
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.className = "tiny-btn";
-      editBtn.textContent = "Edit";
-      editBtn.addEventListener("click", () => {
-        uiState.bitsEditingId = entry.id;
-        uiState.bitsAdding = false;
-        renderApp();
-      });
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "tiny-btn is-danger";
-      deleteBtn.textContent = "Delete";
-      deleteBtn.addEventListener("click", () => {
-        if (!confirm("Delete this bit? This cannot be undone.")) return;
-        const updated = entries.filter(e => e.id !== entry.id);
-        saveBitsEntries(updated);
-        if (uiState.bitsEditingId === entry.id) uiState.bitsEditingId = null;
-        renderApp();
-      });
-
-      cardActions.appendChild(editBtn);
-      cardActions.appendChild(deleteBtn);
-      body.appendChild(cardActions);
-
-      li.appendChild(handle);
-      li.appendChild(body);
-    }
-
-    bitsList.appendChild(li);
-  });
-
-  // ── Add Bit button ─────────────────────────────────────────────────────────
-  const addBtn = document.getElementById("bitsAddBtn");
-  if (addBtn) {
-    addBtn.addEventListener("click", () => {
-      uiState.bitsAdding = true;
-      uiState.bitsEditingId = null;
-      renderApp();
+      li.append(handle, selectButton);
+      bitsList.appendChild(li);
     });
   }
 
-  // ── Add form handlers ──────────────────────────────────────────────────────
-  const addForm = document.getElementById("bitsAddForm");
-  if (addForm) {
-    document.getElementById("bitsCancelAddBtn").addEventListener("click", () => {
-      uiState.bitsAdding = false;
-      renderApp();
-    });
+  function startCreateMode() {
+    uiState.bitsIsCreating = true;
+    renderApp();
+  }
 
-    addForm.addEventListener("submit", evt => {
-      evt.preventDefault();
-      const title   = document.getElementById("bitsTitleInput").value;
-      const content = document.getElementById("bitsContentInput").value.trim();
-      if (!content) {
-        document.getElementById("bitsAddMsg").textContent = "Please write something.";
+  document.getElementById("bitsNewBtn")?.addEventListener("click", startCreateMode);
+  document.getElementById("bitsNewFromEditorBtn")?.addEventListener("click", startCreateMode);
+
+  document.getElementById("bitsEditorCancelBtn")?.addEventListener("click", () => {
+    if (uiState.bitsIsCreating) {
+      if (entries.length === 0) {
+        titleInput.value = "";
+        contentInput.value = "";
+        editorMsg.textContent = "";
         return;
       }
+
+      uiState.bitsIsCreating = false;
+      if (!entries.some(entry => entry.id === uiState.bitsActiveId)) {
+        uiState.bitsActiveId = entries[0].id;
+      }
+      renderApp();
+      return;
+    }
+
+    renderApp();
+  });
+
+  document.getElementById("bitsEditorDeleteBtn")?.addEventListener("click", () => {
+    if (!activeEntry) return;
+    if (!confirm("Delete this bit? This cannot be undone.")) return;
+
+    const updated = entries.filter(entry => entry.id !== activeEntry.id);
+    saveBitsEntries(updated);
+
+    if (updated.length === 0) {
+      uiState.bitsActiveId = null;
+      uiState.bitsIsCreating = true;
+    } else {
+      uiState.bitsActiveId = updated[0].id;
+      uiState.bitsIsCreating = false;
+    }
+
+    renderApp();
+  });
+
+  document.getElementById("bitsEditorForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    const title = titleInput.value.trim();
+    const content = contentInput.value.trim();
+
+    if (!content) {
+      editorMsg.textContent = "Please write something.";
+      return;
+    }
+
+    editorMsg.textContent = "";
+
+    if (isCreating || !activeEntry) {
       const newEntry = createBitsEntry({ title, content });
       saveBitsEntries([newEntry, ...entries]);
-      uiState.bitsAdding = false;
-      renderApp();
-    });
-  }
+      uiState.bitsActiveId = newEntry.id;
+      uiState.bitsIsCreating = false;
+    } else {
+      const updated = entries.map(entry =>
+        entry.id === activeEntry.id
+          ? { ...entry, title, content }
+          : entry
+      );
+      saveBitsEntries(updated);
+      uiState.bitsActiveId = activeEntry.id;
+      uiState.bitsIsCreating = false;
+    }
 
-  // ── Drag-and-drop reordering ───────────────────────────────────────────────
+    renderApp();
+  });
+
+  // Drag-and-drop reordering.
   {
     let dragSrcId = null;
 
     function getBitsDragLi(el) {
-      while (el && !el.classList.contains("bits-card")) el = el.parentElement;
+      while (el && (!el.classList || !el.classList.contains("bits-card"))) el = el.parentElement;
       return el;
     }
 
-    bitsList.addEventListener("dragstart", e => {
-      const li = getBitsDragLi(e.target);
+    bitsList.addEventListener("dragstart", event => {
+      const li = getBitsDragLi(event.target);
       if (!li) return;
       dragSrcId = li.dataset.id;
       li.classList.add("bits-card--dragging");
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", dragSrcId);
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", dragSrcId);
     });
 
-    bitsList.addEventListener("dragend", e => {
-      const li = getBitsDragLi(e.target);
+    bitsList.addEventListener("dragend", event => {
+      const li = getBitsDragLi(event.target);
       if (li) li.classList.remove("bits-card--dragging");
       bitsList.querySelectorAll(".bits-card--drag-over").forEach(el =>
         el.classList.remove("bits-card--drag-over")
@@ -5920,34 +5902,37 @@ function renderBits() {
       dragSrcId = null;
     });
 
-    bitsList.addEventListener("dragover", e => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      const li = getBitsDragLi(e.target);
+    bitsList.addEventListener("dragover", event => {
+      const li = getBitsDragLi(event.target);
       if (!li || li.dataset.id === dragSrcId) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
       bitsList.querySelectorAll(".bits-card--drag-over").forEach(el =>
         el.classList.remove("bits-card--drag-over")
       );
       li.classList.add("bits-card--drag-over");
     });
 
-    bitsList.addEventListener("dragleave", e => {
-      const li = getBitsDragLi(e.target);
+    bitsList.addEventListener("dragleave", event => {
+      const li = getBitsDragLi(event.target);
       if (li) li.classList.remove("bits-card--drag-over");
     });
 
-    bitsList.addEventListener("drop", e => {
-      e.preventDefault();
-      const targetLi = getBitsDragLi(e.target);
+    bitsList.addEventListener("drop", event => {
+      event.preventDefault();
+      const targetLi = getBitsDragLi(event.target);
       if (!targetLi || !dragSrcId) return;
+
       const targetId = targetLi.dataset.id;
       if (targetId === dragSrcId) return;
-      const fresh = loadBitsEntries();
-      const fromIdx = fresh.findIndex(en => en.id === dragSrcId);
-      const toIdx   = fresh.findIndex(en => en.id === targetId);
-      if (fromIdx === -1 || toIdx === -1) return;
-      fresh.splice(toIdx, 0, fresh.splice(fromIdx, 1)[0]);
-      saveBitsEntries(fresh);
+
+      const freshEntries = loadBitsEntries();
+      const fromIndex = freshEntries.findIndex(entry => entry.id === dragSrcId);
+      const toIndex = freshEntries.findIndex(entry => entry.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return;
+
+      freshEntries.splice(toIndex, 0, freshEntries.splice(fromIndex, 1)[0]);
+      saveBitsEntries(freshEntries);
       renderApp();
     });
   }
