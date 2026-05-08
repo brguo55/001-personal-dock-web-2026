@@ -3161,6 +3161,37 @@ function renderCalendar() {
     "lime", "teal-blue", "brown", "slate", "gray"
   ];
 
+  const COLOR_TYPE_LABELS = (() => {
+    const labels = Object.fromEntries(
+      COLOR_OPTIONS.map(color => [
+        color,
+        color.split("-").map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")
+      ])
+    );
+
+    const setByFromEnd = (positionFromEnd, label) => {
+      const colorKey = COLOR_OPTIONS[COLOR_OPTIONS.length - positionFromEnd];
+      if (colorKey) {
+        labels[colorKey] = label;
+      }
+    };
+
+    // Keep color circle order unchanged; only map meaning by existing positions.
+    setByFromEnd(1, "Schlafen");
+    setByFromEnd(5, "Fitness");
+    setByFromEnd(4, "Besprechung");
+    setByFromEnd(6, "Verabredung");
+
+    // Backward compatibility for older events stored with "pink".
+    labels.pink = labels.green || "Green";
+
+    return labels;
+  })();
+
+  function getCalendarColorTypeLabel(color) {
+    return COLOR_TYPE_LABELS[color] || "General";
+  }
+
   // ── compute displayed days ────────────────────────────────────────────────
   function getDisplayDays() {
     const start = new Date(uiState.calendarWeekStart + "T12:00:00");
@@ -3326,7 +3357,8 @@ function renderCalendar() {
           return `<div class="cal-tg-allday__cell">
             ${evts.map(e => {
               const recurBadge = e.recurrence ? `<span class="cal-recur-badge">↻</span>` : "";
-              return `<div class="cal-week-event cal-week-event--${e.color}">
+              const typeLabel = getCalendarColorTypeLabel(e.color);
+              return `<div class="cal-week-event cal-week-event--${e.color}" title="${typeLabel}">
                 <div class="cal-week-event__top">
                   <span class="cal-week-event__title">${e.title}${recurBadge}</span>
                   <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
@@ -3361,7 +3393,8 @@ function renderCalendar() {
       const recurBadge = e.recurrence ? `<span class="cal-recur-badge">↻</span>` : "";
       const notePart   = e.note ? `<span class="cal-tg-event__note">${e.note}</span>` : "";
       const isDraggable = !e._virtual;
-      return `<div class="cal-tg-event cal-tg-event--${e.color}" style="top:${pos.top}px;height:${pos.height}px" data-id="${e.id}"${isDraggable ? "" : ' data-virtual="1"'}>
+      const typeLabel = getCalendarColorTypeLabel(e.color);
+      return `<div class="cal-tg-event cal-tg-event--${e.color}" style="top:${pos.top}px;height:${pos.height}px" data-id="${e.id}" title="${typeLabel}"${isDraggable ? "" : ' data-virtual="1"'}>
         ${isDraggable ? '<div class="cal-tg-event__resize-top"></div>' : ""}
         <div class="cal-tg-event__inner">
           <span class="cal-tg-event__title">${e.title}${recurBadge}</span>
@@ -3386,15 +3419,16 @@ function renderCalendar() {
   const upcomingHtml = upcomingEvents.length === 0
     ? `<li><div class="empty-state">No upcoming events.</div></li>`
     : upcomingEvents.map(e => {
+        const typeLabel = getCalendarColorTypeLabel(e.color);
         const timeRange = formatTimeRange(e.time, e.endTime);
         const displayDate = e._virtual || e.date;
         const originDate = new Date(e.date + "T12:00:00");
         const recurLabel = e.recurrence === "weekly"  ? ` · Weekly on ${DAY_FULL[originDate.getDay()]}`
                          : e.recurrence === "monthly" ? ` · Monthly on the ${originDate.getDate()}${[,"st","nd","rd"][((originDate.getDate()%100-20)%10)||originDate.getDate()%100] || "th"}`
                          : "";
-        const meta = [displayDate, timeRange].filter(Boolean).join(" · ") + recurLabel;
+        const meta = [typeLabel, displayDate, timeRange].filter(Boolean).join(" · ") + recurLabel;
         return `<li class="calendar-event-item">
-          <span class="calendar-event-item__dot" style="background:${dotColor(e.color)}"></span>
+          <span class="calendar-event-item__dot" style="background:${dotColor(e.color)}" title="${typeLabel}" aria-label="${typeLabel}"></span>
           <div class="calendar-event-item__copy">
             <span class="calendar-event-item__title">${e.title}</span>
             ${meta ? `<span class="calendar-event-item__meta">${meta}</span>` : ""}
@@ -3405,8 +3439,10 @@ function renderCalendar() {
         </li>`;
       }).join("");
 
-  const colorSwatches = COLOR_OPTIONS.map(c =>
-    `<button type="button" class="color-swatch color-swatch--${c}" data-color="${c}" title="${c}"></button>`
+  const colorSwatches = COLOR_OPTIONS.map(c => {
+    const typeLabel = getCalendarColorTypeLabel(c);
+    return `<button type="button" class="color-swatch color-swatch--${c}" data-color="${c}" data-type-label="${typeLabel}" title="${typeLabel}" aria-label="${typeLabel}"></button>`;
+  }
   ).join("");
 
   const viewToggleHtml = `
@@ -3480,6 +3516,7 @@ function renderCalendar() {
             <label>Color</label>
             ${colorSwatches}
             <input type="hidden" name="color" id="cal-color" value="green">
+            <div class="calendar-color-row__type" id="cal-color-type-label">Type: ${getCalendarColorTypeLabel("green")}</div>
           </div>
           <div class="section-form__message" id="cal-form-msg" style="display:none"></div>
           <button type="submit" class="primary-btn">Add Event</button>
@@ -3556,6 +3593,12 @@ function renderCalendar() {
 
   // ── color swatches ────────────────────────────────────────────────────────
   const calColorInput = document.getElementById("cal-color");
+  const calColorTypeLabel = document.getElementById("cal-color-type-label");
+
+  function updateSelectedColorTypeLabel(color) {
+    if (!calColorTypeLabel) return;
+    calColorTypeLabel.textContent = `Type: ${getCalendarColorTypeLabel(color)}`;
+  }
 
   // ── time input: auto-normalize on blur ───────────────────────────────────
   function normalizeTime(raw) {
@@ -3592,8 +3635,10 @@ function renderCalendar() {
       document.querySelectorAll(".color-swatch").forEach(b => b.classList.remove("is-selected"));
       btn.classList.add("is-selected");
       calColorInput.value = btn.dataset.color;
+      updateSelectedColorTypeLabel(btn.dataset.color);
     });
   });
+  updateSelectedColorTypeLabel(calColorInput.value || "green");
 
   // ── add event form ────────────────────────────────────────────────────────
   document.getElementById("cal-add-form").addEventListener("submit", e => {
