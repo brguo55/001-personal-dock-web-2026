@@ -512,6 +512,7 @@ function createBudgetItem(title, amount, checked = false, currency = "USD") {
     amount: Number(amount) || 0,
     currency: normalizeBudgetCurrency(currency),
     checked,
+    sortOrder: null,
     itemNote: "",
     reminders: [],
     checklist: []
@@ -856,6 +857,7 @@ function normalizeBudgetCategoryRecord(category) {
             amount,
             currency: normalizeBudgetCurrency(item?.currency),
             checked: Boolean(item.checked),
+            sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : null,
             itemNote: typeof item?.itemNote === "string" ? item.itemNote : "",
             reminders: Array.isArray(item?.reminders)
               ? item.reminders
@@ -1790,14 +1792,42 @@ function findBudgetItem(itemId) {
   return null;
 }
 
+function getBudgetItemSortOrderValue(item) {
+  const parsedOrder = Number(item?.sortOrder);
+  return Number.isFinite(parsedOrder) ? parsedOrder : null;
+}
+
 function getBudgetEntries(selectedCategory = uiState.selectedBudgetCategory) {
   if (selectedCategory === "all") {
-    return appState.budgetCategories.flatMap(category =>
+    const entries = appState.budgetCategories.flatMap(category =>
       category.items.map(item => ({
         category,
         item
       }))
     );
+
+    const hasAnyPersistedOrder = entries.some(entry => getBudgetItemSortOrderValue(entry.item) !== null);
+
+    if (!hasAnyPersistedOrder) {
+      return entries;
+    }
+
+    const maxPersistedOrder = entries.reduce((maxOrder, entry) => {
+      const orderValue = getBudgetItemSortOrderValue(entry.item);
+      return orderValue !== null && orderValue > maxOrder ? orderValue : maxOrder;
+    }, -1);
+    const fallbackOrderBase = maxPersistedOrder + 1;
+
+    return entries
+      .map((entry, index) => ({ entry, index }))
+      .sort((left, right) => {
+        const leftOrder = getBudgetItemSortOrderValue(left.entry.item);
+        const rightOrder = getBudgetItemSortOrderValue(right.entry.item);
+        const leftValue = leftOrder !== null ? leftOrder : fallbackOrderBase + left.index;
+        const rightValue = rightOrder !== null ? rightOrder : fallbackOrderBase + right.index;
+        return leftValue - rightValue;
+      })
+      .map(wrapper => wrapper.entry);
   }
 
   const category = getBudgetCategoryById(selectedCategory);
@@ -8141,7 +8171,7 @@ function renderBudgetList(entries) {
 
   function getDragLi(el) {
     // Walk up to find the .budget-item li
-    while (el && !el.classList.contains("budget-item")) el = el.parentElement;
+    while (el && (!el.classList || !el.classList.contains("budget-item"))) el = el.parentElement;
     return el;
   }
 
@@ -8186,6 +8216,37 @@ function renderBudgetList(entries) {
     const targetId = targetLi.dataset.itemId;
     if (targetId === dragSrcId) return;
 
+    if (uiState.selectedBudgetCategory === "all") {
+      const orderedIds = entries.map(entry => entry.item.id);
+      const fromIndex = orderedIds.indexOf(dragSrcId);
+      const toIndex = orderedIds.indexOf(targetId);
+
+      if (fromIndex === -1 || toIndex === -1) {
+        return;
+      }
+
+      const [movedId] = orderedIds.splice(fromIndex, 1);
+      orderedIds.splice(toIndex, 0, movedId);
+
+      const itemMap = new Map();
+      appState.budgetCategories.forEach(category => {
+        category.items.forEach(item => {
+          itemMap.set(item.id, item);
+        });
+      });
+
+      orderedIds.forEach((itemId, index) => {
+        const item = itemMap.get(itemId);
+        if (item) {
+          item.sortOrder = index;
+        }
+      });
+
+      saveState();
+      renderApp();
+      return;
+    }
+
     // Locate both items in their categories
     const srcEntry  = entries.find(en => en.item.id === dragSrcId);
     const destEntry = entries.find(en => en.item.id === targetId);
@@ -8194,24 +8255,14 @@ function renderBudgetList(entries) {
     const srcCat  = srcEntry.category;
     const destCat = destEntry.category;
 
-    if (srcCat.id === destCat.id) {
-      // Same category — simple in-place reorder
-      const items = srcCat.items;
-      const fromIdx = items.findIndex(it => it.id === dragSrcId);
-      const toIdx   = items.findIndex(it => it.id === targetId);
-      if (fromIdx === -1 || toIdx === -1) return;
-      items.splice(toIdx, 0, items.splice(fromIdx, 1)[0]);
-    } else {
-      // Different categories — move item from srcCat to destCat at target position
-      const fromItems = srcCat.items;
-      const toItems   = destCat.items;
-      const fromIdx   = fromItems.findIndex(it => it.id === dragSrcId);
-      const toIdx     = toItems.findIndex(it => it.id === targetId);
-      if (fromIdx === -1 || toIdx === -1) return;
-      const [movedItem] = fromItems.splice(fromIdx, 1);
-      movedItem.currency = normalizeBudgetCurrency(movedItem.currency || "USD");
-      toItems.splice(toIdx, 0, movedItem);
-    }
+    if (srcCat.id !== destCat.id) return;
+
+    // Same category — simple in-place reorder
+    const items = srcCat.items;
+    const fromIdx = items.findIndex(it => it.id === dragSrcId);
+    const toIdx   = items.findIndex(it => it.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    items.splice(toIdx, 0, items.splice(fromIdx, 1)[0]);
 
     saveState();
     renderApp();
