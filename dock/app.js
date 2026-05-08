@@ -825,6 +825,19 @@ function setDailyBoard(dateStr, sections) {
   saveDailyBoards(boards);
 }
 
+function clearAuxiliaryStorageKeys() {
+  [
+    LEGACY_ACTION_STORAGE_KEY,
+    ACTION_DAILY_STORAGE_KEY,
+    DIARY_STORAGE_KEY,
+    DATES_BOARD_STORAGE_KEY,
+    BITS_STORAGE_KEY,
+    EXPENSE_TRACKER_STORAGE_KEY
+  ].forEach(key => {
+    localStorage.removeItem(key);
+  });
+}
+
 // Copies all section tasks (deep) from source date to target date, merging with existing structure.
 function copyDailyBoard(srcDateStr, destDateStr) {
   const src  = getDailyBoard(srcDateStr);
@@ -8610,7 +8623,7 @@ function renderSettings() {
         <div class="settings-section__header">
           <p class="eyebrow">Danger Zone</p>
           <h2 class="panel-title">Clear All Data</h2>
-          <p class="panel-subtitle">Permanently delete all PersonalDock data — tasks, budget items, categories, calendar events, promises, notes, and checklists. The app will return to a completely empty state. This cannot be undone unless you have exported a backup.</p>
+          <p class="panel-subtitle">Permanently delete all PersonalDock data — tasks, budget items, categories, calendar events, promises, notes, checklists, diary entries, bits, dates board items, and expense tracker records. The app will return to a completely empty state. This cannot be undone unless you have exported a backup.</p>
         </div>
         <div class="settings-actions">
           <button type="button" id="settingsResetBtn" class="ghost-btn">Clear all data</button>
@@ -8630,11 +8643,14 @@ function renderSettings() {
   });
 
   document.getElementById("settingsResetBtn").addEventListener("click", () => {
-    const confirmed = confirm("Clear all PersonalDock data?\n\nThis will permanently delete all tasks, budget items, categories, calendar events, promises, notes, and checklists. This cannot be undone unless you have exported a backup.\n\nAre you sure?");
+    const confirmed = confirm("Clear all PersonalDock data?\n\nThis will permanently delete tasks, budget items, categories, calendar events, promises, notes, checklists, diary entries, bits, dates board items, and expense tracker records. This cannot be undone unless you have exported a backup.\n\nAre you sure?");
 
     if (!confirmed) {
       return;
     }
+
+    clearActiveDailyBoard();
+    clearAuxiliaryStorageKeys();
 
     appState = {
       activeView: DEFAULT_VIEW,
