@@ -672,7 +672,10 @@ function buildDefaultState() {
     plannerSections: PLANNER_SECTION_DEFINITIONS.map(def => ({
       id: def.id,
       title: def.title,
-      items: []
+      items: [],
+      isMoneyRelated: false,
+      amount: "",
+      currency: "USD"
     })),
     notes: DEFAULT_NOTES.map(note => createNote(note)),
     waitingItems: DEFAULT_WAITING_ITEMS.map(item => createWaitingItem(item)),
@@ -1172,12 +1175,45 @@ function normalizePlannerItems(items) {
   }).filter(Boolean);
 }
 
+function normalizePlannerMoneyCurrency(value) {
+  return value === "RMB" ? "RMB" : "USD";
+}
+
+function normalizePlannerSectionAmount(value) {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return String(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return "";
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) && parsed >= 0 ? String(parsed) : "";
+  }
+
+  return "";
+}
+
+function formatPlannerSectionAmountDisplay(amountValue, currency) {
+  const parsedAmount = Number(amountValue);
+  const safeAmount = Number.isFinite(parsedAmount) && parsedAmount >= 0 ? parsedAmount : 0;
+  const compact = safeAmount.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  return normalizePlannerMoneyCurrency(currency) === "RMB" ? `R${compact}` : `$${compact}`;
+}
+
 function normalizePlannerSections(sections) {
   if (!Array.isArray(sections)) {
     return PLANNER_SECTION_DEFINITIONS.map(def => ({
       id: def.id,
       title: def.title,
-      items: []
+      items: [],
+      isMoneyRelated: false,
+      amount: "",
+      currency: "USD"
     }));
   }
   return sections.map(section => {
@@ -1187,7 +1223,10 @@ function normalizePlannerSections(sections) {
     return {
       id,
       title,
-      items: normalizePlannerItems(section?.items)
+      items: normalizePlannerItems(section?.items),
+      isMoneyRelated: Boolean(section?.isMoneyRelated),
+      amount: normalizePlannerSectionAmount(section?.amount),
+      currency: normalizePlannerMoneyCurrency(section?.currency)
     };
   }).filter(Boolean);
 }
@@ -1200,7 +1239,14 @@ function createPlannerSection(title) {
     id = `${base}-${suffix}`;
     suffix += 1;
   }
-  return { id, title, items: [] };
+  return {
+    id,
+    title,
+    items: [],
+    isMoneyRelated: false,
+    amount: "",
+    currency: "USD"
+  };
 }
 
 function getPlannerSectionById(sectionId) {
@@ -3881,6 +3927,9 @@ function renderPlanner() {
   const visibleItems = getPlannerItems(selectedSection);
   const selectedSectionData = selectedSection === "all" ? null : getPlannerSectionById(selectedSection);
   const hasNoSections = appState.plannerSections.length === 0;
+  const selectedSectionMoneyDisplay = selectedSectionData
+    ? formatPlannerSectionAmountDisplay(selectedSectionData.amount, selectedSectionData.currency)
+    : "";
 
   viewRoot.innerHTML = `
     <section class="budget-layout">
@@ -3921,6 +3970,41 @@ function renderPlanner() {
             <strong>${visibleItems.length}</strong>
           </div>
         </div>
+
+        ${selectedSectionData ? `
+        <section class="planner-section-money-card">
+          <div class="planner-section-money-card__top">
+            <label class="planner-money-toggle" for="plannerSectionMoneyToggle">
+              <input id="plannerSectionMoneyToggle" type="checkbox" ${selectedSectionData.isMoneyRelated ? "checked" : ""} />
+              <span>Track money</span>
+            </label>
+            ${selectedSectionData.isMoneyRelated ? `
+            <div class="planner-money-display">
+              <span>Section amount</span>
+              <strong>${selectedSectionMoneyDisplay}</strong>
+            </div>
+            ` : ""}
+          </div>
+          ${selectedSectionData.isMoneyRelated ? `
+          <form class="planner-money-form" id="plannerSectionMoneyForm">
+            <div class="field">
+              <label for="plannerSectionAmountInput">Amount</label>
+              <input id="plannerSectionAmountInput" type="number" min="0" step="0.01" value="${selectedSectionData.amount}" placeholder="0" />
+            </div>
+            <div class="field">
+              <label for="plannerSectionCurrencySelect">Currency</label>
+              <select id="plannerSectionCurrencySelect">
+                <option value="USD"${normalizePlannerMoneyCurrency(selectedSectionData.currency) === "USD" ? " selected" : ""}>$</option>
+                <option value="RMB"${normalizePlannerMoneyCurrency(selectedSectionData.currency) === "RMB" ? " selected" : ""}>R</option>
+              </select>
+            </div>
+            <div class="budget-form__actions">
+              <button type="submit" class="tiny-btn">Save</button>
+            </div>
+          </form>
+          ` : ""}
+        </section>
+        ` : ""}
 
         <form class="planner-form" id="plannerItemForm">
           <div class="field">
@@ -3969,10 +4053,18 @@ function renderPlanner() {
 
   appState.plannerSections.forEach(section => {
     const li = document.createElement("li");
-    li.className = "sidebar-list__item";
+    li.className = "sidebar-list__item planner-section-item";
+    li.dataset.sectionId = section.id;
+    li.draggable = true;
 
     const row = document.createElement("div");
     row.className = "planner-sidebar-row";
+
+    const dragHandle = document.createElement("span");
+    dragHandle.className = "planner-section__drag-handle";
+    dragHandle.setAttribute("aria-hidden", "true");
+    dragHandle.setAttribute("title", "Drag to reorder section");
+    dragHandle.textContent = "\u2807";
 
     const btn = document.createElement("button");
     btn.type = "button";
@@ -4003,11 +4095,113 @@ function renderPlanner() {
       renderApp();
     });
 
+    row.appendChild(dragHandle);
     row.appendChild(btn);
     row.appendChild(delBtn);
     li.appendChild(row);
     sidebarList.appendChild(li);
   });
+
+  {
+    let dragSectionId = null;
+
+    function getPlannerSectionLi(el) {
+      while (el && (!el.classList || !el.classList.contains("planner-section-item"))) el = el.parentElement;
+      return el;
+    }
+
+    sidebarList.addEventListener("dragstart", event => {
+      const li = getPlannerSectionLi(event.target);
+      if (!li) return;
+      dragSectionId = li.dataset.sectionId;
+      li.classList.add("planner-section-item--dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", dragSectionId);
+    });
+
+    sidebarList.addEventListener("dragend", event => {
+      const li = getPlannerSectionLi(event.target);
+      if (li) li.classList.remove("planner-section-item--dragging");
+      sidebarList.querySelectorAll(".planner-section-item--drag-over").forEach(el =>
+        el.classList.remove("planner-section-item--drag-over")
+      );
+      dragSectionId = null;
+    });
+
+    sidebarList.addEventListener("dragover", event => {
+      const li = getPlannerSectionLi(event.target);
+      if (!li || li.dataset.sectionId === dragSectionId) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      sidebarList.querySelectorAll(".planner-section-item--drag-over").forEach(el =>
+        el.classList.remove("planner-section-item--drag-over")
+      );
+      li.classList.add("planner-section-item--drag-over");
+    });
+
+    sidebarList.addEventListener("dragleave", event => {
+      const li = getPlannerSectionLi(event.target);
+      if (li) li.classList.remove("planner-section-item--drag-over");
+    });
+
+    sidebarList.addEventListener("drop", event => {
+      event.preventDefault();
+      const targetLi = getPlannerSectionLi(event.target);
+      if (!targetLi || !dragSectionId) return;
+
+      const targetSectionId = targetLi.dataset.sectionId;
+      if (targetSectionId === dragSectionId) return;
+
+      const reordered = [...appState.plannerSections];
+      const fromIndex = reordered.findIndex(section => section.id === dragSectionId);
+      const toIndex = reordered.findIndex(section => section.id === targetSectionId);
+      if (fromIndex === -1 || toIndex === -1) return;
+
+      reordered.splice(toIndex, 0, reordered.splice(fromIndex, 1)[0]);
+      appState.plannerSections = reordered;
+
+      saveState();
+      renderApp();
+    });
+  }
+
+  if (selectedSectionData) {
+    const moneyToggle = document.getElementById("plannerSectionMoneyToggle");
+
+    moneyToggle?.addEventListener("change", () => {
+      selectedSectionData.isMoneyRelated = moneyToggle.checked;
+      saveState();
+      renderApp();
+    });
+
+    if (selectedSectionData.isMoneyRelated) {
+      const moneyForm = document.getElementById("plannerSectionMoneyForm");
+      const sectionAmountInput = document.getElementById("plannerSectionAmountInput");
+      const sectionCurrencySelect = document.getElementById("plannerSectionCurrencySelect");
+
+      if (sectionCurrencySelect) {
+        sectionCurrencySelect.value = normalizePlannerMoneyCurrency(selectedSectionData.currency);
+        buildGtdCustomSelect(sectionCurrencySelect);
+      }
+
+      moneyForm?.addEventListener("submit", event => {
+        event.preventDefault();
+
+        const rawAmount = sectionAmountInput?.value.trim() || "";
+        const parsedAmount = Number(rawAmount);
+
+        if (rawAmount && (Number.isNaN(parsedAmount) || parsedAmount < 0)) {
+          return;
+        }
+
+        selectedSectionData.amount = rawAmount ? String(parsedAmount) : "";
+        selectedSectionData.currency = normalizePlannerMoneyCurrency(sectionCurrencySelect?.value);
+
+        saveState();
+        renderApp();
+      });
+    }
+  }
 
   // ── Section select when "all" is active ───────────────────────────────────
   if (selectedSection === "all" && !hasNoSections) {

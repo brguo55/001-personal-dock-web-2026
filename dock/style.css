@@ -1042,6 +1042,78 @@ h1 {
 .planner-form .field { flex: 1; min-width: 160px; }
 .planner-sidebar-row { display: flex; align-items: center; gap: 6px; }
 .planner-sidebar-row .sidebar-btn { flex: 1; }
+.planner-section__drag-handle {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: grab;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: .45;
+  user-select: none;
+}
+.planner-section__drag-handle:hover { opacity: .85; color: var(--green); }
+.planner-section-item--dragging { opacity: .45; outline: 2px dashed var(--green); border-radius: 8px; }
+.planner-section-item--drag-over { outline: 2px solid var(--green); border-radius: 8px; background: rgba(10,191,83,.07); }
+
+.planner-section-money-card {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: var(--green-dim);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-md);
+}
+.planner-section-money-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.planner-money-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-bright);
+  font-size: .86rem;
+  font-weight: 600;
+  letter-spacing: .03em;
+}
+.planner-money-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
+}
+.planner-money-display { text-align: right; }
+.planner-money-display span {
+  display: block;
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.planner-money-display strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--green);
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+.planner-money-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.planner-money-form .field {
+  min-width: 140px;
+  flex: 1;
+}
+.planner-money-form .budget-form__actions { margin-left: auto; }
 
 /* Planner item overrides (block layout to accommodate details panel) */
 .promise-item.planner-item { display: block; }
@@ -2166,6 +2238,8 @@ h1 {
   .expense-period-selector .expense-period-btn { width: auto; flex: 1; }
   .expense-period-total { min-width: 0; }
   .expense-category-metrics { grid-template-columns: 1fr; }
+  .planner-money-form { flex-direction: column; align-items: stretch; }
+  .planner-money-form .budget-form__actions { width: 100%; margin-left: 0; }
   .budget-category-form__row { flex-direction: column; }
   .budget-cat-create-btn { width: 100%; padding: 9px; }
   .budget-manage-btn,.budget-category-manager__header .tiny-btn,.budget-category-manager__actions .tiny-btn { width: 100%; }
