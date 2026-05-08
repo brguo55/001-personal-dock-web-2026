@@ -673,6 +673,9 @@ function buildDefaultState() {
       id: def.id,
       title: def.title,
       items: [],
+      trackPlanCost: false,
+      planCostAmount: "",
+      planCostCurrency: "USD",
       isMoneyRelated: false,
       amount: "",
       currency: "USD"
@@ -1179,7 +1182,7 @@ function normalizePlannerMoneyCurrency(value) {
   return value === "RMB" ? "RMB" : "USD";
 }
 
-function normalizePlannerSectionAmount(value) {
+function normalizePlannerPlanCostAmount(value) {
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
     return String(value);
   }
@@ -1198,7 +1201,56 @@ function normalizePlannerSectionAmount(value) {
   return "";
 }
 
-function formatPlannerSectionAmountDisplay(amountValue, currency) {
+function getPlannerSectionTrackPlanCost(section) {
+  if (typeof section?.trackPlanCost === "boolean") {
+    return section.trackPlanCost;
+  }
+
+  if (typeof section?.isMoneyRelated === "boolean") {
+    return section.isMoneyRelated;
+  }
+
+  return false;
+}
+
+function getPlannerSectionPlanCostAmount(section) {
+  if (section?.planCostAmount !== undefined && section?.planCostAmount !== null) {
+    return normalizePlannerPlanCostAmount(section.planCostAmount);
+  }
+
+  return normalizePlannerPlanCostAmount(section?.amount);
+}
+
+function getPlannerSectionPlanCostCurrency(section) {
+  if (section?.planCostCurrency !== undefined && section?.planCostCurrency !== null) {
+    return normalizePlannerMoneyCurrency(section.planCostCurrency);
+  }
+
+  return normalizePlannerMoneyCurrency(section?.currency);
+}
+
+function syncPlannerSectionPlanCostFields(section) {
+  if (!section || typeof section !== "object") {
+    return section;
+  }
+
+  const trackPlanCost = getPlannerSectionTrackPlanCost(section);
+  const planCostAmount = getPlannerSectionPlanCostAmount(section);
+  const planCostCurrency = getPlannerSectionPlanCostCurrency(section);
+
+  section.trackPlanCost = trackPlanCost;
+  section.planCostAmount = planCostAmount;
+  section.planCostCurrency = planCostCurrency;
+
+  // Legacy mirrors for backward compatibility with older saved snapshots.
+  section.isMoneyRelated = trackPlanCost;
+  section.amount = planCostAmount;
+  section.currency = planCostCurrency;
+
+  return section;
+}
+
+function formatPlannerPlanCostDisplay(amountValue, currency) {
   const parsedAmount = Number(amountValue);
   const safeAmount = Number.isFinite(parsedAmount) && parsedAmount >= 0 ? parsedAmount : 0;
   const compact = safeAmount.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
@@ -1211,6 +1263,9 @@ function normalizePlannerSections(sections) {
       id: def.id,
       title: def.title,
       items: [],
+      trackPlanCost: false,
+      planCostAmount: "",
+      planCostCurrency: "USD",
       isMoneyRelated: false,
       amount: "",
       currency: "USD"
@@ -1220,14 +1275,14 @@ function normalizePlannerSections(sections) {
     const id = typeof section?.id === "string" && section.id ? section.id : null;
     const title = typeof section?.title === "string" && section.title.trim() ? section.title.trim() : null;
     if (!id || !title) return null;
-    return {
+    return syncPlannerSectionPlanCostFields({
       id,
       title,
       items: normalizePlannerItems(section?.items),
-      isMoneyRelated: Boolean(section?.isMoneyRelated),
-      amount: normalizePlannerSectionAmount(section?.amount),
-      currency: normalizePlannerMoneyCurrency(section?.currency)
-    };
+      trackPlanCost: getPlannerSectionTrackPlanCost(section),
+      planCostAmount: getPlannerSectionPlanCostAmount(section),
+      planCostCurrency: getPlannerSectionPlanCostCurrency(section)
+    });
   }).filter(Boolean);
 }
 
@@ -1243,6 +1298,9 @@ function createPlannerSection(title) {
     id,
     title,
     items: [],
+    trackPlanCost: false,
+    planCostAmount: "",
+    planCostCurrency: "USD",
     isMoneyRelated: false,
     amount: "",
     currency: "USD"
@@ -3972,8 +4030,21 @@ function renderPlanner() {
   const visibleItems = getPlannerItems(selectedSection);
   const selectedSectionData = selectedSection === "all" ? null : getPlannerSectionById(selectedSection);
   const hasNoSections = appState.plannerSections.length === 0;
-  const selectedSectionMoneyDisplay = selectedSectionData
-    ? formatPlannerSectionAmountDisplay(selectedSectionData.amount, selectedSectionData.currency)
+  if (selectedSectionData) {
+    syncPlannerSectionPlanCostFields(selectedSectionData);
+  }
+
+  const selectedSectionTracksPlanCost = selectedSectionData
+    ? getPlannerSectionTrackPlanCost(selectedSectionData)
+    : false;
+  const selectedSectionPlanCostAmount = selectedSectionData
+    ? getPlannerSectionPlanCostAmount(selectedSectionData)
+    : "";
+  const selectedSectionPlanCostCurrency = selectedSectionData
+    ? getPlannerSectionPlanCostCurrency(selectedSectionData)
+    : "USD";
+  const selectedSectionPlanCostDisplay = selectedSectionData
+    ? formatPlannerPlanCostDisplay(selectedSectionPlanCostAmount, selectedSectionPlanCostCurrency)
     : "";
 
   viewRoot.innerHTML = `
@@ -4020,31 +4091,32 @@ function renderPlanner() {
         <section class="planner-section-money-card">
           <div class="planner-section-money-card__top">
             <label class="planner-money-toggle" for="plannerSectionMoneyToggle">
-              <input id="plannerSectionMoneyToggle" type="checkbox" ${selectedSectionData.isMoneyRelated ? "checked" : ""} />
-              <span>Track money</span>
+              <input id="plannerSectionMoneyToggle" type="checkbox" ${selectedSectionTracksPlanCost ? "checked" : ""} />
+              <span>Track plan cost</span>
             </label>
-            ${selectedSectionData.isMoneyRelated ? `
+            ${selectedSectionTracksPlanCost ? `
             <div class="planner-money-display">
-              <span>Section amount</span>
-              <strong>${selectedSectionMoneyDisplay}</strong>
+              <span>Plan cost</span>
+              <strong>${selectedSectionPlanCostDisplay}</strong>
             </div>
             ` : ""}
           </div>
-          ${selectedSectionData.isMoneyRelated ? `
+          <p class="planner-section-money-card__hint">Use this when the selected plan or activity itself has a cost.</p>
+          ${selectedSectionTracksPlanCost ? `
           <form class="planner-money-form" id="plannerSectionMoneyForm">
             <div class="field">
-              <label for="plannerSectionAmountInput">Amount</label>
-              <input id="plannerSectionAmountInput" type="number" min="0" step="0.01" value="${selectedSectionData.amount}" placeholder="0" />
+              <label for="plannerSectionAmountInput">Plan cost</label>
+              <input id="plannerSectionAmountInput" type="number" min="0" step="0.01" value="${selectedSectionPlanCostAmount}" placeholder="0" />
             </div>
             <div class="field">
               <label for="plannerSectionCurrencySelect">Currency</label>
               <select id="plannerSectionCurrencySelect">
-                <option value="USD"${normalizePlannerMoneyCurrency(selectedSectionData.currency) === "USD" ? " selected" : ""}>$</option>
-                <option value="RMB"${normalizePlannerMoneyCurrency(selectedSectionData.currency) === "RMB" ? " selected" : ""}>R</option>
+                <option value="USD"${normalizePlannerMoneyCurrency(selectedSectionPlanCostCurrency) === "USD" ? " selected" : ""}>$</option>
+                <option value="RMB"${normalizePlannerMoneyCurrency(selectedSectionPlanCostCurrency) === "RMB" ? " selected" : ""}>R</option>
               </select>
             </div>
             <div class="budget-form__actions">
-              <button type="submit" class="tiny-btn">Save</button>
+              <button type="submit" class="tiny-btn">Save cost</button>
             </div>
           </form>
           ` : ""}
@@ -4214,18 +4286,19 @@ function renderPlanner() {
     const moneyToggle = document.getElementById("plannerSectionMoneyToggle");
 
     moneyToggle?.addEventListener("change", () => {
-      selectedSectionData.isMoneyRelated = moneyToggle.checked;
+      selectedSectionData.trackPlanCost = moneyToggle.checked;
+      syncPlannerSectionPlanCostFields(selectedSectionData);
       saveState();
       renderApp();
     });
 
-    if (selectedSectionData.isMoneyRelated) {
+    if (selectedSectionTracksPlanCost) {
       const moneyForm = document.getElementById("plannerSectionMoneyForm");
       const sectionAmountInput = document.getElementById("plannerSectionAmountInput");
       const sectionCurrencySelect = document.getElementById("plannerSectionCurrencySelect");
 
       if (sectionCurrencySelect) {
-        sectionCurrencySelect.value = normalizePlannerMoneyCurrency(selectedSectionData.currency);
+        sectionCurrencySelect.value = normalizePlannerMoneyCurrency(selectedSectionPlanCostCurrency);
         buildGtdCustomSelect(sectionCurrencySelect);
       }
 
@@ -4239,8 +4312,9 @@ function renderPlanner() {
           return;
         }
 
-        selectedSectionData.amount = rawAmount ? String(parsedAmount) : "";
-        selectedSectionData.currency = normalizePlannerMoneyCurrency(sectionCurrencySelect?.value);
+        selectedSectionData.planCostAmount = rawAmount ? String(parsedAmount) : "";
+        selectedSectionData.planCostCurrency = normalizePlannerMoneyCurrency(sectionCurrencySelect?.value);
+        syncPlannerSectionPlanCostFields(selectedSectionData);
 
         saveState();
         renderApp();
