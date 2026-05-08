@@ -1217,7 +1217,7 @@ function saveState(options = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
 
   // When running as a desktop app, also persist to disk via the Python API.
-  // Data is saved to ~/Library/Application Support/MyGTD/data.json
+  // Data is saved to ~/Library/Application Support/dock/data.json
   if (window.pywebview) {
     window.pywebview.api.save_data(snapshot);
   }
@@ -2024,6 +2024,28 @@ function setBudgetCategory(categoryId) {
   renderApp();
 }
 
+// Central registry for view -> render function mapping.
+// Keeping this in one place makes it easier to add new views without
+// growing conditional chains inside renderApp().
+const VIEW_RENDERERS = {
+  dashboard: renderDashboard,
+  actionBoard: renderActionBoard,
+  waitingFor: renderWaitingFor,
+  promise: renderPromise,
+  calendar: renderCalendar,
+  settings: renderSettings,
+  planner: renderPlanner,
+  diary: renderDiary,
+  bits: renderBits,
+  datesBoard: renderDatesBoard,
+  budgetPlanner: renderBudgetPlanner
+};
+
+function renderActiveView(view) {
+  const renderer = VIEW_RENDERERS[view] || renderBudgetPlanner;
+  renderer();
+}
+
 function renderApp() {
   if (uiState.activeView !== "calendar" && _calendarDragAbort) {
     _calendarDragAbort.abort();
@@ -2046,58 +2068,7 @@ function renderApp() {
   });
 
   viewRoot.innerHTML = "";
-
-  if (uiState.activeView === "dashboard") {
-    renderDashboard();
-    return;
-  }
-
-  if (uiState.activeView === "actionBoard") {
-    renderActionBoard();
-    return;
-  }
-
-  if (uiState.activeView === "waitingFor") {
-    renderWaitingFor();
-    return;
-  }
-
-  if (uiState.activeView === "promise") {
-    renderPromise();
-    return;
-  }
-
-  if (uiState.activeView === "calendar") {
-    renderCalendar();
-    return;
-  }
-
-  if (uiState.activeView === "settings") {
-    renderSettings();
-    return;
-  }
-
-  if (uiState.activeView === "planner") {
-    renderPlanner();
-    return;
-  }
-
-  if (uiState.activeView === "diary") {
-    renderDiary();
-    return;
-  }
-
-  if (uiState.activeView === "bits") {
-    renderBits();
-    return;
-  }
-
-  if (uiState.activeView === "datesBoard") {
-    renderDatesBoard();
-    return;
-  }
-
-  renderBudgetPlanner();
+  renderActiveView(uiState.activeView);
 }
 
 function renderDashboard() {
@@ -8061,7 +8032,7 @@ renderApp();
 // When running via app.py, pywebview fires 'pywebviewready' once its JS bridge
 // is ready. We then load the saved data from disk and re-render the app.
 // This overrides the localStorage snapshot with the persistent file-based one.
-// Data file location: ~/Library/Application Support/MyGTD/data.json
+// Data file location: ~/Library/Application Support/dock/data.json
 window.addEventListener("pywebviewready", () => {
   window.pywebview.api.load_data().then(data => {
     if (data && typeof data === "object") {
