@@ -10,6 +10,7 @@ const VIEW_DETAILS = {
   actionBoard: "Organize tasks by energy, urgency, and life context.",
   waitingFor: "Run your GTD capture, context lists, waiting items, projects, reference, and someday lists from one place.",
   budgetPlanner: "Track personal budget items so income, spending, and progress stay visible.",
+  expenseTracker: "Track spending notes in a lightweight category-based log.",
   planner: "Plan your day, set goals, capture notes, and track short-term plans in one place.",
   promise: "Record commitments and promises you have made to other people.",
   diary: "Write and revisit your daily journal entries.",
@@ -2031,14 +2032,15 @@ const VIEW_RENDERERS = {
   dashboard: renderDashboard,
   actionBoard: renderActionBoard,
   waitingFor: renderWaitingFor,
+  budgetPlanner: renderBudgetPlanner,
+  expenseTracker: renderExpenseTracker,
   promise: renderPromise,
   calendar: renderCalendar,
   settings: renderSettings,
   planner: renderPlanner,
   diary: renderDiary,
   bits: renderBits,
-  datesBoard: renderDatesBoard,
-  budgetPlanner: renderBudgetPlanner
+  datesBoard: renderDatesBoard
 };
 
 function renderActiveView(view) {
@@ -5901,6 +5903,42 @@ function renderBudgetPlanner() {
       renderApp();
     });
   }
+}
+
+function renderExpenseTracker() {
+  const groceryPlaces = ["Whole Foods", "Trader Joe\u2019s"];
+
+  viewRoot.innerHTML = `
+    <section class="view-panel">
+      <div class="view-panel__top">
+        <div>
+          <h2 class="panel-title">Expense Tracker</h2>
+          <p class="panel-subtitle">A minimal spending log scaffold to expand later.</p>
+        </div>
+      </div>
+
+      <article class="panel">
+        <h3 class="panel-title">Groceries</h3>
+        <p class="panel-subtitle">Starter merchant list for this category.</p>
+        <ul class="notes-list" id="expenseGroceriesList"></ul>
+      </article>
+    </section>
+  `;
+
+  const groceryList = document.getElementById("expenseGroceriesList");
+
+  groceryPlaces.forEach(place => {
+    const item = document.createElement("li");
+    item.className = "note-item";
+    item.innerHTML = `
+      <div>
+        <strong>${place}</strong>
+        <span class="note-meta">Merchant</span>
+      </div>
+      <span class="pill">Groceries</span>
+    `;
+    groceryList.appendChild(item);
+  });
 }
 
 function populateSelectOptions(select, options, selectedValue = "") {
