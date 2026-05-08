@@ -1690,6 +1690,17 @@ h1 {
 .cal-tg-slot        { height: 19px; box-sizing: border-box; border-bottom: 1px dashed rgba(0,0,0,.08); pointer-events: none; }
 .cal-tg-slot--hour  { border-bottom-style: solid; border-bottom-color: var(--line-faint); }
 
+.cal-tg-selection {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  border-radius: 4px;
+  border: 1px dashed rgba(10,191,83,.52);
+  background: rgba(10,191,83,.14);
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* timed event blocks */
 .cal-tg-event {
   position: absolute; left: 2px; right: 2px;
@@ -1852,6 +1863,12 @@ h1 {
   font-size: .8rem;
   color: var(--muted-bright);
   line-height: 1.4;
+}
+.calendar-event-actions__location {
+  margin: 0;
+  font-size: .78rem;
+  color: var(--muted-bright);
+  line-height: 1.35;
 }
 .calendar-event-actions__hint {
   margin: 0;
