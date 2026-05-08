@@ -5732,14 +5732,14 @@ function renderBits() {
             <label for="bitsEditorTitleInput">Title</label>
             <input id="bitsEditorTitleInput" name="title" type="text" maxlength="120" placeholder="Give it a short title..." autocomplete="off" />
           </div>
-          <div class="field">
+          <div class="field bits-form__note-field">
             <label for="bitsEditorContentInput">Note</label>
             <textarea id="bitsEditorContentInput" name="content" class="bits-textarea bits-textarea--editor" rows="14" maxlength="10000" placeholder="Write whatever..."></textarea>
           </div>
-          <div class="bits-form__actions">
+          <div class="bits-form__actions bits-form__actions--editor">
             <span class="bits-form__msg" id="bitsEditorMsg"></span>
             <button type="button" class="tiny-btn" id="bitsEditorCancelBtn">Cancel</button>
-            <button type="submit" class="primary-btn">${isCreating ? "Save Bit" : "Save Changes"}</button>
+            <button type="submit" class="primary-btn" id="bitsEditorSaveBtn">${isCreating ? "Save Bit" : "Save Changes"}</button>
             ${!isCreating ? '<button type="button" class="tiny-btn is-danger" id="bitsEditorDeleteBtn">Delete</button>' : ""}
           </div>
         </form>

@@ -2078,7 +2078,22 @@ h1 {
 }
 
 .bits-form--editor {
+  position: relative;
+  isolation: isolate;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: stretch;
   min-height: 470px;
+}
+
+.bits-form--editor .field {
+  min-width: 0;
+}
+
+.bits-form__note-field {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 5px;
 }
 
 .bits-form__actions {
@@ -2086,6 +2101,25 @@ h1 {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.bits-form__actions--editor {
+  margin-top: 2px;
+  justify-content: flex-end;
+  position: relative;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.bits-form__actions--editor > button {
+  position: relative;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.bits-form__actions--editor .bits-form__msg {
+  margin-right: auto;
+  text-align: left;
 }
 
 .bits-form__msg {
@@ -2111,7 +2145,11 @@ h1 {
 }
 
 .bits-textarea--editor {
+  position: relative;
+  z-index: 1;
+  height: 100%;
   min-height: 320px;
+  max-height: 52vh;
 }
 
 .bits-textarea:focus {
