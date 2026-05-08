@@ -6035,21 +6035,6 @@ function renderBudgetPlanner() {
             />
             <button type="submit" class="budget-cat-create-btn">Add</button>
           </div>
-          <button type="button" class="budget-cat-more-btn" id="budgetCatMoreBtn">Details</button>
-          <div class="budget-cat-details" id="budgetCatDetails" hidden>
-            <div class="budget-cat-details__group">
-              <label class="budget-cat-details__label" for="budgetCatNoteInput">Note</label>
-              <textarea id="budgetCatNoteInput" class="task-note-input" rows="2" maxlength="400" placeholder="Optional note for this category\u2026"></textarea>
-            </div>
-            <div class="budget-cat-details__group">
-              <span class="budget-cat-details__label">Checklist</span>
-              <ul class="subtask-list" id="budgetCatTodoList"></ul>
-              <div class="subtask-add-form">
-                <input type="text" id="budgetCatTodoInput" placeholder="Add checklist item\u2026" maxlength="120" />
-                <button type="button" id="budgetCatTodoAddBtn">Add</button>
-              </div>
-            </div>
-          </div>
           <p class="budget-category-form__message" id="budgetCategoryFormMessage"></p>
         </form>
 
@@ -6146,69 +6131,6 @@ function renderBudgetPlanner() {
   const budgetCategoryFormMessage = document.getElementById("budgetCategoryFormMessage");
   const toggleBudgetCategoryManagerButton = document.getElementById("toggleBudgetCategoryManagerBtn");
 
-  // ── "Add details" for create-category form ──────────────────────────────
-  let pendingCatTodos = [];
-  const budgetCatMoreBtn = document.getElementById("budgetCatMoreBtn");
-  const budgetCatDetails = document.getElementById("budgetCatDetails");
-
-  function refreshPendingCatTodos() {
-    const list = document.getElementById("budgetCatTodoList");
-    if (!list) return;
-    list.innerHTML = "";
-    pendingCatTodos.forEach((todo, index) => {
-      const li = document.createElement("li");
-      li.className = "subtask-item";
-
-      const fakeCheck = document.createElement("input");
-      fakeCheck.type = "checkbox";
-      fakeCheck.disabled = true;
-
-      const titleSpan = document.createElement("span");
-      titleSpan.className = "subtask-title";
-      titleSpan.textContent = todo.title;
-
-      const delBtn = document.createElement("button");
-      delBtn.type = "button";
-      delBtn.className = "icon-btn";
-      delBtn.textContent = "x";
-      delBtn.setAttribute("aria-label", `Remove ${todo.title}`);
-      delBtn.addEventListener("click", () => {
-        pendingCatTodos.splice(index, 1);
-        refreshPendingCatTodos();
-      });
-
-      li.appendChild(fakeCheck);
-      li.appendChild(titleSpan);
-      li.appendChild(delBtn);
-      list.appendChild(li);
-    });
-  }
-
-  if (budgetCatMoreBtn) {
-    budgetCatMoreBtn.addEventListener("click", () => {
-      const opening = budgetCatDetails.hidden;
-      budgetCatDetails.hidden = !opening;
-      budgetCatMoreBtn.classList.toggle("is-open", opening);
-      if (opening) document.getElementById("budgetCatNoteInput")?.focus();
-    });
-
-    const budgetCatTodoAddBtn = document.getElementById("budgetCatTodoAddBtn");
-    const budgetCatTodoInput = document.getElementById("budgetCatTodoInput");
-
-    budgetCatTodoAddBtn.addEventListener("click", () => {
-      const val = budgetCatTodoInput.value.trim();
-      if (!val) return;
-      pendingCatTodos.push({ id: createId(), title: val, done: false });
-      budgetCatTodoInput.value = "";
-      refreshPendingCatTodos();
-      budgetCatTodoInput.focus();
-    });
-
-    budgetCatTodoInput.addEventListener("keydown", e => {
-      if (e.key === "Enter") { e.preventDefault(); budgetCatTodoAddBtn.click(); }
-    });
-  }
-
   toggleBudgetCategoryManagerButton.addEventListener("click", () => {
     uiState.showBudgetCategoryManager = !uiState.showBudgetCategoryManager;
     renderApp();
@@ -6238,9 +6160,7 @@ function renderBudgetPlanner() {
       return;
     }
 
-    const catNote = (document.getElementById("budgetCatNoteInput")?.value || "").trim();
-    const newCategory = createBudgetCategory(categoryTitle, catNote, pendingCatTodos);
-    pendingCatTodos = [];
+    const newCategory = createBudgetCategory(categoryTitle);
 
     appState.budgetCategories.push(newCategory);
     uiState.selectedBudgetCategory = newCategory.id;
