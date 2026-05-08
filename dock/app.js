@@ -2476,22 +2476,79 @@ function renderActionBoard() {
   }).join("");
 
   // ── build copy-source options ─────────────────────────────────────────────
+  function isIsoDateString(value) {
+    return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  }
+
+  function getBoardTaskCount(rawSections) {
+    if (!Array.isArray(rawSections)) return 0;
+    return rawSections.reduce((total, section) => {
+      if (!section || !Array.isArray(section.tasks)) return total;
+      return total + section.tasks.filter(task =>
+        task && typeof task.title === "string" && task.title.trim()
+      ).length;
+    }, 0);
+  }
+
+  function getDayDiffFromToday(dateStr) {
+    if (!isIsoDateString(dateStr)) return null;
+    const base = new Date(todayIso + "T00:00:00");
+    const target = new Date(dateStr + "T00:00:00");
+    if (Number.isNaN(base.getTime()) || Number.isNaN(target.getTime())) return null;
+    return Math.round((target - base) / 86400000);
+  }
+
+  function formatCopySourceLabel(dateStr, taskCount) {
+    const relative = getDayDiffFromToday(dateStr);
+    const taskLabel = `${taskCount} task${taskCount === 1 ? "" : "s"}`;
+
+    if (relative === 0) {
+      return `Today — ${dateStr} — ${taskLabel}`;
+    }
+    if (relative === -1) {
+      return `Yesterday — ${dateStr} — ${taskLabel}`;
+    }
+    if (relative === 1) {
+      return `Tomorrow — ${dateStr} — ${taskLabel}`;
+    }
+
+    return `${dateStr} — ${taskLabel}`;
+  }
+
   const boards = loadDailyBoards();
-  const boardDates = Object.keys(boards)
+  const boardTaskCounts = new Map();
+  const seenBoardDates = new Set();
+
+  Object.keys(boards).forEach(dateStr => {
+    if (!isIsoDateString(dateStr) || seenBoardDates.has(dateStr)) return;
+    seenBoardDates.add(dateStr);
+
+    const taskCount = getBoardTaskCount(boards[dateStr]);
+    if (taskCount > 0) {
+      boardTaskCounts.set(dateStr, taskCount);
+    }
+  });
+
+  const boardDates = Array.from(boardTaskCounts.keys())
     .filter(d => d !== activeDate)
-    .sort((a, b) => b.localeCompare(a))
-    .slice(0, 14);
+    .sort((a, b) => b.localeCompare(a));
 
   // Sync selected copy-source with available dates
   if (!("abCopySourceDate" in uiState)) uiState.abCopySourceDate = null;
-  if (boardDates.length && !boardDates.includes(uiState.abCopySourceDate)) {
+  if (!("abCopySourceCustomDate" in uiState)) uiState.abCopySourceCustomDate = "";
+  if (!("abCopySourceIsCustom" in uiState)) uiState.abCopySourceIsCustom = false;
+
+  if (boardDates.length && !uiState.abCopySourceIsCustom && !boardDates.includes(uiState.abCopySourceDate)) {
     uiState.abCopySourceDate = boardDates[0];
   }
-  if (!boardDates.length) uiState.abCopySourceDate = null;
+  if (!boardDates.length && !uiState.abCopySourceIsCustom) uiState.abCopySourceDate = null;
 
   const copySrcLabel = uiState.abCopySourceDate
-    ? (uiState.abCopySourceDate === todayIso ? "Today" : uiState.abCopySourceDate)
-    : "No boards yet";
+    ? (boardTaskCounts.has(uiState.abCopySourceDate)
+        ? formatCopySourceLabel(uiState.abCopySourceDate, boardTaskCounts.get(uiState.abCopySourceDate))
+        : `${uiState.abCopySourceDate} — no saved tasks`)
+    : "No task dates";
+
   const copySelectHtml = boardDates.length
     ? `<div class="gtd-cselect ab-copy-cselect" id="abCopySourceWidget">
         <button type="button" class="gtd-cselect__trigger" id="abCopySourceTrigger">
@@ -2499,10 +2556,15 @@ function renderActionBoard() {
           <span class="gtd-cselect__arrow">&#9660;</span>
         </button>
         <div class="gtd-cselect__dropdown" id="abCopySourceDropdown" hidden>
-          ${boardDates.map(d => `<button type="button" class="gtd-cselect__option${d === uiState.abCopySourceDate ? " is-selected" : ""}" data-value="${d}">${d === todayIso ? "Today" : d}</button>`).join("")}
+          ${boardDates.map(d => {
+            const optionLabel = formatCopySourceLabel(d, boardTaskCounts.get(d));
+            return `<button type="button" class="gtd-cselect__option${d === uiState.abCopySourceDate ? " is-selected" : ""}" data-value="${d}" data-label="${optionLabel}">${optionLabel}</button>`;
+          }).join("")}
         </div>
       </div>`
-    : `<span class="ab-copy-row__label" style="opacity:.55">No saved boards yet</span>`;
+    : `<span class="ab-copy-row__label ab-copy-row__empty">No saved task dates yet</span>`;
+
+  const customCopyDateValue = isIsoDateString(uiState.abCopySourceCustomDate) ? uiState.abCopySourceCustomDate : "";
 
   viewRoot.innerHTML = `
     <section class="view-panel">
@@ -2531,6 +2593,10 @@ function renderActionBoard() {
       <div class="ab-copy-row">
         <span class="ab-copy-row__label">Copy tasks from:</span>
         ${copySelectHtml}
+        <div class="ab-copy-custom" aria-label="Custom copy source date">
+          <input type="date" class="ab-copy-custom__input" id="abCopyCustomDateInput" value="${customCopyDateValue}" />
+          <button type="button" class="tiny-btn ab-copy-custom__btn" id="abCopyCustomDateBtn">Use date</button>
+        </div>
         <button type="button" class="secondary-btn ab-copy-row__btn" id="abCopyBtn">Copy</button>
         <button type="button" class="ghost-btn ab-copy-row__btn" id="abCopyYesterdayBtn">Yesterday</button>
       </div>
@@ -2978,12 +3044,39 @@ function renderActionBoard() {
   });
 
   // ── copy controls ────────────────────────────────────────────────────────
+  function getTaskCountForSourceDate(dateStr) {
+    if (!isIsoDateString(dateStr)) return 0;
+    if (boardTaskCounts.has(dateStr)) return boardTaskCounts.get(dateStr);
+    return getBoardTaskCount(boards[dateStr]);
+  }
+
   function confirmCopyIfNeeded(srcDate, destDate) {
-    const currentBoard = getDailyBoard(destDate);
-    const hasExisting = currentBoard.some(s => s.tasks.length > 0);
-    if (hasExisting) {
-      return confirm(`The board for ${destDate} already has tasks. Overwrite with tasks from ${srcDate}?`);
+    if (!isIsoDateString(srcDate)) {
+      alert("Select a source date first.");
+      return false;
     }
+
+    if (srcDate === destDate) {
+      alert("Source and destination dates are the same. Choose a different source date.");
+      return false;
+    }
+
+    const sourceTaskCount = getTaskCountForSourceDate(srcDate);
+    if (sourceTaskCount <= 0) {
+      alert(`No saved tasks found on ${srcDate}. Choose a date with tasks or use another custom date.`);
+      return false;
+    }
+
+    const currentBoard = getDailyBoard(destDate);
+    const destTaskCount = currentBoard.reduce((total, section) => total + section.tasks.length, 0);
+
+    if (destTaskCount > 0) {
+      return confirm(
+        `Copy ${sourceTaskCount} task${sourceTaskCount === 1 ? "" : "s"} from ${srcDate} to ${destDate}?\n\n` +
+        `This will replace the current ${destTaskCount} task${destTaskCount === 1 ? "" : "s"} on ${destDate} to avoid duplicates.`
+      );
+    }
+
     return true;
   }
 
@@ -3002,8 +3095,9 @@ function renderActionBoard() {
       const btn = e.target.closest(".gtd-cselect__option");
       if (!btn) return;
       uiState.abCopySourceDate = btn.dataset.value;
+      uiState.abCopySourceIsCustom = false;
       const lbl = document.getElementById("abCopySourceLabel");
-      if (lbl) lbl.textContent = btn.textContent;
+      if (lbl) lbl.textContent = btn.dataset.label || btn.textContent;
       copyDropdown.querySelectorAll(".gtd-cselect__option").forEach(b => b.classList.toggle("is-selected", b === btn));
       copyDropdown.hidden = true;
       copyTrigger.classList.remove("is-open");
@@ -3016,6 +3110,21 @@ function renderActionBoard() {
       }
     }, { signal: _abCopySelectAbort.signal });
   }
+
+  document.getElementById("abCopyCustomDateBtn")?.addEventListener("click", () => {
+    const customDateInput = document.getElementById("abCopyCustomDateInput");
+    const customDate = (customDateInput?.value || "").trim();
+
+    if (!isIsoDateString(customDate)) {
+      alert("Pick a valid custom date first.");
+      return;
+    }
+
+    uiState.abCopySourceDate = customDate;
+    uiState.abCopySourceCustomDate = customDate;
+    uiState.abCopySourceIsCustom = true;
+    renderApp();
+  });
 
   document.getElementById("abCopyBtn").addEventListener("click", () => {
     const srcDate = uiState.abCopySourceDate;
@@ -3030,6 +3139,11 @@ function renderActionBoard() {
     const yesterday = new Date(activeDate + "T00:00:00");
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayIso = yesterday.toISOString().slice(0, 10);
+
+    uiState.abCopySourceDate = yesterdayIso;
+    uiState.abCopySourceCustomDate = yesterdayIso;
+    uiState.abCopySourceIsCustom = !boardTaskCounts.has(yesterdayIso);
+
     if (!confirmCopyIfNeeded(yesterdayIso, activeDate)) return;
     copyDailyBoard(yesterdayIso, activeDate);
     setActiveDailyBoard(activeDate);
