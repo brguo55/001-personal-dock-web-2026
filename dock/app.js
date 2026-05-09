@@ -20,7 +20,7 @@ const BUDGET_PLANNING_PERIOD_LABELS = {
 };
 
 const VIEW_DETAILS = {
-  dashboard: "Quickly review today's priorities, budget snapshot, and recent notes.",
+  dashboard: "Quickly review today's priorities and recent notes.",
   actionBoard: "Organize tasks by energy, urgency, and life context.",
   waitingFor: "Run your GTD capture, context lists, waiting items, projects, reference, and someday lists from one place.",
   budgetPlanner: "Track personal spending items so income, spending, and progress stay visible.",
@@ -2713,7 +2713,6 @@ function renderApp() {
 
 function renderDashboard() {
   const actionStats = getActionStats();
-  const budgetStats = getBudgetStats();
   const priorities = getTodaysPriorities();
   const notes = getRecentNotes();
 
@@ -2723,7 +2722,7 @@ function renderDashboard() {
         <div class="section-kicker">Today's home page</div>
         <h2 class="hero-title">Keep today calm, visible, and small enough that you can actually finish it well.</h2>
         <p class="hero-copy">
-          PersonalDock brings task areas, budget items, and recent notes into one simple front-end workspace for long-term personal use.
+          Dinosaur's La La Land brings task areas and recent notes into one simple front-end workspace for long-term personal use.
         </p>
 
         <div class="stats-grid">
@@ -2735,19 +2734,10 @@ function renderDashboard() {
             <span class="stat-label">Urgent today</span>
             <strong class="stat-value">${actionStats.urgent}</strong>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">Budget remaining</span>
-            <strong class="stat-value">${formatCurrency(budgetStats.remaining)}</strong>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Unmarked items</span>
-            <strong class="stat-value">${budgetStats.openItems}</strong>
-          </div>
         </div>
 
         <div class="shortcut-row">
           <button type="button" class="shortcut-btn" data-target-view="actionBoard">Open Action Board</button>
-          <button type="button" class="shortcut-btn" data-target-view="budgetPlanning">Open Budget Planner</button>
         </div>
       </article>
 
@@ -2755,29 +2745,6 @@ function renderDashboard() {
         <h2 class="panel-title">Today's priorities</h2>
         <p class="panel-subtitle">Surface the first unfinished items from your most important sections.</p>
         <ul class="priority-list" id="priorityList"></ul>
-      </article>
-
-      <article class="panel">
-        <h2 class="panel-title">Budget overview</h2>
-        <p class="panel-subtitle">Quickly review income, spending, savings, and the current budget plan.</p>
-        <div class="budget-summary-cards">
-          <div class="budget-summary-card">
-            <p>Tracked income</p>
-            <strong>${formatCurrency(budgetStats.income)}</strong>
-          </div>
-          <div class="budget-summary-card">
-            <p>Planned spending</p>
-            <strong>${formatCurrency(budgetStats.planned)}</strong>
-          </div>
-          <div class="budget-summary-card">
-            <p>Marked amount</p>
-            <strong>${formatCurrency(budgetStats.settled)}</strong>
-          </div>
-          <div class="budget-summary-card">
-            <p>Saved or set aside</p>
-            <strong>${formatCurrency(budgetStats.savings)}</strong>
-          </div>
-        </div>
       </article>
 
       <article class="panel">

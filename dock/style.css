@@ -400,7 +400,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .hero-copy { margin-top: 12px; max-width: 620px; color: var(--muted); font-size: .94rem; line-height: 1.65; }
 
 /* ── Stats ───────────────────────────────────────────── */
-.stats-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin-top: 22px; }
+.stats-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 22px; }
 
 .stat-card { padding: 14px; background: var(--green-dim); border: 1px solid var(--line-faint); border-radius: var(--radius-md); }
 
