@@ -177,6 +177,24 @@ h1 {
 
 .view-nav { display: flex; gap: 8px; flex-wrap: wrap; }
 
+#viewNav {
+  width: 100%;
+  gap: 6px;
+  flex-wrap: nowrap;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+#viewNav .nav-btn {
+  width: auto;
+  padding: 7px 11px;
+  font-size: .8rem;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+
 /* ── Buttons ─────────────────────────────────────────── */
 .nav-btn,.ghost-btn,.primary-btn,.secondary-btn,.tiny-btn,
 .shortcut-btn,.section-form button,.budget-form__actions button {
