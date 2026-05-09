@@ -1189,6 +1189,26 @@ h1 {
   display: flex; align-items: center; gap: 12px;
 }
 .planner-item__row .promise-item__main { flex: 1; }
+.planner-item__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.planner-item__cost-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(10,191,83,.26);
+  background: var(--green-dim);
+  color: var(--green);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
 
 /* Drag handle */
 .planner-item__drag-handle {
@@ -1255,6 +1275,30 @@ h1 {
   color: var(--text-bright);
 }
 .planner-item__title-input:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px var(--green-dim); }
+
+/* Item cost editor */
+.planner-item__cost-section { display: grid; gap: 8px; }
+.planner-item__cost-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.planner-item__cost-field { min-width: 120px; }
+.planner-item__cost-field--amount { flex: 1; min-width: 140px; }
+.planner-item__cost-field--currency { width: 120px; }
+.planner-item__cost-field .gtd-cselect {
+  width: 100%;
+  min-width: 0;
+}
+.planner-item__cost-field .gtd-cselect__trigger {
+  padding: 8px 11px;
+  font-size: .84rem;
+}
+.planner-item__cost-actions {
+  display: flex;
+  align-items: center;
+}
 
 /* Note textarea */
 .planner-item__note-section { display: grid; }
@@ -2654,6 +2698,11 @@ h1 {
   .expense-category-metrics { grid-template-columns: 1fr; }
   .planner-money-form { flex-direction: column; align-items: stretch; }
   .planner-money-form .budget-form__actions { width: 100%; margin-left: 0; }
+  .planner-item__cost-row { align-items: stretch; }
+  .planner-item__cost-field,
+  .planner-item__cost-field--amount,
+  .planner-item__cost-field--currency,
+  .planner-item__cost-actions { width: 100%; min-width: 0; }
   .budget-category-form__row { flex-direction: column; }
   .budget-cat-create-btn { width: 100%; padding: 9px; }
   .budget-manage-btn,.budget-category-manager__header .tiny-btn,.budget-category-manager__actions .tiny-btn { width: 100%; }

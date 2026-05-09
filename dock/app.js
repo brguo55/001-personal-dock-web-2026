@@ -1181,7 +1181,17 @@ function normalizePlannerItems(items) {
           done: Boolean(c?.done)
         })).filter(c => c.text)
       : [];
-    return {
+    const itemCostAmount = getPlannerItemCostAmount(item);
+    const hasItemCostAmountField = item?.itemCostAmount !== undefined && item?.itemCostAmount !== null;
+    const hasItemCostCurrencyField = item?.itemCostCurrency !== undefined && item?.itemCostCurrency !== null;
+    const hasLegacyCostAmountField = item?.costAmount !== undefined && item?.costAmount !== null;
+    const hasLegacyCostCurrencyField = item?.costCurrency !== undefined && item?.costCurrency !== null;
+    const hasAnyCostField = hasItemCostAmountField
+      || hasItemCostCurrencyField
+      || hasLegacyCostAmountField
+      || hasLegacyCostCurrencyField;
+
+    const normalizedItem = {
       id: item.id || createId(),
       title,
       done: Boolean(item.done),
@@ -1189,11 +1199,25 @@ function normalizePlannerItems(items) {
       checklist,
       createdAt: normalizeTimestamp(item.createdAt) || new Date().toISOString()
     };
+
+    if (itemCostAmount !== "" || hasAnyCostField) {
+      normalizedItem.itemCostAmount = itemCostAmount;
+      normalizedItem.itemCostCurrency = getPlannerItemCostCurrency(item);
+    }
+
+    return normalizedItem;
   }).filter(Boolean);
 }
 
 function normalizePlannerMoneyCurrency(value) {
-  return value === "RMB" ? "RMB" : "USD";
+  if (typeof value !== "string") {
+    return "USD";
+  }
+
+  const normalized = value.trim().toUpperCase();
+  return normalized === "RMB" || normalized === "CNY" || normalized === "R" || normalized === "\u00a5" || normalized === "\uffe5"
+    ? "RMB"
+    : "USD";
 }
 
 function normalizePlannerPlanCostAmount(value) {
@@ -1213,6 +1237,40 @@ function normalizePlannerPlanCostAmount(value) {
   }
 
   return "";
+}
+
+function getPlannerItemCostAmount(item) {
+  if (item?.itemCostAmount !== undefined && item?.itemCostAmount !== null) {
+    return normalizePlannerPlanCostAmount(item.itemCostAmount);
+  }
+
+  if (item?.costAmount !== undefined && item?.costAmount !== null) {
+    return normalizePlannerPlanCostAmount(item.costAmount);
+  }
+
+  return "";
+}
+
+function getPlannerItemCostCurrency(item) {
+  if (item?.itemCostCurrency !== undefined && item?.itemCostCurrency !== null) {
+    return normalizePlannerMoneyCurrency(item.itemCostCurrency);
+  }
+
+  if (item?.costCurrency !== undefined && item?.costCurrency !== null) {
+    return normalizePlannerMoneyCurrency(item.costCurrency);
+  }
+
+  return "USD";
+}
+
+function formatPlannerItemCostDisplay(item) {
+  const amountValue = getPlannerItemCostAmount(item);
+
+  if (!amountValue) {
+    return "";
+  }
+
+  return formatPlannerPlanCostDisplay(amountValue, getPlannerItemCostCurrency(item));
 }
 
 function getPlannerSectionTrackPlanCost(section) {
@@ -4952,6 +5010,8 @@ function renderPlanner() {
   } else {
     visibleItems.forEach(({ section, item }) => {
       const checklist = Array.isArray(item.checklist) ? item.checklist : [];
+      const itemCostAmount = getPlannerItemCostAmount(item);
+      const itemCostCurrency = getPlannerItemCostCurrency(item);
 
       const li = document.createElement("li");
       li.className = `promise-item planner-item${item.done ? " is-done" : ""}`;
@@ -4986,11 +5046,25 @@ function renderPlanner() {
       const copy = document.createElement("div");
       copy.className = "promise-item__copy";
 
+      const titleRow = document.createElement("div");
+      titleRow.className = "planner-item__title-row";
+
       const titleEl = document.createElement("strong");
       titleEl.className = "promise-item__text";
       titleEl.textContent = item.title;
 
-      copy.appendChild(titleEl);
+      titleRow.appendChild(titleEl);
+
+      const itemCostDisplay = formatPlannerItemCostDisplay(item);
+      if (itemCostDisplay) {
+        const itemCostChip = document.createElement("span");
+        itemCostChip.className = "planner-item__cost-chip";
+        itemCostChip.textContent = itemCostDisplay;
+        itemCostChip.setAttribute("aria-label", `Item cost ${itemCostDisplay}`);
+        titleRow.appendChild(itemCostChip);
+      }
+
+      copy.appendChild(titleRow);
 
       // Meta line: section name (all-view) + note snippet — no timestamp
       const metaParts = [];
@@ -5082,6 +5156,121 @@ function renderPlanner() {
       editTitleRow.appendChild(saveTitleBtn);
       editSection.appendChild(editTitleLabel);
       editSection.appendChild(editTitleRow);
+
+      // Item cost section
+      const costSection = document.createElement("div");
+      costSection.className = "planner-item__cost-section";
+
+      const costLabel = document.createElement("div");
+      costLabel.className = "planner-item__field-label";
+      costLabel.textContent = "Item cost";
+
+      const costRow = document.createElement("div");
+      costRow.className = "planner-item__cost-row";
+
+      const amountField = document.createElement("div");
+      amountField.className = "field planner-item__cost-field planner-item__cost-field--amount";
+
+      const amountInputId = `plannerItemCostAmount-${item.id}`;
+      const amountLabel = document.createElement("label");
+      amountLabel.setAttribute("for", amountInputId);
+      amountLabel.textContent = "Amount";
+
+      const amountInput = document.createElement("input");
+      amountInput.id = amountInputId;
+      amountInput.type = "number";
+      amountInput.className = "planner-item__cost-input";
+      amountInput.min = "0";
+      amountInput.step = "0.01";
+      amountInput.placeholder = "0";
+      amountInput.value = itemCostAmount;
+
+      amountField.appendChild(amountLabel);
+      amountField.appendChild(amountInput);
+
+      const currencyField = document.createElement("div");
+      currencyField.className = "field planner-item__cost-field planner-item__cost-field--currency";
+
+      const currencySelectId = `plannerItemCostCurrency-${item.id}`;
+      const currencyLabel = document.createElement("label");
+      currencyLabel.setAttribute("for", currencySelectId);
+      currencyLabel.textContent = "Currency";
+
+      const currencySelect = document.createElement("select");
+      currencySelect.id = currencySelectId;
+
+      const usdOption = document.createElement("option");
+      usdOption.value = "USD";
+      usdOption.textContent = "$";
+
+      const rmbOption = document.createElement("option");
+      rmbOption.value = "RMB";
+      rmbOption.textContent = "R";
+
+      currencySelect.appendChild(usdOption);
+      currencySelect.appendChild(rmbOption);
+      currencySelect.value = itemCostCurrency;
+
+      currencyField.appendChild(currencyLabel);
+      currencyField.appendChild(currencySelect);
+
+      const costActions = document.createElement("div");
+      costActions.className = "planner-item__cost-actions";
+
+      const saveCostBtn = document.createElement("button");
+      saveCostBtn.type = "button";
+      saveCostBtn.className = "tiny-btn";
+      saveCostBtn.textContent = "Save cost";
+      saveCostBtn.addEventListener("click", () => {
+        const rawAmount = amountInput.value.trim();
+        const parsedAmount = Number(rawAmount);
+
+        if (rawAmount && (Number.isNaN(parsedAmount) || parsedAmount < 0)) {
+          return;
+        }
+
+        if (rawAmount) {
+          item.itemCostAmount = String(parsedAmount);
+          item.itemCostCurrency = normalizePlannerMoneyCurrency(currencySelect.value);
+        } else {
+          delete item.itemCostAmount;
+          delete item.itemCostCurrency;
+        }
+
+        delete item.costAmount;
+        delete item.costCurrency;
+
+        const latestCostDisplay = formatPlannerItemCostDisplay(item);
+        const existingCostChip = titleRow.querySelector(".planner-item__cost-chip");
+
+        if (latestCostDisplay) {
+          if (existingCostChip) {
+            existingCostChip.textContent = latestCostDisplay;
+            existingCostChip.setAttribute("aria-label", `Item cost ${latestCostDisplay}`);
+          } else {
+            const newCostChip = document.createElement("span");
+            newCostChip.className = "planner-item__cost-chip";
+            newCostChip.textContent = latestCostDisplay;
+            newCostChip.setAttribute("aria-label", `Item cost ${latestCostDisplay}`);
+            titleRow.appendChild(newCostChip);
+          }
+        } else if (existingCostChip) {
+          existingCostChip.remove();
+        }
+
+        saveState();
+      });
+
+      costActions.appendChild(saveCostBtn);
+
+      costRow.appendChild(amountField);
+      costRow.appendChild(currencyField);
+      costRow.appendChild(costActions);
+
+      costSection.appendChild(costLabel);
+      costSection.appendChild(costRow);
+
+      buildGtdCustomSelect(currencySelect);
 
       // Note section
       const noteSection = document.createElement("div");
@@ -5314,6 +5503,7 @@ function renderPlanner() {
       clSection.appendChild(clForm);
 
       details.appendChild(editSection);
+      details.appendChild(costSection);
       details.appendChild(noteSection);
       details.appendChild(clSection);
 
