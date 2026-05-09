@@ -713,14 +713,74 @@ function normalizeBudgetPlanningPeriodId(periodId) {
   return BUDGET_PLANNING_PERIODS.includes(periodId) ? periodId : DEFAULT_BUDGET_PLANNING_PERIOD;
 }
 
-function createBudgetPlanningEntry({ title, amount, type = "planned", createdAt = new Date().toISOString() }) {
+function createBudgetPlanningEntry({ title, amount, currency = "USD", type = "planned", createdAt = new Date().toISOString() }) {
   return {
     id: createId(),
     title,
     amount: Number(amount) || 0,
+    currency: normalizeBudgetCurrency(currency),
     type: type === "tracked" ? "tracked" : "planned",
     createdAt
   };
+}
+
+function normalizeBudgetPlannerTarget(rawTarget) {
+  if (rawTarget === null || rawTarget === undefined) {
+    return null;
+  }
+
+  if (typeof rawTarget === "string" && !rawTarget.trim()) {
+    return null;
+  }
+
+  if (typeof rawTarget === "object" && !Array.isArray(rawTarget)) {
+    const parsedAmount = Number(rawTarget.amount);
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      return null;
+    }
+
+    return {
+      amount: parsedAmount,
+      currency: normalizeBudgetCurrency(rawTarget.currency)
+    };
+  }
+
+  const parsedAmount = Number(rawTarget);
+
+  if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+    return null;
+  }
+
+  return {
+    amount: parsedAmount,
+    currency: "USD"
+  };
+}
+
+function convertBudgetPlanningAmount(amount, fromCurrency, toCurrency) {
+  const safeAmount = Number(amount);
+
+  if (!Number.isFinite(safeAmount)) {
+    return 0;
+  }
+
+  const sourceCurrency = normalizeBudgetCurrency(fromCurrency);
+  const targetCurrency = normalizeBudgetCurrency(toCurrency);
+
+  if (sourceCurrency === targetCurrency) {
+    return safeAmount;
+  }
+
+  if (sourceCurrency === "CNY" && targetCurrency === "USD") {
+    return safeAmount * CNY_TO_USD_RATE;
+  }
+
+  if (sourceCurrency === "USD" && targetCurrency === "CNY") {
+    return CNY_TO_USD_RATE > 0 ? safeAmount / CNY_TO_USD_RATE : 0;
+  }
+
+  return safeAmount;
 }
 
 function buildDefaultBudgetPlannerState() {
@@ -745,6 +805,7 @@ function normalizeBudgetPlannerEntry(entry) {
     id: entry?.id || createId(),
     title,
     amount,
+    currency: normalizeBudgetCurrency(entry?.currency),
     type: entry?.type === "tracked" ? "tracked" : "planned",
     createdAt: normalizeTimestamp(entry?.createdAt) || new Date().toISOString()
   };
@@ -758,13 +819,8 @@ function normalizeBudgetPlannerPeriodState(periodState) {
     };
   }
 
-  const rawTarget = periodState.target;
-  const hasTarget = !(rawTarget === null || rawTarget === undefined || (typeof rawTarget === "string" && rawTarget.trim() === ""));
-  const parsedTarget = hasTarget ? Number(rawTarget) : null;
-  const target = hasTarget && Number.isFinite(parsedTarget) && parsedTarget >= 0 ? parsedTarget : null;
-
   return {
-    target,
+    target: normalizeBudgetPlannerTarget(periodState.target),
     entries: Array.isArray(periodState.entries)
       ? periodState.entries.map(entry => normalizeBudgetPlannerEntry(entry)).filter(Boolean)
       : []
@@ -8491,24 +8547,51 @@ function renderBudgetPlanning() {
   const entries = [...activePeriod.entries]
     .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
 
+  const createSplitTotals = () => ({
+    usd: 0,
+    rmb: 0,
+    hasUsd: false,
+    hasRmb: false
+  });
+
   const totals = activePeriod.entries.reduce(
     (accumulator, entry) => {
       const safeAmount = Number(entry.amount) || 0;
+      const currency = normalizeBudgetCurrency(entry.currency);
+      const bucket = entry.type === "tracked" ? accumulator.tracked : accumulator.planned;
 
-      if (entry.type === "tracked") {
-        accumulator.tracked += safeAmount;
+      if (currency === "CNY") {
+        bucket.rmb += safeAmount;
+        bucket.hasRmb = true;
       } else {
-        accumulator.planned += safeAmount;
+        bucket.usd += safeAmount;
+        bucket.hasUsd = true;
       }
 
       return accumulator;
     },
-    { planned: 0, tracked: 0 }
+    {
+      planned: createSplitTotals(),
+      tracked: createSplitTotals()
+    }
   );
 
-  const target = Number.isFinite(activePeriod.target) ? activePeriod.target : null;
-  const remaining = target === null ? null : target - totals.tracked;
-  const usagePercent = target && target > 0 ? (totals.tracked / target) * 100 : null;
+  const target = normalizeBudgetPlannerTarget(activePeriod.target);
+  const targetCurrency = target ? target.currency : "USD";
+  const trackedInTargetCurrency = target
+    ? activePeriod.entries.reduce((sum, entry) => {
+        if (entry.type !== "tracked") {
+          return sum;
+        }
+
+        return sum + convertBudgetPlanningAmount(entry.amount, entry.currency, target.currency);
+      }, 0)
+    : 0;
+  const remaining = target ? target.amount - trackedInTargetCurrency : null;
+  const usagePercent = target && target.amount > 0 ? (trackedInTargetCurrency / target.amount) * 100 : null;
+  const remainingSummary = target
+    ? `${formatBudgetAmount(remaining, target.currency)}${usagePercent === null ? "" : ` · ${usagePercent.toFixed(1)}% used`}`
+    : "No target";
 
   viewRoot.innerHTML = `
     <section class="view-panel budget-planning-view">
@@ -8528,26 +8611,33 @@ function renderBudgetPlanning() {
       <div class="budget-summary-cards">
         <div class="budget-summary-card">
           <p>Target budget</p>
-          <strong>${target === null ? "No target" : formatBudgetUsdAmount(target)}</strong>
+          <strong>${target === null ? "No target" : formatBudgetAmount(target.amount, target.currency)}</strong>
         </div>
         <div class="budget-summary-card">
           <p>Planned total</p>
-          <strong>${formatBudgetUsdAmount(totals.planned)}</strong>
+          <strong>${formatBudgetSplitTotalDisplay(totals.planned)}</strong>
         </div>
         <div class="budget-summary-card">
           <p>Tracked total</p>
-          <strong>${formatBudgetUsdAmount(totals.tracked)}</strong>
+          <strong>${formatBudgetSplitTotalDisplay(totals.tracked)}</strong>
         </div>
         <div class="budget-summary-card">
-          <p>${remaining === null ? "Usage" : "Remaining"}</p>
-          <strong>${remaining === null ? (usagePercent === null ? "No target" : `${usagePercent.toFixed(1)}%`) : formatBudgetUsdAmount(remaining)}</strong>
+          <p>Remaining</p>
+          <strong>${remainingSummary}</strong>
         </div>
       </div>
 
       <form class="budget-form budget-plan-target-form" id="budgetPlanningTargetForm">
         <div class="field">
-          <label for="budgetPlanningTargetInput">${BUDGET_PLANNING_PERIOD_LABELS[activePeriodId]} target (USD)</label>
-          <input id="budgetPlanningTargetInput" type="number" step="0.01" min="0" placeholder="0" value="${target ?? ""}" required />
+          <label for="budgetPlanningTargetInput">${BUDGET_PLANNING_PERIOD_LABELS[activePeriodId]} target amount</label>
+          <input id="budgetPlanningTargetInput" type="number" step="0.01" min="0" placeholder="0" value="${target?.amount ?? ""}" required />
+        </div>
+        <div class="field">
+          <label for="budgetPlanningTargetCurrencySelect">Currency</label>
+          <select id="budgetPlanningTargetCurrencySelect">
+            <option value="USD"${targetCurrency === "USD" ? " selected" : ""}>$</option>
+            <option value="CNY"${targetCurrency === "CNY" ? " selected" : ""}>R</option>
+          </select>
         </div>
         <div class="budget-form__actions">
           <button type="submit" class="primary-btn">Save target</button>
@@ -8562,8 +8652,16 @@ function renderBudgetPlanning() {
         </div>
 
         <div class="field">
-          <label for="budgetPlanningAmountInput">Amount (USD)</label>
+          <label for="budgetPlanningAmountInput">Amount</label>
           <input id="budgetPlanningAmountInput" type="number" step="0.01" min="0" placeholder="0" required />
+        </div>
+
+        <div class="field">
+          <label for="budgetPlanningCurrencySelect">Currency</label>
+          <select id="budgetPlanningCurrencySelect">
+            <option value="USD">$</option>
+            <option value="CNY">R</option>
+          </select>
         </div>
 
         <div class="field">
@@ -8609,13 +8707,17 @@ function renderBudgetPlanning() {
     event.preventDefault();
 
     const targetInput = document.getElementById("budgetPlanningTargetInput");
+    const targetCurrencySelect = document.getElementById("budgetPlanningTargetCurrencySelect");
     const parsedTarget = Number(targetInput.value);
 
     if (Number.isNaN(parsedTarget) || parsedTarget < 0) {
       return;
     }
 
-    activePeriod.target = parsedTarget;
+    activePeriod.target = {
+      amount: parsedTarget,
+      currency: normalizeBudgetCurrency(targetCurrencySelect?.value)
+    };
     saveState();
     renderApp();
   });
@@ -8631,16 +8733,18 @@ function renderBudgetPlanning() {
 
     const titleInput = document.getElementById("budgetPlanningTitleInput");
     const amountInput = document.getElementById("budgetPlanningAmountInput");
+    const currencySelect = document.getElementById("budgetPlanningCurrencySelect");
     const typeSelect = document.getElementById("budgetPlanningTypeSelect");
     const title = titleInput.value.trim();
     const amount = Number(amountInput.value);
+    const currency = normalizeBudgetCurrency(currencySelect?.value);
     const type = typeSelect.value === "tracked" ? "tracked" : "planned";
 
     if (!title || Number.isNaN(amount) || amount < 0) {
       return;
     }
 
-    activePeriod.entries.unshift(createBudgetPlanningEntry({ title, amount, type }));
+    activePeriod.entries.unshift(createBudgetPlanningEntry({ title, amount, currency, type }));
     saveState();
     renderApp();
   });
@@ -8659,7 +8763,7 @@ function renderBudgetPlanning() {
     const meta = document.createElement("span");
     title.textContent = entry.title;
     meta.className = "note-meta budget-plan-item__meta";
-    meta.textContent = `${entry.type === "tracked" ? "Tracked" : "Planned"} · ${formatBudgetUsdAmount(entry.amount)}`;
+    meta.textContent = `${entry.type === "tracked" ? "Tracked" : "Planned"} · ${formatBudgetAmount(entry.amount, entry.currency || "USD")}`;
     copy.append(title, meta);
 
     const actions = document.createElement("div");
