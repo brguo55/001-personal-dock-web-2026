@@ -41,6 +41,12 @@
   --radius-md: 2px;
   --radius-sm: 2px;
 
+  /* typography */
+  --font-ui-latin: "Rajdhani","Trebuchet MS","Arial Narrow","Arial",sans-serif;
+  --font-ui-zh-screen: "Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Microsoft JhengHei","Heiti SC","SimHei",sans-serif;
+  --font-ui-zh-print: "Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei","SimSun","Songti SC",sans-serif;
+  --font-ui-base: "Rajdhani","Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Trebuchet MS","Arial Narrow","Arial",sans-serif;
+
   /* compatibility aliases */
   --pink: #0abf53;
   --pink-hot: #00e676;
@@ -77,13 +83,31 @@ body {
     radial-gradient(ellipse at 10% 0%, rgba(10,191,83,.04) 0%, transparent 36%),
     radial-gradient(ellipse at 90% 100%, rgba(0,122,50,.03) 0%, transparent 36%);
   color: var(--text);
-  font-family: "Rajdhani","Noto Sans SC","Trebuchet MS","Arial Narrow","Arial",sans-serif;
+  font-family: var(--font-ui-base);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-button,input,textarea,select { font: inherit; }
+button,input,textarea,select,option,optgroup {
+  font: inherit;
+  font-family: var(--font-ui-base);
+  font-kerning: normal;
+  font-variant-east-asian: proportional-width;
+}
 button { border: 0; cursor: pointer; }
 button,input,textarea,select { color: inherit; }
 h1,h2,h3,p { margin: 0; }
+
+/* reusable Chinese typography utility for mixed-language UI text */
+.font-zh,
+:lang(zh),
+[lang|="zh"] {
+  font-family: var(--font-ui-zh-screen);
+  font-variant-east-asian: proportional-width;
+  letter-spacing: .01em;
+  text-transform: none;
+}
 
 .app-shell { width: min(1380px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 42px; }
 .app-header { display: grid; gap: 16px; margin-bottom: 24px; }
@@ -112,7 +136,7 @@ h1,h2,h3,p { margin: 0; }
 .brand-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
 
 h1 {
-  font-family: "Rajdhani","Noto Sans SC","Trebuchet MS","Arial Narrow",sans-serif;
+  font-family: var(--font-ui-base);
   font-size: clamp(2.2rem, 4vw, 4rem);
   font-weight: 700;
   letter-spacing: .1em;
@@ -167,7 +191,7 @@ h1 {
   color: var(--muted-bright);
   font-size: .88rem;
   font-weight: 600;
-  letter-spacing: .05em;
+  letter-spacing: .03em;
   text-transform: uppercase;
 }
 
@@ -194,7 +218,7 @@ h1 {
   color: #fff;
   font-size: .88rem;
   font-weight: 700;
-  letter-spacing: .07em;
+  letter-spacing: .05em;
   text-transform: uppercase;
 }
 
@@ -2554,6 +2578,26 @@ h1 {
 
 .db-empty {
   padding: 20px 0 6px; color: var(--muted); font-size: .88rem; line-height: 1.55; margin: 0;
+}
+
+/* ── Print typography (clarity first) ────────────────── */
+@media print {
+  :root {
+    --font-ui-base: var(--font-ui-zh-print);
+  }
+
+  html,body {
+    font-family: var(--font-ui-zh-print);
+    text-shadow: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body :is(h1,h2,h3,h4,h5,h6,p,span,strong,small,label,li,dt,dd,td,th,caption,button,input,textarea,select,option) {
+    font-family: var(--font-ui-zh-print);
+    letter-spacing: normal;
+    text-transform: none;
+  }
 }
 
 /* ── Responsive ──────────────────────────────────────── */

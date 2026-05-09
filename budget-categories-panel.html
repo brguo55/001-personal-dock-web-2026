@@ -20,6 +20,10 @@
       --radius-xl: 28px;
       --radius-lg: 22px;
       --radius-md: 16px;
+
+      --font-ui-zh-screen: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Microsoft JhengHei", "Heiti SC", "SimHei", sans-serif;
+      --font-ui-zh-print: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SimSun", "Songti SC", sans-serif;
+      --font-ui-base: "Rajdhani", "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Avenir Next", "Segoe UI", "Trebuchet MS", "Helvetica Neue", sans-serif;
     }
 
     * { box-sizing: border-box; }
@@ -36,12 +40,30 @@
         radial-gradient(circle at bottom right, rgba(225, 240, 226, 0.9) 0, transparent 30%),
         linear-gradient(180deg, #f9f5ee 0%, #f2ebe0 100%);
       color: var(--text);
-      font-family: "Avenir Next", "Segoe UI", "Trebuchet MS", "Helvetica Neue", sans-serif;
+      font-family: var(--font-ui-base);
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
-    button, input { font: inherit; color: inherit; }
+    button, input, textarea, select, option, optgroup {
+      font: inherit;
+      color: inherit;
+      font-family: var(--font-ui-base);
+      font-kerning: normal;
+      font-variant-east-asian: proportional-width;
+    }
     button { border: 0; cursor: pointer; }
     h2, h3, p { margin: 0; }
+
+    .font-zh,
+    :lang(zh),
+    [lang|="zh"] {
+      font-family: var(--font-ui-zh-screen);
+      font-variant-east-asian: proportional-width;
+      letter-spacing: 0.01em;
+      text-transform: none;
+    }
 
     /* ── Panel shell ─────────────────────────────────────── */
     .budget-sidebar {
@@ -186,6 +208,19 @@
       color: var(--muted);
       font-size: 0.84rem;
       white-space: nowrap;
+    }
+
+    @media print {
+      html, body {
+        font-family: var(--font-ui-zh-print);
+        text-shadow: none;
+      }
+
+      body :is(h2, h3, p, span, strong, label, li, button, input, textarea, select, option) {
+        font-family: var(--font-ui-zh-print);
+        letter-spacing: normal;
+        text-transform: none;
+      }
     }
   </style>
 </head>
