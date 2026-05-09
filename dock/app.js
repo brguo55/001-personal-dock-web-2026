@@ -5765,6 +5765,7 @@ function loadDiaryEntries() {
         id: e.id,
         date: e.date,
         dayOfWeek: typeof e.dayOfWeek === "string" ? e.dayOfWeek : "",
+        title: typeof e.title === "string" ? e.title : "",
         location: typeof e.location === "string" ? e.location : "",
         text: typeof e.text === "string" ? e.text : "",
         createdAt: typeof e.createdAt === "string" ? e.createdAt : new Date().toISOString()
@@ -5779,13 +5780,14 @@ function saveDiaryEntries(entries) {
   localStorage.setItem(DIARY_STORAGE_KEY, JSON.stringify(entries));
 }
 
-function createDiaryEntry({ date, dayOfWeek, location, text }) {
+function createDiaryEntry({ date, dayOfWeek, title = "", location, text }) {
   return {
     id: createId(),
     date,
     dayOfWeek,
-    location: location.trim(),
-    text: text.trim(),
+    title: title.trim(),
+    location: (location || "").trim(),
+    text: (text || "").trim(),
     createdAt: new Date().toISOString()
   };
 }
@@ -6362,6 +6364,13 @@ function renderDiary() {
     return clean.length <= len ? clean : clean.slice(0, len) + "…";
   }
 
+  function escAttr(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  }
+
   viewRoot.innerHTML = `
     <div class="diary-layout">
       <div class="diary-main">
@@ -6385,8 +6394,12 @@ function renderDiary() {
             </div>
             <div class="field diary-form__location">
               <label for="diaryLocation">Location</label>
-              <input id="diaryLocation" name="location" type="text" maxlength="100" placeholder="e.g. Home, Caf\u00e9\u2026" value="${active ? active.location.replace(/"/g, "&quot;") : ""}" />
+              <input id="diaryLocation" name="location" type="text" maxlength="100" placeholder="e.g. Home, Caf\u00e9\u2026" value="${active ? escAttr(active.location) : ""}" />
             </div>
+          </div>
+          <div class="field">
+            <label for="diaryTitle">Title</label>
+            <input id="diaryTitle" name="title" type="text" maxlength="140" placeholder="Optional title\u2026" value="${active ? escAttr(active.title) : ""}" />
           </div>
           <div class="field">
             <label for="diaryText">Entry</label>
@@ -6431,14 +6444,24 @@ function renderDiary() {
       dateRow.className = "diary-entry-item__date";
       dateRow.textContent = [entry.dayOfWeek, entry.date].filter(Boolean).join(", ");
 
-      const preview = document.createElement("span");
-      preview.className = "diary-entry-item__preview";
-      preview.textContent = entry.location
-        ? `📍 ${entry.location}  ${previewText(entry.text, 60)}`
-        : previewText(entry.text, 72);
-
       btn.appendChild(dateRow);
-      btn.appendChild(preview);
+
+      const title = typeof entry.title === "string" ? entry.title.trim() : "";
+
+      if (title) {
+        const titleRow = document.createElement("span");
+        titleRow.className = "diary-entry-item__title";
+        titleRow.textContent = title;
+        btn.appendChild(titleRow);
+      } else {
+        const preview = document.createElement("span");
+        preview.className = "diary-entry-item__preview";
+        preview.textContent = entry.location
+          ? `📍 ${entry.location}  ${previewText(entry.text, 60)}`
+          : previewText(entry.text, 72);
+        btn.appendChild(preview);
+      }
+
       btn.addEventListener("click", () => {
         uiState.diaryActiveId = entry.id;
         renderApp();
@@ -6484,6 +6507,7 @@ function renderDiary() {
     const form = evt.target;
     const date      = form.date.value;
     const dayOfWeek = form.dayOfWeek.value.trim();
+    const title     = form.title.value.trim();
     const location  = form.location.value.trim();
     const text      = form.text.value.trim();
     const msg       = document.getElementById("diaryMsg");
@@ -6495,13 +6519,13 @@ function renderDiary() {
     if (active) {
       // Update existing
       const updated = entries.map(e => e.id === active.id
-        ? { ...e, date, dayOfWeek, location, text }
+        ? { ...e, date, dayOfWeek, title, location, text }
         : e);
       saveDiaryEntries(updated);
       uiState.diaryActiveId = active.id;
     } else {
       // Create new
-      const newEntry = createDiaryEntry({ date, dayOfWeek, location, text });
+      const newEntry = createDiaryEntry({ date, dayOfWeek, title, location, text });
       saveDiaryEntries([newEntry, ...entries]);
       uiState.diaryActiveId = newEntry.id;
     }
