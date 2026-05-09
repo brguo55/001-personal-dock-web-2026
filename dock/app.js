@@ -11,13 +11,21 @@ const EXPENSE_TRACKER_STARTER_MERCHANTS = {
   Groceries: ["Whole Foods", "Trader Joe's"],
   Household: ["Walmart"]
 };
+const BUDGET_PLANNING_PERIODS = ["week", "month", "year"];
+const DEFAULT_BUDGET_PLANNING_PERIOD = "month";
+const BUDGET_PLANNING_PERIOD_LABELS = {
+  week: "Weekly",
+  month: "Monthly",
+  year: "Yearly"
+};
 
 const VIEW_DETAILS = {
   dashboard: "Quickly review today's priorities, budget snapshot, and recent notes.",
   actionBoard: "Organize tasks by energy, urgency, and life context.",
   waitingFor: "Run your GTD capture, context lists, waiting items, projects, reference, and someday lists from one place.",
-  budgetPlanner: "Track personal budget items so income, spending, and progress stay visible.",
+  budgetPlanner: "Track personal spending items so income, spending, and progress stay visible.",
   expenseTracker: "Log expenses quickly with weekly, monthly, and yearly totals split by currency.",
+  budgetPlanning: "Plan and track weekly, monthly, and yearly budgets in a separate planning workspace.",
   planner: "Plan your day, set goals, capture notes, and track short-term plans in one place.",
   promise: "Record commitments and promises you have made to other people.",
   diary: "Write and revisit your daily journal entries.",
@@ -424,6 +432,7 @@ let uiState = {
   justCompletedTaskId: null,  // task id for the fade-in animation in the completed panel
   expandedTaskIds: new Set(),  // task ids whose details panel is open
   selectedPlannerSection: "all",  // planner section filter
+  selectedBudgetPlanningPeriod: DEFAULT_BUDGET_PLANNING_PERIOD,
   actionBoardDate: null,       // ISO date string; null = today
   actionBoardWeekStart: null   // ISO date string for Monday of the displayed ab week; null = this week
 };
@@ -700,6 +709,79 @@ function createBudgetCategory(title, note = "", todos = []) {
   };
 }
 
+function normalizeBudgetPlanningPeriodId(periodId) {
+  return BUDGET_PLANNING_PERIODS.includes(periodId) ? periodId : DEFAULT_BUDGET_PLANNING_PERIOD;
+}
+
+function createBudgetPlanningEntry({ title, amount, type = "planned", createdAt = new Date().toISOString() }) {
+  return {
+    id: createId(),
+    title,
+    amount: Number(amount) || 0,
+    type: type === "tracked" ? "tracked" : "planned",
+    createdAt
+  };
+}
+
+function buildDefaultBudgetPlannerState() {
+  return BUDGET_PLANNING_PERIODS.reduce((state, periodId) => {
+    state[periodId] = {
+      target: null,
+      entries: []
+    };
+    return state;
+  }, {});
+}
+
+function normalizeBudgetPlannerEntry(entry) {
+  const title = typeof entry?.title === "string" ? entry.title.trim() : "";
+  const amount = Number(entry?.amount);
+
+  if (!title || Number.isNaN(amount) || amount < 0) {
+    return null;
+  }
+
+  return {
+    id: entry?.id || createId(),
+    title,
+    amount,
+    type: entry?.type === "tracked" ? "tracked" : "planned",
+    createdAt: normalizeTimestamp(entry?.createdAt) || new Date().toISOString()
+  };
+}
+
+function normalizeBudgetPlannerPeriodState(periodState) {
+  if (!periodState || typeof periodState !== "object" || Array.isArray(periodState)) {
+    return {
+      target: null,
+      entries: []
+    };
+  }
+
+  const rawTarget = periodState.target;
+  const hasTarget = !(rawTarget === null || rawTarget === undefined || (typeof rawTarget === "string" && rawTarget.trim() === ""));
+  const parsedTarget = hasTarget ? Number(rawTarget) : null;
+  const target = hasTarget && Number.isFinite(parsedTarget) && parsedTarget >= 0 ? parsedTarget : null;
+
+  return {
+    target,
+    entries: Array.isArray(periodState.entries)
+      ? periodState.entries.map(entry => normalizeBudgetPlannerEntry(entry)).filter(Boolean)
+      : []
+  };
+}
+
+function normalizeBudgetPlannerState(rawState) {
+  if (!rawState || typeof rawState !== "object" || Array.isArray(rawState)) {
+    return buildDefaultBudgetPlannerState();
+  }
+
+  return BUDGET_PLANNING_PERIODS.reduce((state, periodId) => {
+    state[periodId] = normalizeBudgetPlannerPeriodState(rawState[periodId]);
+    return state;
+  }, {});
+}
+
 function createNote(text, createdAt = new Date().toISOString()) {
   return {
     id: createId(),
@@ -835,6 +917,7 @@ function buildDefaultState() {
       title: category.title,
       items: category.sampleItems.map(item => createBudgetItem(item.title, item.amount, item.checked))
     })),
+    budgetPlanner: buildDefaultBudgetPlannerState(),
     plannerSections: PLANNER_SECTION_DEFINITIONS.map(def => ({
       id: def.id,
       title: def.title,
@@ -910,6 +993,7 @@ function normalizeState(rawState) {
     lastSavedAt: normalizeTimestamp(rawState?.lastSavedAt),
     actionSections: mergeActionSections(rawState?.actionSections),
     budgetCategories,
+    budgetPlanner: normalizeBudgetPlannerState(rawState?.budgetPlanner),
     plannerSections: normalizePlannerSections(rawState?.plannerSections),
     notes: normalizeNotes(rawState?.notes),
     waitingItems: normalizeWaitingItems(rawState?.waitingItems),
@@ -1625,6 +1709,7 @@ function getStateSnapshot(lastSavedAt = appState.lastSavedAt ?? null) {
     lastSavedAt,
     actionSections: appState.actionSections,
     budgetCategories: appState.budgetCategories,
+    budgetPlanner: appState.budgetPlanner,
     plannerSections: appState.plannerSections,
     notes: appState.notes,
     waitingItems: appState.waitingItems,
@@ -2416,6 +2501,10 @@ function validateBackupShape(candidateState) {
     throw new Error("The backup file is missing valid budget categories.");
   }
 
+  if (candidateState.budgetPlanner && (typeof candidateState.budgetPlanner !== "object" || Array.isArray(candidateState.budgetPlanner))) {
+    throw new Error("The backup file includes invalid budget planner data.");
+  }
+
   if (!Array.isArray(candidateState.notes) || candidateState.notes.some(note => typeof note !== "object" || note === null)) {
     throw new Error("The backup file is missing valid notes.");
   }
@@ -2490,7 +2579,8 @@ async function importJsonBackup(file) {
     showBudgetCategoryManager: false,
     calendarYear: new Date().getFullYear(),
     calendarMonth: new Date().getMonth(),
-    selectedPlannerSection: "all"
+    selectedPlannerSection: "all",
+    selectedBudgetPlanningPeriod: DEFAULT_BUDGET_PLANNING_PERIOD
   };
   saveState({ touch: false, lastSavedAt: importedState.lastSavedAt });
   renderApp();
@@ -2524,6 +2614,7 @@ const VIEW_RENDERERS = {
   waitingFor: renderWaitingFor,
   budgetPlanner: renderBudgetPlanner,
   expenseTracker: renderExpenseTracker,
+  budgetPlanning: renderBudgetPlanning,
   promise: renderPromise,
   calendar: renderCalendar,
   settings: renderSettings,
@@ -2600,7 +2691,7 @@ function renderDashboard() {
 
         <div class="shortcut-row">
           <button type="button" class="shortcut-btn" data-target-view="actionBoard">Open Action Board</button>
-          <button type="button" class="shortcut-btn" data-target-view="budgetPlanner">Open Budget Planner</button>
+          <button type="button" class="shortcut-btn" data-target-view="budgetPlanning">Open Budget Planner</button>
         </div>
       </article>
 
@@ -8379,6 +8470,227 @@ function upgradeCustomDatePickers(container) {
   });
 }
 
+function renderBudgetPlanning() {
+  if (!appState.budgetPlanner || typeof appState.budgetPlanner !== "object" || Array.isArray(appState.budgetPlanner)) {
+    appState.budgetPlanner = buildDefaultBudgetPlannerState();
+  }
+
+  BUDGET_PLANNING_PERIODS.forEach(periodId => {
+    if (!appState.budgetPlanner[periodId] || typeof appState.budgetPlanner[periodId] !== "object") {
+      appState.budgetPlanner[periodId] = { target: null, entries: [] };
+    }
+    if (!Array.isArray(appState.budgetPlanner[periodId].entries)) {
+      appState.budgetPlanner[periodId].entries = [];
+    }
+  });
+
+  uiState.selectedBudgetPlanningPeriod = normalizeBudgetPlanningPeriodId(uiState.selectedBudgetPlanningPeriod);
+
+  const activePeriodId = uiState.selectedBudgetPlanningPeriod;
+  const activePeriod = appState.budgetPlanner[activePeriodId];
+  const entries = [...activePeriod.entries]
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+
+  const totals = activePeriod.entries.reduce(
+    (accumulator, entry) => {
+      const safeAmount = Number(entry.amount) || 0;
+
+      if (entry.type === "tracked") {
+        accumulator.tracked += safeAmount;
+      } else {
+        accumulator.planned += safeAmount;
+      }
+
+      return accumulator;
+    },
+    { planned: 0, tracked: 0 }
+  );
+
+  const target = Number.isFinite(activePeriod.target) ? activePeriod.target : null;
+  const remaining = target === null ? null : target - totals.tracked;
+  const usagePercent = target && target > 0 ? (totals.tracked / target) * 100 : null;
+
+  viewRoot.innerHTML = `
+    <section class="view-panel budget-planning-view">
+      <div class="view-panel__top expense-period-header">
+        <div>
+          <h2 class="panel-title">Budget Planner</h2>
+          <p class="panel-subtitle">Plan and track weekly, monthly, and yearly budget targets separately from Budget Spending items.</p>
+        </div>
+
+        <div class="view-nav expense-period-selector" id="budgetPlanningPeriodSelector" aria-label="Budget planning period selector">
+          ${BUDGET_PLANNING_PERIODS
+            .map(periodId => `<button type="button" class="nav-btn expense-period-btn${periodId === activePeriodId ? " is-active" : ""}" data-period="${periodId}">${BUDGET_PLANNING_PERIOD_LABELS[periodId]}</button>`)
+            .join("")}
+        </div>
+      </div>
+
+      <div class="budget-summary-cards">
+        <div class="budget-summary-card">
+          <p>Target budget</p>
+          <strong>${target === null ? "No target" : formatBudgetUsdAmount(target)}</strong>
+        </div>
+        <div class="budget-summary-card">
+          <p>Planned total</p>
+          <strong>${formatBudgetUsdAmount(totals.planned)}</strong>
+        </div>
+        <div class="budget-summary-card">
+          <p>Tracked total</p>
+          <strong>${formatBudgetUsdAmount(totals.tracked)}</strong>
+        </div>
+        <div class="budget-summary-card">
+          <p>${remaining === null ? "Usage" : "Remaining"}</p>
+          <strong>${remaining === null ? (usagePercent === null ? "No target" : `${usagePercent.toFixed(1)}%`) : formatBudgetUsdAmount(remaining)}</strong>
+        </div>
+      </div>
+
+      <form class="budget-form budget-plan-target-form" id="budgetPlanningTargetForm">
+        <div class="field">
+          <label for="budgetPlanningTargetInput">${BUDGET_PLANNING_PERIOD_LABELS[activePeriodId]} target (USD)</label>
+          <input id="budgetPlanningTargetInput" type="number" step="0.01" min="0" placeholder="0" value="${target ?? ""}" required />
+        </div>
+        <div class="budget-form__actions">
+          <button type="submit" class="primary-btn">Save target</button>
+          ${target === null ? "" : '<button type="button" class="secondary-btn" id="budgetPlanningClearTargetBtn">Clear</button>'}
+        </div>
+      </form>
+
+      <form class="budget-form budget-plan-entry-form" id="budgetPlanningEntryForm">
+        <div class="field">
+          <label for="budgetPlanningTitleInput">Entry</label>
+          <input id="budgetPlanningTitleInput" type="text" maxlength="120" placeholder="For example: groceries, subscriptions, travel" required />
+        </div>
+
+        <div class="field">
+          <label for="budgetPlanningAmountInput">Amount (USD)</label>
+          <input id="budgetPlanningAmountInput" type="number" step="0.01" min="0" placeholder="0" required />
+        </div>
+
+        <div class="field">
+          <label for="budgetPlanningTypeSelect">Type</label>
+          <select id="budgetPlanningTypeSelect">
+            <option value="planned">Planned</option>
+            <option value="tracked">Tracked</option>
+          </select>
+        </div>
+
+        <div class="budget-form__actions">
+          <button type="submit" class="primary-btn">Add entry</button>
+        </div>
+      </form>
+
+      <ul class="notes-list budget-plan-list" id="budgetPlanningEntryList"></ul>
+    </section>
+  `;
+
+  const periodSelector = document.getElementById("budgetPlanningPeriodSelector");
+  const targetForm = document.getElementById("budgetPlanningTargetForm");
+  const entryForm = document.getElementById("budgetPlanningEntryForm");
+  const entryList = document.getElementById("budgetPlanningEntryList");
+
+  periodSelector.addEventListener("click", event => {
+    const button = event.target.closest("[data-period]");
+
+    if (!button) {
+      return;
+    }
+
+    const nextPeriod = normalizeBudgetPlanningPeriodId(button.dataset.period);
+
+    if (nextPeriod === uiState.selectedBudgetPlanningPeriod) {
+      return;
+    }
+
+    uiState.selectedBudgetPlanningPeriod = nextPeriod;
+    renderApp();
+  });
+
+  targetForm.addEventListener("submit", event => {
+    event.preventDefault();
+
+    const targetInput = document.getElementById("budgetPlanningTargetInput");
+    const parsedTarget = Number(targetInput.value);
+
+    if (Number.isNaN(parsedTarget) || parsedTarget < 0) {
+      return;
+    }
+
+    activePeriod.target = parsedTarget;
+    saveState();
+    renderApp();
+  });
+
+  document.getElementById("budgetPlanningClearTargetBtn")?.addEventListener("click", () => {
+    activePeriod.target = null;
+    saveState();
+    renderApp();
+  });
+
+  entryForm.addEventListener("submit", event => {
+    event.preventDefault();
+
+    const titleInput = document.getElementById("budgetPlanningTitleInput");
+    const amountInput = document.getElementById("budgetPlanningAmountInput");
+    const typeSelect = document.getElementById("budgetPlanningTypeSelect");
+    const title = titleInput.value.trim();
+    const amount = Number(amountInput.value);
+    const type = typeSelect.value === "tracked" ? "tracked" : "planned";
+
+    if (!title || Number.isNaN(amount) || amount < 0) {
+      return;
+    }
+
+    activePeriod.entries.unshift(createBudgetPlanningEntry({ title, amount, type }));
+    saveState();
+    renderApp();
+  });
+
+  if (entries.length === 0) {
+    entryList.appendChild(createEmptyState("No planning entries yet. Add planned and tracked entries to compare against your target."));
+    return;
+  }
+
+  entries.forEach(entry => {
+    const item = document.createElement("li");
+    item.className = "note-item budget-plan-item";
+
+    const copy = document.createElement("div");
+    const title = document.createElement("strong");
+    const meta = document.createElement("span");
+    title.textContent = entry.title;
+    meta.className = "note-meta budget-plan-item__meta";
+    meta.textContent = `${entry.type === "tracked" ? "Tracked" : "Planned"} · ${formatBudgetUsdAmount(entry.amount)}`;
+    copy.append(title, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "budget-plan-item__actions";
+
+    const toggleButton = document.createElement("button");
+    toggleButton.type = "button";
+    toggleButton.className = "tiny-btn";
+    toggleButton.textContent = entry.type === "tracked" ? "Mark planned" : "Mark tracked";
+    toggleButton.addEventListener("click", () => {
+      entry.type = entry.type === "tracked" ? "planned" : "tracked";
+      saveState();
+      renderApp();
+    });
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "tiny-btn is-danger";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => {
+      activePeriod.entries = activePeriod.entries.filter(itemEntry => itemEntry.id !== entry.id);
+      saveState();
+      renderApp();
+    });
+
+    actions.append(toggleButton, deleteButton);
+    item.append(copy, actions);
+    entryList.appendChild(item);
+  });
+}
+
 function renderWaitingFor() {
   const waitingStats = getWaitingStats();
   const gtdStats = getGtdStats();
@@ -9553,6 +9865,7 @@ function renderSettings() {
         tasks: []
       })),
       budgetCategories: [],
+      budgetPlanner: buildDefaultBudgetPlannerState(),
       plannerSections: [],
       notes: [],
       waitingItems: [],
@@ -9575,7 +9888,8 @@ function renderSettings() {
       calendarViewMode: "week",
       justCompletedTaskId: null,
       expandedTaskIds: new Set(),
-      selectedPlannerSection: "all"
+      selectedPlannerSection: "all",
+      selectedBudgetPlanningPeriod: DEFAULT_BUDGET_PLANNING_PERIOD
     };
     saveState();
     renderApp();
@@ -10200,7 +10514,8 @@ window.addEventListener("pywebviewready", () => {
         activeView: data.activeView || DEFAULT_VIEW,
         selectedBudgetCategory: data.selectedBudgetCategory || null,
         budgetEditorId: null,
-        showBudgetCategoryManager: false
+        showBudgetCategoryManager: false,
+        selectedBudgetPlanningPeriod: DEFAULT_BUDGET_PLANNING_PERIOD
       };
       renderApp();
     }

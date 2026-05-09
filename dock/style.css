@@ -1216,6 +1216,31 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   line-height: 1.45;
 }
 
+.budget-plan-target-form {
+  grid-template-columns: minmax(0,1.25fr) auto;
+}
+
+.budget-plan-entry-form {
+  margin-top: 12px;
+}
+
+.budget-plan-list {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.budget-plan-item__meta {
+  margin-top: 6px;
+}
+
+.budget-plan-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .budget-form { display: grid; grid-template-columns: 1.3fr .8fr .9fr auto; gap: 10px; margin-top: 18px; align-items: end; }
 .field { display: grid; gap: 5px; }
 .field label { color: var(--muted); font-size: .76rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
