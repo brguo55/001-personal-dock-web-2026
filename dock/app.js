@@ -9113,11 +9113,8 @@ function renderBudgetList(entries) {
     budgetItem.classList.toggle("is-checked", item.checked);
     checkbox.checked = item.checked;
     title.textContent = item.title;
-    meta.textContent = uiState.selectedBudgetCategory === "all"
-      ? `${category.title} · ${item.checked ? "Completed" : "In Progress"}`
-      : item.checked
-        ? "Completed"
-        : "In Progress";
+    meta.textContent = uiState.selectedBudgetCategory === "all" ? category.title : "";
+    meta.hidden = !meta.textContent;
     amount.textContent = formatBudgetAmount(item.amount, item.currency || "USD");
 
     function itemHasDetails() {
