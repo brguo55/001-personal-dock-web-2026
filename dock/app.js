@@ -24,6 +24,7 @@ const VIEW_DETAILS = {
   bits: "Capture small fragments, quick thoughts, and scattered everyday life details.",
   calendar: "View and manage your schedule in a monthly calendar.",
   datesBoard: "Track countdowns, reminders, and special dates all in one place.",
+  lessonsLearned: "Record personal reflections, insights, and lessons learned over time.",
   settings: "Manage backups, import data, and adjust app preferences."
 };
 
@@ -833,6 +834,7 @@ function clearAuxiliaryStorageKeys() {
     DIARY_STORAGE_KEY,
     DATES_BOARD_STORAGE_KEY,
     BITS_STORAGE_KEY,
+    LESSONS_LEARNED_STORAGE_KEY,
     EXPENSE_TRACKER_STORAGE_KEY
   ].forEach(key => {
     localStorage.removeItem(key);
@@ -2364,7 +2366,8 @@ const VIEW_RENDERERS = {
   planner: renderPlanner,
   diary: renderDiary,
   bits: renderBits,
-  datesBoard: renderDatesBoard
+  datesBoard: renderDatesBoard,
+  lessonsLearned: renderLessonsLearned
 };
 
 function renderActiveView(view) {
@@ -6539,6 +6542,8 @@ function renderDiary() {
 
 const BITS_STORAGE_KEY = "dockBitsEntries";
 
+const LESSONS_LEARNED_STORAGE_KEY = "dockLessonsLearnedEntries";
+
 function loadBitsEntries() {
   try {
     const raw = localStorage.getItem(BITS_STORAGE_KEY);
@@ -6568,6 +6573,296 @@ function createBitsEntry({ title, content }) {
     title: title.trim(),
     content: content.trim()
   };
+}
+
+function loadLessonsLearnedEntries() {
+  try {
+    const raw = localStorage.getItem(LESSONS_LEARNED_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(entry => {
+      if (!entry || typeof entry.id !== "string") return null;
+      return {
+        id: entry.id,
+        title: typeof entry.title === "string" ? entry.title : "",
+        content: typeof entry.content === "string" ? entry.content : "",
+        createdAt: typeof entry.createdAt === "string" ? entry.createdAt : new Date().toISOString()
+      };
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function saveLessonsLearnedEntries(entries) {
+  localStorage.setItem(LESSONS_LEARNED_STORAGE_KEY, JSON.stringify(entries));
+}
+
+function createLessonsLearnedEntry({ title, content }) {
+  return {
+    id: createId(),
+    title: title.trim(),
+    content: content.trim(),
+    createdAt: new Date().toISOString()
+  };
+}
+
+function renderLessonsLearned() {
+  const entries = loadLessonsLearnedEntries();
+
+  if (!("lessonsActiveId" in uiState)) uiState.lessonsActiveId = null;
+  if (!("lessonsIsCreating" in uiState)) uiState.lessonsIsCreating = false;
+
+  if (entries.length === 0) {
+    uiState.lessonsActiveId = null;
+    uiState.lessonsIsCreating = true;
+  } else if (!uiState.lessonsIsCreating && !entries.some(entry => entry.id === uiState.lessonsActiveId)) {
+    uiState.lessonsActiveId = entries[0].id;
+  }
+
+  const activeEntry = entries.find(entry => entry.id === uiState.lessonsActiveId) || null;
+  const isCreating = uiState.lessonsIsCreating || !activeEntry;
+
+  function previewText(text, maxLength = 88) {
+    const cleaned = (text || "").replace(/\s+/g, " ").trim();
+
+    if (!cleaned) {
+      return "No reflection yet.";
+    }
+
+    return cleaned.length <= maxLength ? cleaned : `${cleaned.slice(0, maxLength)}...`;
+  }
+
+  viewRoot.innerHTML = `
+    <div class="bits-layout">
+      <aside class="bits-sidebar">
+        <div class="bits-sidebar__header">
+          <span class="budget-sidebar__heading">Saved Lessons</span>
+          <button type="button" class="tiny-btn" id="lessonsNewBtn">+ New</button>
+        </div>
+        <ol class="bits-list bits-list--sidebar" id="lessonsList"></ol>
+      </aside>
+
+      <section class="bits-main">
+        <div class="budget-main__top">
+          <div>
+            <h2 class="panel-title">${isCreating ? "New Lesson" : "Edit Lesson"}</h2>
+            <p class="panel-subtitle">${isCreating
+              ? "Capture a new reflection, insight, or lesson learned."
+              : "Edit the selected lesson from the left list."}</p>
+          </div>
+          ${!isCreating ? '<button type="button" class="ghost-btn" id="lessonsNewFromEditorBtn">+ New Lesson</button>' : ""}
+        </div>
+
+        <form class="bits-form bits-form--editor" id="lessonsEditorForm" novalidate>
+          <div class="field">
+            <label for="lessonsEditorTitleInput">Title</label>
+            <input id="lessonsEditorTitleInput" name="title" type="text" maxlength="140" placeholder="Give this lesson a title..." autocomplete="off" />
+          </div>
+          <div class="field bits-form__note-field">
+            <label for="lessonsEditorContentInput">Lesson Note</label>
+            <textarea id="lessonsEditorContentInput" name="content" class="bits-textarea bits-textarea--editor" rows="14" maxlength="20000" placeholder="Write your reflection, insight, or lesson...\n\nWhat happened?\nWhat did you learn?\nWhat will you do differently next time?"></textarea>
+          </div>
+          <div class="bits-form__actions bits-form__actions--editor">
+            <span class="bits-form__msg" id="lessonsEditorMsg"></span>
+            <button type="button" class="tiny-btn" id="lessonsEditorCancelBtn">Cancel</button>
+            <button type="submit" class="primary-btn" id="lessonsEditorSaveBtn">${isCreating ? "Save Lesson" : "Save Changes"}</button>
+            ${!isCreating ? '<button type="button" class="tiny-btn is-danger" id="lessonsEditorDeleteBtn">Delete</button>' : ""}
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+
+  const lessonsList = document.getElementById("lessonsList");
+  const titleInput = document.getElementById("lessonsEditorTitleInput");
+  const contentInput = document.getElementById("lessonsEditorContentInput");
+  const editorMsg = document.getElementById("lessonsEditorMsg");
+
+  titleInput.value = isCreating ? "" : (activeEntry ? activeEntry.title : "");
+  contentInput.value = isCreating ? "" : (activeEntry ? activeEntry.content : "");
+
+  if (entries.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "bits-empty bits-empty--sidebar";
+    empty.textContent = "No lessons yet. Save your first lesson from the editor.";
+    lessonsList.appendChild(empty);
+  } else {
+    entries.forEach(entry => {
+      const li = document.createElement("li");
+      li.className = `bits-card${!isCreating && entry.id === uiState.lessonsActiveId ? " is-active" : ""}`;
+      li.draggable = true;
+      li.dataset.id = entry.id;
+
+      const handle = document.createElement("div");
+      handle.className = "bits-card__handle";
+      handle.setAttribute("aria-hidden", "true");
+      handle.setAttribute("title", "Drag to reorder");
+      handle.textContent = "\u2807";
+
+      const selectButton = document.createElement("button");
+      selectButton.type = "button";
+      selectButton.className = "bits-card__select-btn";
+
+      const titleEl = document.createElement("span");
+      titleEl.className = "bits-card__title";
+      titleEl.textContent = entry.title || "Untitled lesson";
+
+      const previewEl = document.createElement("span");
+      previewEl.className = "bits-card__preview";
+      previewEl.textContent = previewText(entry.content, 74);
+
+      selectButton.append(titleEl, previewEl);
+      selectButton.addEventListener("click", () => {
+        uiState.lessonsActiveId = entry.id;
+        uiState.lessonsIsCreating = false;
+        renderApp();
+      });
+
+      li.append(handle, selectButton);
+      lessonsList.appendChild(li);
+    });
+  }
+
+  function startCreateMode() {
+    uiState.lessonsIsCreating = true;
+    renderApp();
+  }
+
+  document.getElementById("lessonsNewBtn")?.addEventListener("click", startCreateMode);
+  document.getElementById("lessonsNewFromEditorBtn")?.addEventListener("click", startCreateMode);
+
+  document.getElementById("lessonsEditorCancelBtn")?.addEventListener("click", () => {
+    if (uiState.lessonsIsCreating) {
+      if (entries.length === 0) {
+        titleInput.value = "";
+        contentInput.value = "";
+        editorMsg.textContent = "";
+        return;
+      }
+
+      uiState.lessonsIsCreating = false;
+      if (!entries.some(entry => entry.id === uiState.lessonsActiveId)) {
+        uiState.lessonsActiveId = entries[0].id;
+      }
+      renderApp();
+      return;
+    }
+
+    renderApp();
+  });
+
+  document.getElementById("lessonsEditorDeleteBtn")?.addEventListener("click", () => {
+    if (!activeEntry) return;
+    if (!confirm("Delete this lesson? This cannot be undone.")) return;
+
+    const updated = entries.filter(entry => entry.id !== activeEntry.id);
+    saveLessonsLearnedEntries(updated);
+
+    if (updated.length === 0) {
+      uiState.lessonsActiveId = null;
+      uiState.lessonsIsCreating = true;
+    } else {
+      uiState.lessonsActiveId = updated[0].id;
+      uiState.lessonsIsCreating = false;
+    }
+
+    renderApp();
+  });
+
+  document.getElementById("lessonsEditorForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    const title = titleInput.value.trim();
+    const content = contentInput.value.trim();
+
+    if (!content) {
+      editorMsg.textContent = "Please write something.";
+      return;
+    }
+
+    editorMsg.textContent = "";
+
+    if (isCreating || !activeEntry) {
+      const newEntry = createLessonsLearnedEntry({ title, content });
+      saveLessonsLearnedEntries([newEntry, ...entries]);
+      uiState.lessonsActiveId = newEntry.id;
+      uiState.lessonsIsCreating = false;
+    } else {
+      const updated = entries.map(entry =>
+        entry.id === activeEntry.id
+          ? { ...entry, title, content }
+          : entry
+      );
+      saveLessonsLearnedEntries(updated);
+      uiState.lessonsActiveId = activeEntry.id;
+      uiState.lessonsIsCreating = false;
+    }
+
+    renderApp();
+  });
+
+  {
+    let dragSrcId = null;
+
+    function getLessonsDragLi(el) {
+      while (el && (!el.classList || !el.classList.contains("bits-card"))) el = el.parentElement;
+      return el;
+    }
+
+    lessonsList.addEventListener("dragstart", event => {
+      const li = getLessonsDragLi(event.target);
+      if (!li) return;
+      dragSrcId = li.dataset.id;
+      li.classList.add("bits-card--dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", dragSrcId);
+    });
+
+    lessonsList.addEventListener("dragend", event => {
+      const li = getLessonsDragLi(event.target);
+      if (li) li.classList.remove("bits-card--dragging");
+      lessonsList.querySelectorAll(".bits-card--drag-over").forEach(el =>
+        el.classList.remove("bits-card--drag-over")
+      );
+      dragSrcId = null;
+    });
+
+    lessonsList.addEventListener("dragover", event => {
+      const li = getLessonsDragLi(event.target);
+      if (!li || li.dataset.id === dragSrcId) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      lessonsList.querySelectorAll(".bits-card--drag-over").forEach(el =>
+        el.classList.remove("bits-card--drag-over")
+      );
+      li.classList.add("bits-card--drag-over");
+    });
+
+    lessonsList.addEventListener("dragleave", event => {
+      const li = getLessonsDragLi(event.target);
+      if (li) li.classList.remove("bits-card--drag-over");
+    });
+
+    lessonsList.addEventListener("drop", event => {
+      event.preventDefault();
+      const targetLi = getLessonsDragLi(event.target);
+      if (!targetLi || !dragSrcId) return;
+
+      const targetId = targetLi.dataset.id;
+      if (targetId === dragSrcId) return;
+
+      const freshEntries = loadLessonsLearnedEntries();
+      const fromIndex = freshEntries.findIndex(entry => entry.id === dragSrcId);
+      const toIndex = freshEntries.findIndex(entry => entry.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return;
+
+      freshEntries.splice(toIndex, 0, freshEntries.splice(fromIndex, 1)[0]);
+      saveLessonsLearnedEntries(freshEntries);
+      renderApp();
+    });
+  }
 }
 
 function renderBits() {
@@ -9052,7 +9347,7 @@ function renderSettings() {
         <div class="settings-section__header">
           <p class="eyebrow">Danger Zone</p>
           <h2 class="panel-title">Clear All Data</h2>
-          <p class="panel-subtitle">Permanently delete all PersonalDock data — tasks, budget items, categories, calendar events, promises, notes, checklists, diary entries, bits, dates board items, and expense tracker records. The app will return to a completely empty state. This cannot be undone unless you have exported a backup.</p>
+          <p class="panel-subtitle">Permanently delete all PersonalDock data — tasks, budget items, categories, calendar events, promises, notes, checklists, diary entries, bits, dates board items, lessons learned entries, and expense tracker records. The app will return to a completely empty state. This cannot be undone unless you have exported a backup.</p>
         </div>
         <div class="settings-actions">
           <button type="button" id="settingsResetBtn" class="ghost-btn">Clear all data</button>
@@ -9072,7 +9367,7 @@ function renderSettings() {
   });
 
   document.getElementById("settingsResetBtn").addEventListener("click", () => {
-    const confirmed = confirm("Clear all PersonalDock data?\n\nThis will permanently delete tasks, budget items, categories, calendar events, promises, notes, checklists, diary entries, bits, dates board items, and expense tracker records. This cannot be undone unless you have exported a backup.\n\nAre you sure?");
+    const confirmed = confirm("Clear all PersonalDock data?\n\nThis will permanently delete tasks, budget items, categories, calendar events, promises, notes, checklists, diary entries, bits, dates board items, lessons learned entries, and expense tracker records. This cannot be undone unless you have exported a backup.\n\nAre you sure?");
 
     if (!confirmed) {
       return;
