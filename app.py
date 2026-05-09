@@ -88,7 +88,7 @@ if __name__ == "__main__":
     api = Api()
 
     window = webview.create_window(
-        title="PersonalDock",
+        title="Dinosaur's La La Land",
         url=str(html_path),
         js_api=api,
         width=1400,
