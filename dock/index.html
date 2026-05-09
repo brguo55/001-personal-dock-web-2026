@@ -12,42 +12,45 @@
 
 <body>
   <div class="app-shell">
-    <header class="app-header">
-      <div class="brand-panel">
-        <p class="eyebrow">Personal productivity and budget planning</p>
-        <div class="brand-row">
-          <div>
-            <h1>PersonalDock</h1>
-            <p class="subtitle" id="viewDescription">
-              A calm place to organize your day, tasks, and budget.
-            </p>
+    <aside class="app-sidebar" aria-label="Primary navigation sidebar">
+      <p class="app-sidebar__title">Sections</p>
+      <nav class="view-nav" id="viewNav" aria-label="Primary navigation">
+        <button type="button" class="nav-btn" data-view="dashboard">Dashboard</button>
+        <button type="button" class="nav-btn" data-view="actionBoard">Action Board</button>
+        <button type="button" class="nav-btn" data-view="calendar">Calendar</button>
+        <button type="button" class="nav-btn" data-view="waitingFor">GTD</button>
+        <button type="button" class="nav-btn" data-view="budgetPlanner">Budget Planner</button>
+        <button type="button" class="nav-btn" data-view="expenseTracker">Expense Tracker</button>
+        <button type="button" class="nav-btn" data-view="planner">Planner</button>
+        <button type="button" class="nav-btn" data-view="promise">Promise</button>
+        <button type="button" class="nav-btn" data-view="diary">Diary</button>
+        <button type="button" class="nav-btn" data-view="bits">Bits</button>
+        <button type="button" class="nav-btn" data-view="datesBoard">Dates</button>
+        <button type="button" class="nav-btn" data-view="lessonsLearned">Lessons</button>
+        <button type="button" class="nav-btn" data-view="settings">Settings</button>
+      </nav>
+    </aside>
+
+    <div class="app-main">
+      <header class="app-header">
+        <div class="brand-panel">
+          <p class="eyebrow">Personal productivity and budget planning</p>
+          <div class="brand-row">
+            <div>
+              <h1>PersonalDock</h1>
+              <p class="subtitle" id="viewDescription">
+                A calm place to organize your day, tasks, and budget.
+              </p>
+            </div>
+            <p class="today-stamp" id="todayStamp"></p>
           </div>
-          <p class="today-stamp" id="todayStamp"></p>
         </div>
-      </div>
+      </header>
 
-      <div class="header-controls">
-        <nav class="view-nav" id="viewNav" aria-label="Primary navigation">
-          <button type="button" class="nav-btn" data-view="dashboard">Dashboard</button>
-          <button type="button" class="nav-btn" data-view="actionBoard">Action Board</button>
-          <button type="button" class="nav-btn" data-view="calendar">Calendar</button>
-          <button type="button" class="nav-btn" data-view="waitingFor">GTD</button>
-          <button type="button" class="nav-btn" data-view="budgetPlanner">Budget Planner</button>
-          <button type="button" class="nav-btn" data-view="expenseTracker">Expense Tracker</button>
-          <button type="button" class="nav-btn" data-view="planner">Planner</button>
-          <button type="button" class="nav-btn" data-view="promise">Promise</button>
-          <button type="button" class="nav-btn" data-view="diary">Diary</button>
-          <button type="button" class="nav-btn" data-view="bits">Bits</button>
-          <button type="button" class="nav-btn" data-view="datesBoard">Dates</button>
-          <button type="button" class="nav-btn" data-view="lessonsLearned">Lessons</button>
-          <button type="button" class="nav-btn" data-view="settings">Settings</button>
-        </nav>
-      </div>
-    </header>
+      <input type="file" id="importJsonInput" accept=".json,application/json" hidden />
 
-    <input type="file" id="importJsonInput" accept=".json,application/json" hidden />
-
-    <main id="viewRoot" class="view-root"></main>
+      <main id="viewRoot" class="view-root"></main>
+    </div>
   </div>
 
   <template id="actionSectionTemplate">
