@@ -183,6 +183,68 @@ h1 {
   box-shadow: var(--shadow-sm);
 }
 
+.sidebar-hover-zone {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 100vh;
+  z-index: 34;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease;
+}
+
+.sidebar-hover-zone::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(10,191,83,.11) 0%, rgba(10,191,83,0) 100%);
+  opacity: .28;
+}
+
+body.sidebar-auto .app-shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.sidebar-auto .app-sidebar {
+  position: fixed;
+  top: 50%;
+  left: 12px;
+  width: clamp(212px, 21vw, 250px);
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transform: translate3d(calc(-100% - 22px), -50%, 0);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 40;
+  transition: transform .32s cubic-bezier(.22, 1, .36, 1), opacity .22s ease, box-shadow .22s ease;
+}
+
+body.sidebar-auto .app-sidebar__title {
+  margin-bottom: 12px;
+}
+
+body.sidebar-auto #viewNav {
+  justify-content: center;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+body.sidebar-auto .sidebar-hover-zone {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body.sidebar-auto.sidebar-visible .app-sidebar {
+  transform: translate3d(0, -50%, 0);
+  opacity: 1;
+  pointer-events: auto;
+  box-shadow: var(--shadow-lg);
+}
+
 .app-sidebar__title {
   margin: 0 0 10px;
   padding: 0 2px 10px;
