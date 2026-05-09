@@ -1273,6 +1273,64 @@ function formatPlannerItemCostDisplay(item) {
   return formatPlannerPlanCostDisplay(amountValue, getPlannerItemCostCurrency(item));
 }
 
+function getPlannerVisibleItemCostTotals(visibleItems) {
+  if (!Array.isArray(visibleItems)) {
+    return { USD: 0, RMB: 0 };
+  }
+
+  return visibleItems.reduce((totals, entry) => {
+    const amountValue = getPlannerItemCostAmount(entry?.item);
+
+    if (!amountValue) {
+      return totals;
+    }
+
+    const parsedAmount = Number(amountValue);
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      return totals;
+    }
+
+    const currency = getPlannerItemCostCurrency(entry?.item);
+    totals[currency] = (totals[currency] || 0) + parsedAmount;
+    return totals;
+  }, { USD: 0, RMB: 0 });
+}
+
+function formatPlannerVisibleItemCostSummary(visibleItems) {
+  const totals = getPlannerVisibleItemCostTotals(visibleItems);
+  const includedCurrencies = new Set();
+
+  if (Array.isArray(visibleItems)) {
+    visibleItems.forEach(entry => {
+      const amountValue = getPlannerItemCostAmount(entry?.item);
+
+      if (!amountValue) {
+        return;
+      }
+
+      const parsedAmount = Number(amountValue);
+
+      if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+        return;
+      }
+
+      includedCurrencies.add(getPlannerItemCostCurrency(entry?.item));
+    });
+  }
+
+  const currencyOrder = ["RMB", "USD"];
+  const parts = currencyOrder
+    .filter(currency => includedCurrencies.has(currency))
+    .map(currency => formatPlannerPlanCostDisplay(totals[currency], currency));
+
+  if (parts.length === 0) {
+    return "";
+  }
+
+  return parts.join(" / ");
+}
+
 function getPlannerSectionTrackPlanCost(section) {
   if (typeof section?.trackPlanCost === "boolean") {
     return section.trackPlanCost;
@@ -4692,6 +4750,7 @@ function renderCalendar() {
 function renderPlanner() {
   const selectedSection = uiState.selectedPlannerSection || "all";
   const visibleItems = getPlannerItems(selectedSection);
+  const visibleItemCostSummary = formatPlannerVisibleItemCostSummary(visibleItems);
   const selectedSectionData = selectedSection === "all" ? null : getPlannerSectionById(selectedSection);
   const hasNoSections = appState.plannerSections.length === 0;
   if (selectedSectionData) {
@@ -4745,9 +4804,15 @@ function renderPlanner() {
                 : `Manage items inside ${selectedSectionData.title}.`}
             </p>
           </div>
-          <div class="budget-total">
-            <span>Items</span>
-            <strong>${visibleItems.length}</strong>
+          <div class="planner-main-metrics">
+            <div class="budget-total">
+              <span>Items</span>
+              <strong>${visibleItems.length}</strong>
+            </div>
+            <div class="budget-total planner-total${visibleItemCostSummary ? "" : " is-empty"}" id="plannerVisibleCostTotalCard">
+              <span>Total cost</span>
+              <strong id="plannerVisibleCostTotalValue">${visibleItemCostSummary || "No costs"}</strong>
+            </div>
           </div>
         </div>
 
@@ -4817,6 +4882,20 @@ function renderPlanner() {
 
   // ── Sidebar ───────────────────────────────────────────────────────────────
   const sidebarList = document.getElementById("plannerSectionList");
+  const plannerVisibleCostTotalCard = document.getElementById("plannerVisibleCostTotalCard");
+  const plannerVisibleCostTotalValue = document.getElementById("plannerVisibleCostTotalValue");
+
+  function refreshPlannerVisibleCostSummary() {
+    if (!plannerVisibleCostTotalCard || !plannerVisibleCostTotalValue) {
+      return;
+    }
+
+    const summary = formatPlannerVisibleItemCostSummary(visibleItems);
+    plannerVisibleCostTotalValue.textContent = summary || "No costs";
+    plannerVisibleCostTotalCard.classList.toggle("is-empty", !summary);
+  }
+
+  refreshPlannerVisibleCostSummary();
 
   const allLi = document.createElement("li");
   allLi.className = "sidebar-list__item";
@@ -5259,6 +5338,7 @@ function renderPlanner() {
         }
 
         saveState();
+        refreshPlannerVisibleCostSummary();
       });
 
       costActions.appendChild(saveCostBtn);
