@@ -1648,6 +1648,8 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .note-delete:hover,.tiny-btn.is-danger:hover { color: var(--danger); background: var(--danger-dim); border-color: rgba(224,53,53,.35); }
 
 /* ── Promise section ─────────────────────────────────── */
+.promise-view { overflow: visible; }
+
 .promise-list { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 10px; }
 
 .promise-item {

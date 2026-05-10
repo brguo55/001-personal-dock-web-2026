@@ -3702,7 +3702,7 @@ function renderPromise() {
   const now = new Date();
   const todayIso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
   viewRoot.innerHTML = `
-    <section class="view-panel">
+    <section class="view-panel promise-view">
       <div class="view-panel__top">
         <div>
           <h2 class="panel-title">Promise</h2>
