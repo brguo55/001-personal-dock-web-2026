@@ -1220,6 +1220,12 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   grid-template-columns: minmax(0,1.1fr) minmax(120px,.7fr) auto;
 }
 
+.budget-plan-target-form .field .gtd-cselect,
+.budget-plan-entry-form .field .gtd-cselect {
+  width: 100%;
+  min-width: 0;
+}
+
 .budget-plan-entry-form {
   margin-top: 12px;
   grid-template-columns: 1.2fr .9fr .8fr .9fr auto;

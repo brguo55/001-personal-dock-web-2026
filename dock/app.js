@@ -8990,7 +8990,7 @@ function renderBudgetPlanning() {
         </div>
         <div class="field">
           <label for="budgetPlanningTargetCurrencySelect">Currency</label>
-          <select id="budgetPlanningTargetCurrencySelect">
+          <select id="budgetPlanningTargetCurrencySelect" class="budget-plan-currency-select">
             <option value="USD"${targetCurrency === "USD" ? " selected" : ""}>$</option>
             <option value="CNY"${targetCurrency === "CNY" ? " selected" : ""}>R</option>
           </select>
@@ -9014,7 +9014,7 @@ function renderBudgetPlanning() {
 
         <div class="field">
           <label for="budgetPlanningCurrencySelect">Currency</label>
-          <select id="budgetPlanningCurrencySelect">
+          <select id="budgetPlanningCurrencySelect" class="budget-plan-currency-select">
             <option value="USD">$</option>
             <option value="CNY">R</option>
           </select>
@@ -9041,6 +9041,10 @@ function renderBudgetPlanning() {
   const targetForm = document.getElementById("budgetPlanningTargetForm");
   const entryForm = document.getElementById("budgetPlanningEntryForm");
   const entryList = document.getElementById("budgetPlanningEntryList");
+
+  viewRoot
+    .querySelectorAll(".budget-plan-currency-select")
+    .forEach(selectElement => buildGtdCustomSelect(selectElement));
 
   periodSelector.addEventListener("click", event => {
     const button = event.target.closest("[data-period]");
