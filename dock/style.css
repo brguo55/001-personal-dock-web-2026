@@ -2290,6 +2290,36 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .diary-form__actions {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
+
+.editor-autosave-status {
+  flex: 0 0 8.2rem;
+  font-size: .72rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: .9;
+  transition: color .14s ease, opacity .14s ease;
+}
+
+.editor-autosave-status[data-state="saving"] {
+  color: var(--green);
+  opacity: 1;
+}
+
+.editor-autosave-status[data-state="saved"] {
+  color: var(--muted);
+  opacity: .88;
+}
+
+.editor-autosave-status[data-state="unsaved"] {
+  color: var(--muted-bright);
+  opacity: .94;
+}
+
+.editor-autosave-status[data-state="idle"] {
+  opacity: 0;
+}
+
 .diary-form__msg { flex: 1; font-size: .82rem; color: var(--danger); min-width: 0; }
 
 .diary-entry-list {

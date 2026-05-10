@@ -2643,10 +2643,119 @@ async function importJsonBackup(file) {
   setBackupStatus(`Imported ${file.name}. Current saved data was replaced.`, "success");
 }
 
+let _activeEditorAutosave = null;
+
+function clearActiveEditorAutosave() {
+  if (_activeEditorAutosave && typeof _activeEditorAutosave.dispose === "function") {
+    _activeEditorAutosave.dispose();
+  }
+
+  _activeEditorAutosave = null;
+}
+
+function registerActiveEditorAutosave(autosaveController) {
+  clearActiveEditorAutosave();
+  _activeEditorAutosave = autosaveController || null;
+}
+
+function flushActiveEditorAutosave() {
+  if (!_activeEditorAutosave || typeof _activeEditorAutosave.flush !== "function") {
+    return false;
+  }
+
+  return Boolean(_activeEditorAutosave.flush());
+}
+
+function createEditorAutosaveController({ delayMs = 700, getDraft, saveDraft, updateStatus }) {
+  let timerId = null;
+  let isDisposed = false;
+  let lastSavedKey = getDraft().key;
+
+  function setStatus(state, text) {
+    if (typeof updateStatus === "function") {
+      updateStatus(state, text);
+    }
+  }
+
+  function clearTimer() {
+    if (timerId !== null) {
+      window.clearTimeout(timerId);
+      timerId = null;
+    }
+  }
+
+  function queueSave() {
+    if (isDisposed) {
+      return;
+    }
+
+    const snapshot = getDraft();
+
+    if (snapshot.key === lastSavedKey) {
+      setStatus("saved", "Saved");
+      clearTimer();
+      return;
+    }
+
+    setStatus("unsaved", "Unsaved changes");
+    clearTimer();
+    timerId = window.setTimeout(() => {
+      flush();
+    }, delayMs);
+  }
+
+  function flush() {
+    if (isDisposed) {
+      return false;
+    }
+
+    clearTimer();
+    const snapshot = getDraft();
+
+    if (snapshot.key === lastSavedKey) {
+      setStatus("saved", "Saved");
+      return false;
+    }
+
+    setStatus("saving", "Saving...");
+    const result = saveDraft(snapshot);
+
+    if (!result || result.saved !== true) {
+      lastSavedKey = getDraft().key;
+      setStatus("idle", "");
+      return false;
+    }
+
+    lastSavedKey = typeof result.savedKey === "string" ? result.savedKey : getDraft().key;
+    setStatus("saved", "Saved");
+    return true;
+  }
+
+  function syncSavedKey(savedKey, statusState = "saved", statusText = "Saved") {
+    clearTimer();
+    lastSavedKey = typeof savedKey === "string" ? savedKey : getDraft().key;
+    setStatus(statusState, statusText);
+  }
+
+  function dispose() {
+    isDisposed = true;
+    clearTimer();
+  }
+
+  return {
+    queueSave,
+    flush,
+    syncSavedKey,
+    dispose
+  };
+}
+
 function setActiveView(view) {
   if (!VIEW_DETAILS[view]) {
     return;
   }
+
+  flushActiveEditorAutosave();
 
   uiState.activeView = view;
   uiState.budgetEditorId = null;
@@ -2687,6 +2796,8 @@ function renderActiveView(view) {
 }
 
 function renderApp() {
+  clearActiveEditorAutosave();
+
   if (uiState.activeView !== "calendar" && _calendarDragAbort) {
     _calendarDragAbort.abort();
     _calendarDragAbort = null;
@@ -6618,14 +6729,14 @@ function renderDatesBoard() {
 
 function renderDiary() {
   const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const entries = loadDiaryEntries();
+  let entries = loadDiaryEntries();
 
   // Track which entry is being viewed/edited in uiState (session-only, not persisted)
   if (!("diaryActiveId" in uiState)) uiState.diaryActiveId = null;
 
   // Resolve the active entry (may have been deleted)
   let active = uiState.diaryActiveId
-    ? entries.find(e => e.id === uiState.diaryActiveId) || null
+    ? entries.find(entry => entry.id === uiState.diaryActiveId) || null
     : null;
 
   // Default the date field to today
@@ -6687,6 +6798,7 @@ function renderDiary() {
             <textarea id="diaryText" name="text" class="diary-textarea" rows="14" maxlength="20000" placeholder="Write freely\u2026" required>${active ? active.text.replace(/</g, "&lt;") : ""}</textarea>
           </div>
           <div class="diary-form__actions">
+            <span class="editor-autosave-status" id="diaryAutosaveStatus" data-state="idle"></span>
             <span class="diary-form__msg" id="diaryMsg"></span>
             <button type="submit" class="primary-btn">${active ? "Save changes" : "Save entry"}</button>
             ${active ? `<button type="button" class="tiny-btn is-danger" id="diaryDeleteBtn">Delete</button>` : ""}
@@ -6703,6 +6815,153 @@ function renderDiary() {
       </div>
     </div>
   `;
+
+  const diaryForm = document.getElementById("diaryForm");
+  const diaryMsg = document.getElementById("diaryMsg");
+  const autosaveStatus = document.getElementById("diaryAutosaveStatus");
+  const dateInput = document.getElementById("diaryDate");
+  const dayInput = document.getElementById("diaryDay");
+  const titleInput = document.getElementById("diaryTitle");
+  const locationInput = document.getElementById("diaryLocation");
+  const textInput = document.getElementById("diaryText");
+
+  function setDiaryAutosaveStatus(state, text) {
+    if (!autosaveStatus) {
+      return;
+    }
+
+    autosaveStatus.dataset.state = state;
+    autosaveStatus.textContent = text;
+  }
+
+  function buildDiarySavedKey(entry) {
+    return JSON.stringify([
+      entry.id,
+      entry.date,
+      entry.dayOfWeek || "",
+      entry.title || "",
+      entry.location || "",
+      entry.text || ""
+    ]);
+  }
+
+  function buildDiaryDraft() {
+    const date = (diaryForm.date.value || todayIso).trim();
+    const dayOfWeek = (diaryForm.dayOfWeek.value || dayOfWeekFromDate(date)).trim();
+    const title = (diaryForm.title.value || "").trim();
+    const location = (diaryForm.location.value || "").trim();
+    const text = (diaryForm.text.value || "").trim();
+    const activeId = active ? active.id : "new";
+
+    return {
+      date,
+      dayOfWeek,
+      title,
+      location,
+      text,
+      activeId,
+      key: JSON.stringify([activeId, date, dayOfWeek, title, location, text])
+    };
+  }
+
+  function saveDiaryDraft(snapshot) {
+    const hasAnyContent = Boolean(snapshot.title || snapshot.text || snapshot.location);
+    const freshEntries = loadDiaryEntries();
+
+    if (active) {
+      const targetIndex = freshEntries.findIndex(entry => entry.id === active.id);
+
+      if (targetIndex === -1) {
+        if (!hasAnyContent) {
+          return { saved: false };
+        }
+
+        const recoveredEntry = createDiaryEntry({
+          date: snapshot.date,
+          dayOfWeek: snapshot.dayOfWeek,
+          title: snapshot.title,
+          location: snapshot.location,
+          text: snapshot.text
+        });
+
+        saveDiaryEntries([recoveredEntry, ...freshEntries]);
+        entries = [recoveredEntry, ...freshEntries];
+        active = recoveredEntry;
+        uiState.diaryActiveId = recoveredEntry.id;
+
+        return {
+          saved: true,
+          savedKey: buildDiarySavedKey(recoveredEntry)
+        };
+      }
+
+      const updatedEntry = {
+        ...freshEntries[targetIndex],
+        date: snapshot.date,
+        dayOfWeek: snapshot.dayOfWeek,
+        title: snapshot.title,
+        location: snapshot.location,
+        text: snapshot.text
+      };
+
+      freshEntries[targetIndex] = updatedEntry;
+      saveDiaryEntries(freshEntries);
+      entries = freshEntries;
+      active = updatedEntry;
+      uiState.diaryActiveId = updatedEntry.id;
+
+      return {
+        saved: true,
+        savedKey: buildDiarySavedKey(updatedEntry)
+      };
+    }
+
+    if (!hasAnyContent) {
+      return { saved: false };
+    }
+
+    const newEntry = createDiaryEntry({
+      date: snapshot.date,
+      dayOfWeek: snapshot.dayOfWeek,
+      title: snapshot.title,
+      location: snapshot.location,
+      text: snapshot.text
+    });
+
+    saveDiaryEntries([newEntry, ...freshEntries]);
+    entries = [newEntry, ...freshEntries];
+    active = newEntry;
+    uiState.diaryActiveId = newEntry.id;
+
+    return {
+      saved: true,
+      savedKey: buildDiarySavedKey(newEntry)
+    };
+  }
+
+  const diaryAutosave = createEditorAutosaveController({
+    delayMs: 700,
+    getDraft: buildDiaryDraft,
+    saveDraft: saveDiaryDraft,
+    updateStatus: setDiaryAutosaveStatus
+  });
+
+  registerActiveEditorAutosave({
+    flush: () => diaryAutosave.flush(),
+    dispose: () => diaryAutosave.dispose()
+  });
+
+  const hasInitialContent = Boolean(
+    (titleInput.value || "").trim() ||
+    (locationInput.value || "").trim() ||
+    (textInput.value || "").trim()
+  );
+
+  if (active || hasInitialContent) {
+    setDiaryAutosaveStatus("saved", "Saved");
+  } else {
+    setDiaryAutosaveStatus("idle", "");
+  }
 
   // ── Populate sidebar list ─────────────────────────────────────────────────
   const entryList = document.getElementById("diaryEntryList");
@@ -6744,6 +7003,7 @@ function renderDiary() {
       }
 
       btn.addEventListener("click", () => {
+        diaryAutosave.flush();
         uiState.diaryActiveId = entry.id;
         renderApp();
       });
@@ -6754,16 +7014,26 @@ function renderDiary() {
   }
 
   // ── Date → day-of-week auto-fill ──────────────────────────────────────────
-  const dateInput = document.getElementById("diaryDate");
-  const dayInput  = document.getElementById("diaryDay");
   dateInput.addEventListener("change", () => {
     dayInput.value = dayOfWeekFromDate(dateInput.value);
+    diaryMsg.textContent = "";
+    diaryAutosave.queueSave();
   });
+
+  function queueDiaryAutosave() {
+    diaryMsg.textContent = "";
+    diaryAutosave.queueSave();
+  }
+
+  titleInput.addEventListener("input", queueDiaryAutosave);
+  textInput.addEventListener("input", queueDiaryAutosave);
+  locationInput.addEventListener("input", queueDiaryAutosave);
 
   // ── New entry button ──────────────────────────────────────────────────────
   const newBtn = document.getElementById("diaryNewBtn");
   if (newBtn) {
     newBtn.addEventListener("click", () => {
+      diaryAutosave.flush();
       uiState.diaryActiveId = null;
       renderApp();
     });
@@ -6775,7 +7045,7 @@ function renderDiary() {
     deleteBtn.addEventListener("click", () => {
       if (!active) return;
       if (!confirm("Delete this diary entry? This cannot be undone.")) return;
-      const updated = entries.filter(e => e.id !== active.id);
+      const updated = loadDiaryEntries().filter(entry => entry.id !== active.id);
       saveDiaryEntries(updated);
       uiState.diaryActiveId = null;
       renderApp();
@@ -6783,33 +7053,30 @@ function renderDiary() {
   }
 
   // ── Form submit ───────────────────────────────────────────────────────────
-  document.getElementById("diaryForm").addEventListener("submit", evt => {
+  diaryForm.addEventListener("submit", evt => {
     evt.preventDefault();
-    const form = evt.target;
-    const date      = form.date.value;
-    const dayOfWeek = form.dayOfWeek.value.trim();
-    const title     = form.title.value.trim();
-    const location  = form.location.value.trim();
-    const text      = form.text.value.trim();
-    const msg       = document.getElementById("diaryMsg");
+    const snapshot = buildDiaryDraft();
 
-    if (!date) { msg.textContent = "Please pick a date."; return; }
-    if (!text) { msg.textContent = "Please write something before saving."; return; }
-    msg.textContent = "";
-
-    if (active) {
-      // Update existing
-      const updated = entries.map(e => e.id === active.id
-        ? { ...e, date, dayOfWeek, title, location, text }
-        : e);
-      saveDiaryEntries(updated);
-      uiState.diaryActiveId = active.id;
-    } else {
-      // Create new
-      const newEntry = createDiaryEntry({ date, dayOfWeek, title, location, text });
-      saveDiaryEntries([newEntry, ...entries]);
-      uiState.diaryActiveId = newEntry.id;
+    if (!snapshot.date) {
+      diaryMsg.textContent = "Please pick a date.";
+      return;
     }
+
+    if (!snapshot.text) {
+      diaryMsg.textContent = "Please write something before saving.";
+      return;
+    }
+
+    diaryMsg.textContent = "";
+
+    const result = saveDiaryDraft(snapshot);
+
+    if (!result.saved) {
+      diaryMsg.textContent = "Please write something before saving.";
+      return;
+    }
+
+    diaryAutosave.syncSavedKey(result.savedKey);
     renderApp();
   });
 
@@ -7144,7 +7411,7 @@ function renderLessonsLearned() {
 }
 
 function renderBits() {
-  const entries = loadBitsEntries();
+  let entries = loadBitsEntries();
 
   if (!("bitsActiveId" in uiState)) uiState.bitsActiveId = null;
   if (!("bitsIsCreating" in uiState)) uiState.bitsIsCreating = false;
@@ -7166,7 +7433,7 @@ function renderBits() {
     uiState.bitsActiveId = entries[0].id;
   }
 
-  const activeEntry = entries.find(entry => entry.id === uiState.bitsActiveId) || null;
+  let activeEntry = entries.find(entry => entry.id === uiState.bitsActiveId) || null;
   const isCreating = uiState.bitsIsCreating || !activeEntry;
 
   function previewText(text, maxLength = 88) {
@@ -7210,6 +7477,7 @@ function renderBits() {
             <textarea id="bitsEditorContentInput" name="content" class="bits-textarea bits-textarea--editor" rows="14" maxlength="10000" placeholder="Write whatever..."></textarea>
           </div>
           <div class="bits-form__actions bits-form__actions--editor">
+            <span class="editor-autosave-status" id="bitsAutosaveStatus" data-state="idle"></span>
             <span class="bits-form__msg" id="bitsEditorMsg"></span>
             <button type="button" class="tiny-btn" id="bitsEditorCancelBtn">Cancel</button>
             <button type="submit" class="primary-btn" id="bitsEditorSaveBtn">${isCreating ? "Save Bit" : "Save Changes"}</button>
@@ -7224,9 +7492,133 @@ function renderBits() {
   const titleInput = document.getElementById("bitsEditorTitleInput");
   const contentInput = document.getElementById("bitsEditorContentInput");
   const editorMsg = document.getElementById("bitsEditorMsg");
+  const autosaveStatus = document.getElementById("bitsAutosaveStatus");
 
   titleInput.value = isCreating ? "" : (activeEntry ? activeEntry.title : "");
   contentInput.value = isCreating ? "" : (activeEntry ? activeEntry.content : "");
+
+  function setBitsAutosaveStatus(state, text) {
+    if (!autosaveStatus) {
+      return;
+    }
+
+    autosaveStatus.dataset.state = state;
+    autosaveStatus.textContent = text;
+  }
+
+  function buildBitsSavedKey(entry) {
+    return JSON.stringify([entry.id, entry.title || "", entry.content || ""]);
+  }
+
+  function buildBitsDraft() {
+    const title = (titleInput.value || "").trim();
+    const content = (contentInput.value || "").trim();
+    const activeId = activeEntry ? activeEntry.id : "new";
+
+    return {
+      title,
+      content,
+      activeId,
+      key: JSON.stringify([activeId, title, content])
+    };
+  }
+
+  function saveBitsDraft(snapshot) {
+    const hasAnyContent = Boolean(snapshot.title || snapshot.content);
+    const freshEntries = loadBitsEntries();
+
+    if (activeEntry) {
+      const targetIndex = freshEntries.findIndex(entry => entry.id === activeEntry.id);
+
+      if (targetIndex === -1) {
+        if (!hasAnyContent) {
+          return { saved: false };
+        }
+
+        const recoveredEntry = createBitsEntry({
+          title: snapshot.title,
+          content: snapshot.content
+        });
+
+        saveBitsEntries([recoveredEntry, ...freshEntries]);
+        entries = [recoveredEntry, ...freshEntries];
+        activeEntry = recoveredEntry;
+        uiState.bitsActiveId = recoveredEntry.id;
+        uiState.bitsIsCreating = false;
+
+        return {
+          saved: true,
+          savedKey: buildBitsSavedKey(recoveredEntry)
+        };
+      }
+
+      const updatedEntry = {
+        ...freshEntries[targetIndex],
+        title: snapshot.title,
+        content: snapshot.content
+      };
+
+      freshEntries[targetIndex] = updatedEntry;
+      saveBitsEntries(freshEntries);
+      entries = freshEntries;
+      activeEntry = updatedEntry;
+      uiState.bitsActiveId = updatedEntry.id;
+      uiState.bitsIsCreating = false;
+
+      return {
+        saved: true,
+        savedKey: buildBitsSavedKey(updatedEntry)
+      };
+    }
+
+    if (!hasAnyContent) {
+      return { saved: false };
+    }
+
+    const newEntry = createBitsEntry({
+      title: snapshot.title,
+      content: snapshot.content
+    });
+
+    saveBitsEntries([newEntry, ...freshEntries]);
+    entries = [newEntry, ...freshEntries];
+    activeEntry = newEntry;
+    uiState.bitsActiveId = newEntry.id;
+    uiState.bitsIsCreating = false;
+
+    return {
+      saved: true,
+      savedKey: buildBitsSavedKey(newEntry)
+    };
+  }
+
+  const bitsAutosave = createEditorAutosaveController({
+    delayMs: 700,
+    getDraft: buildBitsDraft,
+    saveDraft: saveBitsDraft,
+    updateStatus: setBitsAutosaveStatus
+  });
+
+  registerActiveEditorAutosave({
+    flush: () => bitsAutosave.flush(),
+    dispose: () => bitsAutosave.dispose()
+  });
+
+  const hasInitialContent = Boolean((titleInput.value || "").trim() || (contentInput.value || "").trim());
+
+  if (activeEntry || hasInitialContent) {
+    setBitsAutosaveStatus("saved", "Saved");
+  } else {
+    setBitsAutosaveStatus("idle", "");
+  }
+
+  function queueBitsAutosave() {
+    editorMsg.textContent = "";
+    bitsAutosave.queueSave();
+  }
+
+  titleInput.addEventListener("input", queueBitsAutosave);
+  contentInput.addEventListener("input", queueBitsAutosave);
 
   if (entries.length === 0) {
     const empty = document.createElement("li");
@@ -7260,6 +7652,7 @@ function renderBits() {
 
       selectButton.append(titleEl, previewEl);
       selectButton.addEventListener("click", () => {
+        bitsAutosave.flush();
         uiState.bitsActiveId = entry.id;
         uiState.bitsIsCreating = false;
         renderApp();
@@ -7271,6 +7664,7 @@ function renderBits() {
   }
 
   function startCreateMode() {
+    bitsAutosave.flush();
     uiState.bitsIsCreating = true;
     renderApp();
   }
@@ -7284,6 +7678,7 @@ function renderBits() {
         titleInput.value = "";
         contentInput.value = "";
         editorMsg.textContent = "";
+        bitsAutosave.syncSavedKey(null, "idle", "");
         return;
       }
 
@@ -7302,7 +7697,7 @@ function renderBits() {
     if (!activeEntry) return;
     if (!confirm("Delete this bit? This cannot be undone.")) return;
 
-    const updated = entries.filter(entry => entry.id !== activeEntry.id);
+    const updated = loadBitsEntries().filter(entry => entry.id !== activeEntry.id);
     saveBitsEntries(updated);
 
     if (updated.length === 0) {
@@ -7319,32 +7714,23 @@ function renderBits() {
   document.getElementById("bitsEditorForm").addEventListener("submit", event => {
     event.preventDefault();
 
-    const title = titleInput.value.trim();
-    const content = contentInput.value.trim();
+    const snapshot = buildBitsDraft();
 
-    if (!content) {
+    if (!snapshot.content) {
       editorMsg.textContent = "Please write something.";
       return;
     }
 
     editorMsg.textContent = "";
 
-    if (isCreating || !activeEntry) {
-      const newEntry = createBitsEntry({ title, content });
-      saveBitsEntries([newEntry, ...entries]);
-      uiState.bitsActiveId = newEntry.id;
-      uiState.bitsIsCreating = false;
-    } else {
-      const updated = entries.map(entry =>
-        entry.id === activeEntry.id
-          ? { ...entry, title, content }
-          : entry
-      );
-      saveBitsEntries(updated);
-      uiState.bitsActiveId = activeEntry.id;
-      uiState.bitsIsCreating = false;
+    const result = saveBitsDraft(snapshot);
+
+    if (!result.saved) {
+      editorMsg.textContent = "Please write something.";
+      return;
     }
 
+    bitsAutosave.syncSavedKey(result.savedKey);
     renderApp();
   });
 
@@ -7393,6 +7779,9 @@ function renderBits() {
 
     bitsList.addEventListener("drop", event => {
       event.preventDefault();
+
+      bitsAutosave.flush();
+
       const targetLi = getBitsDragLi(event.target);
       if (!targetLi || !dragSrcId) return;
 
