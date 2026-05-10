@@ -364,23 +364,54 @@ function formatBudgetRmbAmount(amount) {
   return `R${fixed}`;
 }
 
+function createSplitCurrencyTotals() {
+  return {
+    usd: 0,
+    rmb: 0,
+    hasUsd: false,
+    hasRmb: false
+  };
+}
+
+function getSplitCurrencyTotalsFromBudgetItems(items) {
+  return items.reduce((totals, item) => {
+    const amount = Number(item?.amount);
+    const safeAmount = Number.isFinite(amount) ? amount : 0;
+    const currency = normalizeBudgetCurrency(item?.currency);
+
+    if (currency === "CNY") {
+      totals.hasRmb = true;
+      totals.rmb += safeAmount;
+    } else {
+      totals.hasUsd = true;
+      totals.usd += safeAmount;
+    }
+
+    return totals;
+  }, createSplitCurrencyTotals());
+}
+
 function formatBudgetSplitTotalDisplay(totals) {
-  const hasUsd = Boolean(totals.hasUsd);
-  const hasRmb = Boolean(totals.hasRmb);
+  const usdRaw = totals?.usd ?? totals?.USD;
+  const rmbRaw = totals?.rmb ?? totals?.RMB;
+  const usd = Number.isFinite(Number(usdRaw)) ? Number(usdRaw) : 0;
+  const rmb = Number.isFinite(Number(rmbRaw)) ? Number(rmbRaw) : 0;
+  const hasUsd = typeof totals?.hasUsd === "boolean" ? totals.hasUsd : usd !== 0;
+  const hasRmb = typeof totals?.hasRmb === "boolean" ? totals.hasRmb : rmb !== 0;
 
   if (!hasUsd && !hasRmb) {
-    return "$0 + R0";
+    return "$0";
   }
 
   if (hasUsd && hasRmb) {
-    return `${formatBudgetUsdAmount(totals.usd)} + ${formatBudgetRmbAmount(totals.rmb)}`;
+    return `${formatBudgetUsdAmount(usd)} + ${formatBudgetRmbAmount(rmb)}`;
   }
 
   if (hasUsd) {
-    return formatBudgetUsdAmount(totals.usd);
+    return formatBudgetUsdAmount(usd);
   }
 
-  return formatBudgetRmbAmount(totals.rmb);
+  return formatBudgetRmbAmount(rmb);
 }
 
 function itemAmountInUSD(item) {
@@ -772,15 +803,7 @@ function convertBudgetPlanningAmount(amount, fromCurrency, toCurrency) {
     return safeAmount;
   }
 
-  if (sourceCurrency === "CNY" && targetCurrency === "USD") {
-    return safeAmount * CNY_TO_USD_RATE;
-  }
-
-  if (sourceCurrency === "USD" && targetCurrency === "CNY") {
-    return CNY_TO_USD_RATE > 0 ? safeAmount / CNY_TO_USD_RATE : 0;
-  }
-
-  return safeAmount;
+  return 0;
 }
 
 function buildDefaultBudgetPlannerState() {
@@ -7852,23 +7875,7 @@ function renderBudgetPlanner() {
     ? null
     : getBudgetCategoryById(selectedCategory);
   const editorTarget = uiState.budgetEditorId ? findBudgetItem(uiState.budgetEditorId) : null;
-  const totalInView = visibleEntries.reduce(
-    (totals, entry) => {
-      const amount = Number(entry.item.amount) || 0;
-      const currency = normalizeBudgetCurrency(entry.item.currency);
-
-      if (currency === "CNY") {
-        totals.hasRmb = true;
-        totals.rmb += amount;
-      } else {
-        totals.hasUsd = true;
-        totals.usd += amount;
-      }
-
-      return totals;
-    },
-    { usd: 0, rmb: 0, hasUsd: false, hasRmb: false }
-  );
+  const totalInView = getSplitCurrencyTotalsFromBudgetItems(visibleEntries.map(entry => entry.item));
 
   viewRoot.innerHTML = `
     <section class="budget-layout">
@@ -8218,10 +8225,7 @@ function renderExpenseTracker() {
   }
 
   function formatSummaryTotals(totals) {
-    const safeUsd = Number.isFinite(totals.USD) ? totals.USD : 0;
-    const safeRmb = Number.isFinite(totals.RMB) ? totals.RMB : 0;
-    const usdText = safeUsd === 0 ? "$0" : `$${safeUsd.toFixed(2)}`;
-    return `${usdText} + ${formatExpenseAmount(safeRmb, "RMB")}`;
+    return formatBudgetSplitTotalDisplay(totals);
   }
 
   function getWeekStart(dateObj) {
@@ -8257,11 +8261,21 @@ function renderExpenseTracker() {
   function getTotalsForEntries(entries) {
     return entries.reduce(
       (totals, entry) => {
-        const currency = entry.currency === "RMB" ? "RMB" : "USD";
-        totals[currency] += entry.amount;
+        const amount = Number(entry.amount);
+        const safeAmount = Number.isFinite(amount) ? amount : 0;
+        const currency = normalizeBudgetCurrency(entry.currency);
+
+        if (currency === "CNY") {
+          totals.hasRmb = true;
+          totals.rmb += safeAmount;
+        } else {
+          totals.hasUsd = true;
+          totals.usd += safeAmount;
+        }
+
         return totals;
       },
-      { USD: 0, RMB: 0 }
+      createSplitCurrencyTotals()
     );
   }
 
@@ -8354,7 +8368,7 @@ function renderExpenseTracker() {
           <div class="expense-category-metrics">
             <div class="expense-category-metric">
               <span>Selected period total</span>
-              <strong data-category-total="${category}">$0 + R0</strong>
+              <strong data-category-total="${category}">$0</strong>
             </div>
             <div class="expense-category-metric">
               <span>Entries</span>
@@ -8385,7 +8399,7 @@ function renderExpenseTracker() {
         </nav>
         <div class="budget-total expense-period-total">
           <span id="expensePeriodSummaryLabel">This Week</span>
-          <strong id="expensePeriodSummaryTotal">$0 + R0</strong>
+          <strong id="expensePeriodSummaryTotal">$0</strong>
           <small class="expense-period-summary-note" id="expensePeriodSummaryHint">No expenses logged yet</small>
         </div>
       </div>
@@ -10368,13 +10382,13 @@ function renderBudgetSidebar() {
       id: "all",
       title: "All Budgets",
       count: allEntries.length,
-      total: allEntries.reduce((sum, entry) => sum + entry.item.amount, 0)
+      total: getSplitCurrencyTotalsFromBudgetItems(allEntries.map(entry => entry.item))
     },
     ...appState.budgetCategories.map(category => ({
       id: category.id,
       title: category.title,
       count: category.items.length,
-      total: category.items.reduce((sum, item) => sum + item.amount, 0)
+      total: getSplitCurrencyTotalsFromBudgetItems(category.items)
     }))
   ];
 
@@ -10387,7 +10401,7 @@ function renderBudgetSidebar() {
     button.className = `sidebar-btn ${category.id === uiState.selectedBudgetCategory ? "is-active" : ""}`;
     button.innerHTML = `
       <strong>${category.title}</strong>
-      <span>${category.count} items · ${formatCurrency(category.total)}</span>
+      <span>${category.count} items · ${formatBudgetSplitTotalDisplay(category.total)}</span>
     `;
     button.addEventListener("click", () => {
       setBudgetCategory(category.id);
@@ -10418,14 +10432,14 @@ function renderBudgetCategoryManager() {
     const actions = document.createElement("div");
     const deleteButton = document.createElement("button");
     const deletionCopy = getBudgetCategoryDeletionCopy(category);
-    const total = category.items.reduce((sum, entry) => sum + entry.amount, 0);
+    const total = getSplitCurrencyTotalsFromBudgetItems(category.items);
     const itemLabel = category.items.length === 1 ? "1 item" : `${category.items.length} items`;
 
     item.className = "budget-category-manager__item";
     copy.className = "budget-category-manager__copy";
     title.textContent = category.title;
     meta.className = "budget-category-manager__meta";
-    meta.textContent = `${itemLabel} · ${formatCurrency(total)} · ${deletionCopy.detail}`;
+    meta.textContent = `${itemLabel} · ${formatBudgetSplitTotalDisplay(total)} · ${deletionCopy.detail}`;
 
     actions.className = "budget-category-manager__actions";
     deleteButton.type = "button";
