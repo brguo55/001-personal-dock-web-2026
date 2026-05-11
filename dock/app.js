@@ -470,7 +470,8 @@ let uiState = {
 };
 let backupUiState = {
   message: "Export a JSON backup or import one to restore your current data.",
-  tone: "info"
+  tone: "info",
+  historyEntries: []
 };
 let _calendarDragAbort = null;
 let _calendarPickerAbort = null;
@@ -2635,39 +2636,217 @@ function formatBackupFileDate(dateValue = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function formatBackupFileDateTime(dateValue = new Date()) {
+  const year = dateValue.getFullYear();
+  const month = String(dateValue.getMonth() + 1).padStart(2, "0");
+  const day = String(dateValue.getDate()).padStart(2, "0");
+  const hour = String(dateValue.getHours()).padStart(2, "0");
+  const minute = String(dateValue.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day}_${hour}-${minute}`;
+}
+
+function getAuxiliaryBackupStorageKeys() {
+  return [
+    LEGACY_ACTION_STORAGE_KEY,
+    ACTION_DAILY_STORAGE_KEY,
+    DIARY_STORAGE_KEY,
+    DATES_BOARD_STORAGE_KEY,
+    BITS_STORAGE_KEY,
+    LESSONS_LEARNED_STORAGE_KEY,
+    EXPENSE_TRACKER_STORAGE_KEY
+  ];
+}
+
+function collectAuxiliaryStorageSnapshot() {
+  const snapshot = {};
+
+  getAuxiliaryBackupStorageKeys().forEach(storageKey => {
+    const raw = localStorage.getItem(storageKey);
+
+    if (typeof raw === "string") {
+      snapshot[storageKey] = raw;
+    }
+  });
+
+  return snapshot;
+}
+
+function restoreAuxiliaryStorageSnapshot(auxiliaryStorage) {
+  if (!auxiliaryStorage || typeof auxiliaryStorage !== "object" || Array.isArray(auxiliaryStorage)) {
+    return;
+  }
+
+  const allowedKeys = new Set(getAuxiliaryBackupStorageKeys());
+
+  Object.entries(auxiliaryStorage).forEach(([storageKey, rawValue]) => {
+    if (!allowedKeys.has(storageKey) || typeof rawValue !== "string") {
+      return;
+    }
+
+    localStorage.setItem(storageKey, rawValue);
+  });
+}
+
 function setBackupStatus(message, tone = "info") {
-  backupUiState = { message, tone };
+  backupUiState = {
+    ...backupUiState,
+    message,
+    tone
+  };
+  updateStorageBackupPanel();
+}
+
+function getBackupHistoryTypeLabel(type) {
+  switch (type) {
+    case "pre-restore":
+      return "Pre-restore";
+    case "hourly":
+      return "Hourly";
+    case "daily":
+      return "Daily";
+    case "restore":
+      return "Restore";
+    case "export":
+      return "Export";
+    default:
+      return "Manual";
+  }
+}
+
+function recordBackupHistoryEntry({ type = "manual", fileName, createdAt, note = "" }) {
+  const entry = {
+    id: createId(),
+    type,
+    fileName: fileName || "",
+    createdAt: createdAt || new Date().toISOString(),
+    note
+  };
+
+  backupUiState = {
+    ...backupUiState,
+    historyEntries: [entry, ...backupUiState.historyEntries].slice(0, 40)
+  };
+
   updateStorageBackupPanel();
 }
 
 function updateStorageBackupPanel() {
   const backupStatus = document.getElementById("backupStatus");
   const lastSavedStamp = document.getElementById("lastSavedStamp");
+  const backupHistoryList = document.getElementById("backupHistoryList");
+  const backupHistoryEmpty = document.getElementById("backupHistoryEmpty");
 
-  if (!backupStatus || !lastSavedStamp) {
-    return;
+  if (lastSavedStamp) {
+    lastSavedStamp.textContent = appState.lastSavedAt
+      ? `Last saved ${formatShortDate(appState.lastSavedAt)}`
+      : "No local save timestamp yet";
   }
 
-  lastSavedStamp.textContent = appState.lastSavedAt
-    ? `Last saved ${formatShortDate(appState.lastSavedAt)}`
-    : "No local save timestamp yet";
-  backupStatus.textContent = backupUiState.message;
-  backupStatus.dataset.tone = backupUiState.tone;
+  if (backupStatus) {
+    backupStatus.textContent = backupUiState.message;
+    backupStatus.dataset.tone = backupUiState.tone;
+  }
+
+  if (backupHistoryList && backupHistoryEmpty) {
+    const historyEntries = Array.isArray(backupUiState.historyEntries)
+      ? backupUiState.historyEntries
+      : [];
+
+    backupHistoryList.textContent = "";
+
+    if (historyEntries.length === 0) {
+      backupHistoryList.hidden = true;
+      backupHistoryEmpty.hidden = false;
+      return;
+    }
+
+    backupHistoryList.hidden = false;
+    backupHistoryEmpty.hidden = true;
+
+    historyEntries.forEach(entry => {
+      const item = document.createElement("li");
+      item.className = "settings-history-item";
+
+      const row = document.createElement("div");
+      row.className = "settings-history-item__row";
+
+      const typeBadge = document.createElement("span");
+      typeBadge.className = "settings-history-item__type";
+      typeBadge.textContent = getBackupHistoryTypeLabel(entry.type);
+
+      const timeValue = new Date(entry.createdAt);
+      const timeStamp = document.createElement("span");
+      timeStamp.className = "settings-history-item__time";
+      timeStamp.textContent = Number.isNaN(timeValue.getTime())
+        ? "Unknown time"
+        : formatShortDate(timeValue);
+
+      row.append(typeBadge, timeStamp);
+
+      const fileLabel = document.createElement("p");
+      fileLabel.className = "settings-history-item__file";
+      fileLabel.textContent = entry.fileName || "Backup file";
+
+      item.append(row, fileLabel);
+
+      if (entry.note) {
+        const note = document.createElement("p");
+        note.className = "settings-history-item__note";
+        note.textContent = entry.note;
+        item.append(note);
+      }
+
+      backupHistoryList.append(item);
+    });
+  }
 }
 
-function buildBackupPayload() {
+function buildBackupPayload(exportedAt = new Date()) {
+  const exportedIso = exportedAt.toISOString();
+
   return {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
-    exportedAt: new Date().toISOString(),
+    exportedAt: exportedIso,
     lastSavedAt: appState.lastSavedAt || null,
-    data: getStateSnapshot(appState.lastSavedAt || null)
+    data: getStateSnapshot(appState.lastSavedAt || null),
+    auxiliaryStorage: collectAuxiliaryStorageSnapshot()
   };
 }
 
-function downloadJsonBackup() {
-  const payload = JSON.stringify(buildBackupPayload(), null, 2);
-  const fileName = `personaldock-backup-${formatBackupFileDate()}.json`;
+function buildBackupFileName(backupType = "manual", dateValue = new Date()) {
+  if (backupType === "daily") {
+    return `personal_dock_daily_${formatBackupFileDate(dateValue)}.json`;
+  }
+
+  if (backupType === "hourly") {
+    return `personal_dock_hourly_${formatBackupFileDateTime(dateValue)}.json`;
+  }
+
+  if (backupType === "pre-restore") {
+    return `personal_dock_pre_restore_${formatBackupFileDateTime(dateValue)}.json`;
+  }
+
+  if (backupType === "export") {
+    return `personal_dock_export_${formatBackupFileDateTime(dateValue)}.json`;
+  }
+
+  return `personal_dock_manual_${formatBackupFileDateTime(dateValue)}.json`;
+}
+
+function downloadJsonBackup(options = {}) {
+  const {
+    backupType = "manual",
+    historyType = backupType,
+    createdAt = new Date(),
+    statusMessage,
+    statusTone = "success",
+    recordHistory = true
+  } = options;
+
+  const payload = JSON.stringify(buildBackupPayload(createdAt), null, 2);
+  const fileName = buildBackupFileName(backupType, createdAt);
   const blob = new Blob([payload], { type: "application/json" });
   const downloadUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -2678,7 +2857,26 @@ function downloadJsonBackup() {
   link.click();
   link.remove();
   URL.revokeObjectURL(downloadUrl);
-  setBackupStatus(`Exported ${fileName}.`, "success");
+
+  if (recordHistory) {
+    recordBackupHistoryEntry({
+      type: historyType,
+      fileName,
+      createdAt: createdAt.toISOString()
+    });
+  }
+
+  if (statusMessage !== null) {
+    const defaultStatusMessage = backupType === "export"
+      ? `Exported ${fileName}.`
+      : backupType === "pre-restore"
+        ? `Created pre-restore backup ${fileName}.`
+        : "Backup created.";
+
+    setBackupStatus(typeof statusMessage === "string" ? statusMessage : defaultStatusMessage, statusTone);
+  }
+
+  return fileName;
 }
 
 function validateBackupShape(candidateState) {
@@ -2753,9 +2951,18 @@ function extractBackupState(payload) {
   const candidateState = payload.format === BACKUP_FORMAT ? payload.data : payload;
   const validatedState = validateBackupShape(candidateState);
 
-  return {
+  const state = {
     ...validatedState,
     lastSavedAt: validatedState.lastSavedAt || payload.lastSavedAt || null
+  };
+
+  const auxiliaryStorage = payload.auxiliaryStorage;
+
+  return {
+    state,
+    auxiliaryStorage: auxiliaryStorage && typeof auxiliaryStorage === "object" && !Array.isArray(auxiliaryStorage)
+      ? auxiliaryStorage
+      : null
   };
 }
 
@@ -2770,7 +2977,8 @@ async function importJsonBackup(file) {
 
   const fileText = await file.text();
   const parsed = JSON.parse(fileText);
-  const importedState = normalizeState(extractBackupState(parsed));
+  const extractedBackup = extractBackupState(parsed);
+  const importedState = normalizeState(extractedBackup.state);
 
   appState = importedState;
   uiState = {
@@ -2783,9 +2991,13 @@ async function importJsonBackup(file) {
     selectedPlannerSection: "all",
     selectedBudgetPlanningPeriod: DEFAULT_BUDGET_PLANNING_PERIOD
   };
+  restoreAuxiliaryStorageSnapshot(extractedBackup.auxiliaryStorage);
   saveState({ touch: false, lastSavedAt: importedState.lastSavedAt });
   renderApp();
-  setBackupStatus(`Imported ${file.name}. Current saved data was replaced.`, "success");
+
+  return {
+    fileName: file.name
+  };
 }
 
 let _activeEditorAutosave = null;
@@ -10927,16 +11139,30 @@ function renderSettings() {
       <div class="settings-section">
         <div class="settings-section__header">
           <p class="eyebrow">Storage</p>
-          <h2 class="panel-title">Backup &amp; Restore</h2>
-          <p class="panel-subtitle">Export all PersonalDock data to a dated JSON file, or import a previous backup to restore your saved state.</p>
+          <h2 class="panel-title">Data Backup</h2>
+          <p class="panel-subtitle">Create timestamped JSON backups before major changes, then restore from a previous backup when needed.</p>
         </div>
+        <p class="settings-backup-help">For safer recovery, keep downloaded backup files in a dedicated backup folder on your device.</p>
         <div class="settings-meta-row">
           <p class="storage-panel__last-saved" id="lastSavedStamp">No local save timestamp yet</p>
           <p class="storage-panel__status" id="backupStatus" data-tone="info">Export a JSON backup or import one to restore your current data.</p>
         </div>
         <div class="settings-actions">
-          <button type="button" id="settingsExportBtn" class="primary-btn">Export JSON backup</button>
+          <button type="button" id="settingsBackupNowBtn" class="primary-btn">Backup now</button>
+          <button type="button" id="settingsExportBtn" class="secondary-btn">Export JSON backup</button>
           <button type="button" id="settingsImportBtn" class="secondary-btn">Import JSON backup</button>
+        </div>
+        <div class="settings-backup-mode-note">
+          <p class="settings-backup-mode-note__title">Automatic backups</p>
+          <p class="settings-backup-mode-note__copy">Hourly and daily local-folder backups are not available in this browser-style runtime. Use <strong>Backup now</strong> before risky changes and keep those downloaded files in your backup folder.</p>
+        </div>
+        <div class="settings-history-panel">
+          <div class="settings-history-panel__header">
+            <h3 class="settings-history-panel__title">Backup History</h3>
+            <p class="settings-history-panel__subtitle">Session-only history of backups created from this Settings panel.</p>
+          </div>
+          <ul class="settings-history-list" id="backupHistoryList" hidden></ul>
+          <p class="settings-history-empty" id="backupHistoryEmpty">No backups created in this session yet.</p>
         </div>
       </div>
       <div class="settings-section settings-section--danger">
@@ -10954,8 +11180,17 @@ function renderSettings() {
 
   updateStorageBackupPanel();
 
+  document.getElementById("settingsBackupNowBtn").addEventListener("click", () => {
+    downloadJsonBackup({
+      backupType: "manual",
+      statusMessage: "Backup created."
+    });
+  });
+
   document.getElementById("settingsExportBtn").addEventListener("click", () => {
-    downloadJsonBackup();
+    downloadJsonBackup({
+      backupType: "export"
+    });
   });
 
   document.getElementById("settingsImportBtn").addEventListener("click", () => {
@@ -11601,15 +11836,36 @@ importJsonInput.addEventListener("change", async event => {
     return;
   }
 
-  const confirmed = confirm("Importing a backup will replace your current saved data. Continue?");
+  const confirmed = confirm("Restore this backup? A pre-restore backup of your current data should be created first.");
 
   if (!confirmed) {
     event.target.value = "";
     return;
   }
 
+  let preRestoreFileName = "";
+
+  try {
+    preRestoreFileName = downloadJsonBackup({
+      backupType: "pre-restore",
+      statusMessage: null
+    });
+  } catch (error) {
+    setBackupStatus("Could not create a pre-restore backup. Restore was cancelled.", "error");
+    event.target.value = "";
+    return;
+  }
+
   try {
     await importJsonBackup(file);
+    recordBackupHistoryEntry({
+      type: "restore",
+      fileName: file.name,
+      note: preRestoreFileName
+        ? `Pre-restore backup: ${preRestoreFileName}`
+        : ""
+    });
+    setBackupStatus("Backup restored.", "success");
   } catch (error) {
     setBackupStatus(error instanceof Error ? error.message : "The backup could not be imported.", "error");
   } finally {

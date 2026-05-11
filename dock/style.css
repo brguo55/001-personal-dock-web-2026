@@ -2776,8 +2776,113 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .settings-section__header { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line-faint); }
 .settings-section__header .eyebrow { margin-bottom: 6px; }
 .settings-section__header .panel-subtitle { margin-top: 6px; }
+.settings-backup-help {
+  margin: 0 0 14px;
+  font-size: .88rem;
+  line-height: 1.5;
+  color: var(--muted-bright);
+}
 .settings-meta-row { display: grid; gap: 5px; padding: 12px 14px; margin-bottom: 16px; background: var(--green-dim); border: 1px solid var(--line-faint); border-radius: var(--radius-md); }
 .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.settings-backup-mode-note {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-faint);
+  background: #fff;
+}
+.settings-backup-mode-note__title {
+  margin: 0;
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted-bright);
+}
+.settings-backup-mode-note__copy {
+  margin: 6px 0 0;
+  font-size: .86rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.settings-history-panel {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line-faint);
+}
+.settings-history-panel__header {
+  margin-bottom: 10px;
+}
+.settings-history-panel__title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-bright);
+}
+.settings-history-panel__subtitle {
+  margin: 4px 0 0;
+  font-size: .84rem;
+  color: var(--muted);
+}
+.settings-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.settings-history-item {
+  padding: 10px 11px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+.settings-history-item__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.settings-history-item__type {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(10,191,83,.35);
+  background: var(--green-dim);
+  color: var(--green);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.settings-history-item__time {
+  color: var(--muted);
+  font-size: .76rem;
+  letter-spacing: .03em;
+}
+.settings-history-item__file {
+  margin: 6px 0 0;
+  font-size: .86rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-bright);
+  word-break: break-word;
+}
+.settings-history-item__note {
+  margin: 4px 0 0;
+  font-size: .78rem;
+  color: var(--muted);
+  line-height: 1.4;
+  word-break: break-word;
+}
+.settings-history-empty {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--line-faint);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: .85rem;
+}
 
 /* ── Dates Board ─────────────────────────────────────── */
 .db-view { display: grid; gap: 16px; }
