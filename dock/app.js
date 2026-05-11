@@ -457,6 +457,7 @@ let uiState = {
   calendarMonth: new Date().getMonth(),
   calendarWeekStart: null,  // ISO date string for Monday of displayed week; null = use today's week
   calendarViewMode: "week",  // "week" | "day"
+  calendarEventListTab: "current",  // "current" | "upcoming" in the right sidebar list
   calendarPickerOpen: false,     // mini month-picker panel open
   calendarPickerMonth: null,     // 0-11, month shown in picker; null = sync from view on open
   calendarPickerYear: null,      // year shown in picker
@@ -3871,6 +3872,9 @@ function renderCalendar() {
   if (typeof uiState.calendarCopyTargetDate !== "string") uiState.calendarCopyTargetDate = "";
   if (!Object.prototype.hasOwnProperty.call(uiState, "calendarDraftRange")) uiState.calendarDraftRange = null;
   if (typeof uiState.calendarFocusTitleOnce !== "boolean") uiState.calendarFocusTitleOnce = false;
+  if (uiState.calendarEventListTab !== "current" && uiState.calendarEventListTab !== "upcoming") {
+    uiState.calendarEventListTab = "current";
+  }
 
   const viewMode = uiState.calendarViewMode;  // "week" | "day"
   const todayStr = toISODateString(now);
@@ -4019,6 +4023,57 @@ function renderCalendar() {
     const hour = timeMatch ? Number(timeMatch[1]) : 0;
     const minute = timeMatch ? Number(timeMatch[2]) : 0;
     return new Date(year, month - 1, day, hour, minute, 0, 0);
+  }
+
+  function shiftIsoDate(dateStr, dayDelta) {
+    const next = new Date(dateStr + "T12:00:00");
+    next.setDate(next.getDate() + dayDelta);
+    return toISODateString(next);
+  }
+
+  function parseTimeParts(rawTime) {
+    const match = /^([01][0-9]|2[0-3]):([0-5][0-9])$/.exec(formatTime(rawTime || ""));
+    if (!match) return null;
+    return { hour: Number(match[1]), minute: Number(match[2]) };
+  }
+
+  function occurrenceEndDateTime(eventItem, occurrenceDate, startsAt) {
+    if (!eventItem.time) {
+      const end = new Date(startsAt);
+      end.setDate(end.getDate() + 1);
+      return end;
+    }
+
+    const endParts = parseTimeParts(eventItem.endTime || "");
+    if (!endParts) {
+      const fallbackEnd = new Date(startsAt);
+      fallbackEnd.setHours(fallbackEnd.getHours() + 1);
+      return fallbackEnd;
+    }
+
+    const [year, month, day] = occurrenceDate.split("-").map(Number);
+    const endsAt = new Date(year, month - 1, day, endParts.hour, endParts.minute, 0, 0);
+    if (endsAt <= startsAt) endsAt.setDate(endsAt.getDate() + 1);
+    return endsAt;
+  }
+
+  function getCurrentOccurrences() {
+    const results = [];
+    const candidateDates = [shiftIsoDate(todayStr, -1), todayStr];
+
+    candidateDates.forEach(dateStr => {
+      eventsForDate(dateStr).forEach(eventItem => {
+        const startsAt = eventItem.time
+          ? occurrenceDateTime(eventItem, dateStr)
+          : new Date(`${dateStr}T00:00:00`);
+        const endsAt = occurrenceEndDateTime(eventItem, dateStr, startsAt);
+        if (startsAt <= now && now < endsAt) {
+          results.push({ eventItem, displayDate: dateStr, startsAt });
+        }
+      });
+    });
+
+    return results.sort((a, b) => a.startsAt - b.startsAt || a.eventItem.title.localeCompare(b.eventItem.title));
   }
 
   function getNextUpcomingOccurrence() {
@@ -4207,8 +4262,34 @@ function renderCalendar() {
     </div>`;
   }).join("");
 
-  // ── upcoming events sidebar ───────────────────────────────────────────────
+  // ── sidebar events list tabs ─────────────────────────────────────────────
+  const eventListTab = uiState.calendarEventListTab === "upcoming" ? "upcoming" : "current";
+  const currentOccurrences = getCurrentOccurrences();
   const nextUpcoming = getNextUpcomingOccurrence();
+
+  const currentHtml = !currentOccurrences.length
+    ? `<li><div class="empty-state">No current events.</div></li>`
+    : currentOccurrences
+      .map(currentOccurrence => {
+        const e = currentOccurrence.eventItem;
+        const displayDate = currentOccurrence.displayDate;
+        const typeLabel = getCalendarColorTypeLabel(e.color);
+        const timeRange = e.time ? formatTimeRange(e.time, e.endTime) : "All day";
+        const locationMeta = e.location ? `📍 ${e.location}` : "";
+        const isSelected = selectedEvent && selectedEvent.id === e.id && selectedEventDate === displayDate;
+        const meta = [typeLabel, displayDate, timeRange, locationMeta].filter(Boolean).join(" · ");
+        return `<li class="calendar-event-item${isSelected ? " is-selected" : ""}" data-id="${e.id}" data-display-date="${displayDate}">
+          <span class="calendar-event-item__dot" style="background:${dotColor(e.color)}" title="${typeLabel}" aria-label="${typeLabel}"></span>
+          <div class="calendar-event-item__copy">
+            <span class="calendar-event-item__title">${e.title}</span>
+            ${meta ? `<span class="calendar-event-item__meta">${meta}</span>` : ""}
+          </div>
+          <div class="calendar-event-item__actions">
+            <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
+          </div>
+        </li>`;
+      })
+      .join("");
 
   const upcomingHtml = !nextUpcoming
     ? `<li><div class="empty-state">No upcoming events.</div></li>`
@@ -4235,6 +4316,8 @@ function renderCalendar() {
           </div>
         </li>`;
       })();
+
+  const eventListHtml = eventListTab === "current" ? currentHtml : upcomingHtml;
 
   const colorSwatches = COLOR_OPTIONS.map(c => {
     const typeLabel = getCalendarColorTypeLabel(c);
@@ -4366,9 +4449,13 @@ function renderCalendar() {
         </form>
 
         <div class="calendar-event-list-section">
-          <div class="calendar-event-list-section__heading">Upcoming Events</div>
-          <ul class="calendar-event-list" id="cal-upcoming">
-            ${upcomingHtml}
+          <div class="calendar-event-list-section__heading">Events</div>
+          <div class="cal-view-toggle calendar-event-tabs" role="tablist" aria-label="Event list filter">
+            <button type="button" class="cal-toggle-btn${eventListTab === "current" ? " is-active" : ""}" data-event-tab="current" role="tab" aria-selected="${eventListTab === "current"}">Current Events</button>
+            <button type="button" class="cal-toggle-btn${eventListTab === "upcoming" ? " is-active" : ""}" data-event-tab="upcoming" role="tab" aria-selected="${eventListTab === "upcoming"}">Upcoming Events</button>
+          </div>
+          <ul class="calendar-event-list" id="cal-event-list">
+            ${eventListHtml}
           </ul>
         </div>
       </div>
@@ -4418,7 +4505,7 @@ function renderCalendar() {
   });
 
   // ── view mode toggle ──────────────────────────────────────────────────────
-  document.querySelectorAll(".cal-toggle-btn").forEach(btn => {
+  document.querySelectorAll(".cal-toggle-btn[data-mode]").forEach(btn => {
     btn.addEventListener("click", () => {
       const mode = btn.dataset.mode;
       if (mode === uiState.calendarViewMode) return;
@@ -4756,7 +4843,17 @@ function renderCalendar() {
     renderApp();
   });
 
-  document.getElementById("cal-upcoming").addEventListener("click", e => {
+  document.querySelectorAll(".calendar-event-tabs [data-event-tab]").forEach(tabButton => {
+    tabButton.addEventListener("click", () => {
+      const nextTab = tabButton.dataset.eventTab;
+      if (nextTab !== "current" && nextTab !== "upcoming") return;
+      if (uiState.calendarEventListTab === nextTab) return;
+      uiState.calendarEventListTab = nextTab;
+      renderApp();
+    });
+  });
+
+  document.getElementById("cal-event-list").addEventListener("click", e => {
     const deleteButton = e.target.closest(".cal-del-btn");
     if (deleteButton) {
       const row = deleteButton.closest(".calendar-event-item");

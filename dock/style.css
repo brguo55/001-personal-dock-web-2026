@@ -2221,6 +2221,16 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   color: var(--muted); margin-bottom: 12px;
 }
 
+.calendar-event-tabs {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.calendar-event-tabs .cal-toggle-btn {
+  flex: 1 1 0;
+  text-align: center;
+}
+
 .calendar-event-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 
 .calendar-event-item {
