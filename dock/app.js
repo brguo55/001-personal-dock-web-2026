@@ -4581,8 +4581,22 @@ function renderCalendar() {
   }
 
   function eventTopHeight(ev) {
+    const range = getCalendarEventOffsetRange(ev);
+    if (!range) return null;
+
+    const startOff = range.startOff;
+    const endOff = range.endOff;
+
+    return {
+      top:    Math.round(startOff * HOUR_PX),
+      height: Math.max(22, Math.round((endOff - startOff) * HOUR_PX))
+    };
+  }
+
+  function getCalendarEventOffsetRange(ev) {
     const startOff = timeToOffset(ev.time);
     if (startOff === null) return null;
+
     let endOff;
     if (!ev.endTime) {
       endOff = startOff + 1;
@@ -4600,9 +4614,128 @@ function renderCalendar() {
       // Overnight events (endTime < startTime string-wise) are already correct:
       // timeToOffset wraps them so endOff > startOff naturally.
     }
+
+    return { startOff, endOff };
+  }
+
+  function getCalendarTimedEventLayoutByIndex(timedEvents) {
+    const ranges = timedEvents
+      .map((eventItem, originalIndex) => {
+        const range = getCalendarEventOffsetRange(eventItem);
+        if (!range) return null;
+
+        return {
+          originalIndex,
+          startOff: range.startOff,
+          endOff: range.endOff,
+          col: 0,
+          span: 1
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => {
+        if (left.startOff !== right.startOff) return left.startOff - right.startOff;
+        if (left.endOff !== right.endOff) return left.endOff - right.endOff;
+        return left.originalIndex - right.originalIndex;
+      });
+
+    const layoutByIndex = new Map();
+    if (!ranges.length) return layoutByIndex;
+
+    function overlaps(left, right) {
+      return left.startOff < right.endOff && right.startOff < left.endOff;
+    }
+
+    function assignCluster(clusterEntries) {
+      const columnEndOffsets = [];
+      const entriesByColumn = [];
+
+      clusterEntries.forEach(entry => {
+        let columnIndex = -1;
+
+        for (let index = 0; index < columnEndOffsets.length; index += 1) {
+          if (columnEndOffsets[index] <= entry.startOff) {
+            columnIndex = index;
+            break;
+          }
+        }
+
+        if (columnIndex === -1) {
+          columnIndex = columnEndOffsets.length;
+          columnEndOffsets.push(entry.endOff);
+          entriesByColumn.push([]);
+        } else {
+          columnEndOffsets[columnIndex] = entry.endOff;
+        }
+
+        entry.col = columnIndex;
+        entriesByColumn[columnIndex].push(entry);
+      });
+
+      const totalColumns = columnEndOffsets.length;
+
+      clusterEntries.forEach(entry => {
+        let span = 1;
+
+        for (let columnIndex = entry.col + 1; columnIndex < totalColumns; columnIndex += 1) {
+          const hasConflict = entriesByColumn[columnIndex].some(otherEntry => overlaps(entry, otherEntry));
+          if (hasConflict) break;
+          span += 1;
+        }
+
+        layoutByIndex.set(entry.originalIndex, {
+          column: entry.col,
+          span,
+          totalColumns
+        });
+      });
+    }
+
+    let cluster = [];
+    let clusterMaxEnd = -Infinity;
+
+    ranges.forEach(rangeEntry => {
+      if (!cluster.length) {
+        cluster = [rangeEntry];
+        clusterMaxEnd = rangeEntry.endOff;
+        return;
+      }
+
+      if (rangeEntry.startOff < clusterMaxEnd) {
+        cluster.push(rangeEntry);
+        clusterMaxEnd = Math.max(clusterMaxEnd, rangeEntry.endOff);
+        return;
+      }
+
+      assignCluster(cluster);
+      cluster = [rangeEntry];
+      clusterMaxEnd = rangeEntry.endOff;
+    });
+
+    if (cluster.length) {
+      assignCluster(cluster);
+    }
+
+    return layoutByIndex;
+  }
+
+  function getCalendarTimedEventHorizontalStyle(layout) {
+    if (!layout || layout.totalColumns <= 1) {
+      return "";
+    }
+
+    const OUTER_PADDING_PX = 2;
+    const COLUMN_GAP_PX = 2;
+    const totalColumns = Math.max(1, layout.totalColumns);
+    const column = Math.max(0, Math.min(totalColumns - 1, layout.column || 0));
+    const span = Math.max(1, Math.min(totalColumns - column, layout.span || 1));
+    const usableWidthExpr = `(100% - ${OUTER_PADDING_PX * 2}px - ${(totalColumns - 1) * COLUMN_GAP_PX}px)`;
+    const leftExpr = `calc(${OUTER_PADDING_PX}px + ${column} * ((${usableWidthExpr}) / ${totalColumns} + ${COLUMN_GAP_PX}px))`;
+    const widthExpr = `calc(${span} * ((${usableWidthExpr}) / ${totalColumns}) + ${(span - 1) * COLUMN_GAP_PX}px)`;
+
     return {
-      top:    Math.round(startOff * HOUR_PX),
-      height: Math.max(22, Math.round((endOff - startOff) * HOUR_PX))
+      leftExpr,
+      widthExpr
     };
   }
 
@@ -4698,9 +4831,17 @@ function renderCalendar() {
   const colsHtml = displayDays.map(dateStr => {
     const isToday   = dateStr === todayStr;
     const timedEvts = eventsForDate(dateStr).filter(e => e.time);
-    const eventsHtml = timedEvts.map(e => {
+    const timedEventLayout = getCalendarTimedEventLayoutByIndex(timedEvts);
+
+    const eventsHtml = timedEvts.map((e, index) => {
       const pos = eventTopHeight(e);
       if (!pos) return "";
+
+      const horizontalLayout = getCalendarTimedEventHorizontalStyle(timedEventLayout.get(index));
+      const layoutStyle = horizontalLayout
+        ? `;left:${horizontalLayout.leftExpr};width:${horizontalLayout.widthExpr};right:auto`
+        : "";
+
       const timeRange  = formatTimeRange(e.time, e.endTime);
       const recurBadge = e.recurrence ? `<span class="cal-recur-badge">↻</span>` : "";
       const notePart   = e.note ? `<span class="cal-tg-event__note">${e.note}</span>` : "";
@@ -4709,7 +4850,7 @@ function renderCalendar() {
       const typeLabel = getCalendarColorTypeLabel(e.color);
       const displayDate = e._virtual || e.date;
       const isSelected = selectedEvent && selectedEvent.id === e.id && selectedEventDate === displayDate;
-      return `<div class="cal-tg-event cal-tg-event--${e.color}${isSelected ? " is-selected" : ""}" style="top:${pos.top}px;height:${pos.height}px" data-id="${e.id}" data-display-date="${displayDate}" title="${typeLabel}"${isDraggable ? "" : ' data-virtual="1"'}>
+      return `<div class="cal-tg-event cal-tg-event--${e.color}${isSelected ? " is-selected" : ""}" style="top:${pos.top}px;height:${pos.height}px${layoutStyle}" data-id="${e.id}" data-display-date="${displayDate}" title="${typeLabel}"${isDraggable ? "" : ' data-virtual="1"'}>
         ${isDraggable ? '<div class="cal-tg-event__resize-top"></div>' : ""}
         <div class="cal-tg-event__inner">
           <span class="cal-tg-event__title">${e.title}${recurBadge}</span>
