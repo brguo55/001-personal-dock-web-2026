@@ -921,8 +921,128 @@ function createPromise({ text, to = "", promiseDate = "", dueDate = "" }) {
   return { id: createId(), text, to, promiseDate, dueDate, done: false, createdAt: new Date().toISOString() };
 }
 
-function createCalendarEvent({ title, date, time = "", endTime = "", color = "green", note = "", location = "", recurrence = "" }) {
-  return { id: createId(), title, date, time, endTime, color, note, location, recurrence, createdAt: new Date().toISOString() };
+const CALENDAR_BLOCK_REMINDER_OFFSETS = [0, 5, 10];
+const CALENDAR_TIME_PATTERN = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+
+function normalizeCalendarBlockItemType(value) {
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase().slice(0, 24);
+}
+
+function normalizeCalendarBlockItemTimeValue(value) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  return CALENDAR_TIME_PATTERN.test(trimmed) ? trimmed : "";
+}
+
+function normalizeCalendarBlockReminderOffsetMinutes(value) {
+  if (typeof value === "number" && CALENDAR_BLOCK_REMINDER_OFFSETS.includes(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+
+    if (!normalized || normalized === "none" || normalized === "off" || normalized === "no reminder") {
+      return 0;
+    }
+
+    if (
+      normalized === "5"
+      || normalized === "5m"
+      || normalized === "5min"
+      || normalized === "5 minutes"
+      || normalized === "5 minutes before"
+    ) {
+      return 5;
+    }
+
+    if (
+      normalized === "10"
+      || normalized === "10m"
+      || normalized === "10min"
+      || normalized === "10 minutes"
+      || normalized === "10 minutes before"
+    ) {
+      return 10;
+    }
+
+    const parsed = Number(normalized);
+    if (CALENDAR_BLOCK_REMINDER_OFFSETS.includes(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+}
+
+function normalizeCalendarBlockItems(items) {
+  if (!Array.isArray(items)) return [];
+
+  return items.map(item => {
+    const title = typeof item === "string"
+      ? item.trim()
+      : (typeof item?.title === "string" ? item.title.trim() : "");
+
+    if (!title) return null;
+
+    const startTime = normalizeCalendarBlockItemTimeValue(item?.startTime || item?.start || "");
+
+    return {
+      id: typeof item?.id === "string" && item.id ? item.id : createId(),
+      title,
+      startTime,
+      endTime: normalizeCalendarBlockItemTimeValue(item?.endTime || item?.end || ""),
+      type: normalizeCalendarBlockItemType(item?.type),
+      reminderOffsetMinutes: startTime
+        ? normalizeCalendarBlockReminderOffsetMinutes(item?.reminderOffsetMinutes ?? item?.reminderMinutes ?? item?.reminder)
+        : 0,
+      done: Boolean(item?.done || item?.completed || item?.checked)
+    };
+  }).filter(Boolean);
+}
+
+function getCalendarBlockItemSortMinutes(blockItem) {
+  const startTime = normalizeCalendarBlockItemTimeValue(blockItem?.startTime || "");
+  if (!startTime) return Number.POSITIVE_INFINITY;
+  const [hour, minute] = startTime.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function sortCalendarBlockItemsForDisplay(items) {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item, index) => ({ item, index, sortMinutes: getCalendarBlockItemSortMinutes(item) }))
+    .sort((left, right) => {
+      const leftTimed = Number.isFinite(left.sortMinutes);
+      const rightTimed = Number.isFinite(right.sortMinutes);
+
+      if (leftTimed && rightTimed) {
+        return left.sortMinutes - right.sortMinutes || left.index - right.index;
+      }
+
+      if (leftTimed) return -1;
+      if (rightTimed) return 1;
+      return left.index - right.index;
+    })
+    .map(entry => entry.item);
+}
+
+function createCalendarEvent({ title, date, time = "", endTime = "", color = "green", note = "", location = "", recurrence = "", blockItems = [] }) {
+  return {
+    id: createId(),
+    title,
+    date,
+    time,
+    endTime,
+    color,
+    note,
+    location,
+    recurrence,
+    blockItems: normalizeCalendarBlockItems(blockItems),
+    createdAt: new Date().toISOString()
+  };
 }
 
 function normalizeCalendarEvents(events) {
@@ -942,6 +1062,7 @@ function normalizeCalendarEvents(events) {
       note: typeof e?.note === "string" ? e.note.trim() : "",
       location: typeof e?.location === "string" ? e.location.trim() : "",
       recurrence: ["weekly", "monthly"].includes(e?.recurrence) ? e.recurrence : "",
+      blockItems: normalizeCalendarBlockItems(e?.blockItems),
       createdAt: normalizeTimestamp(e.createdAt) || new Date().toISOString()
     };
   }).filter(Boolean);
@@ -4017,6 +4138,62 @@ function renderCalendar() {
     return endTime ? `${formatTime(startTime)} – ${formatTime(endTime)}` : formatTime(startTime);
   }
 
+  function formatCalendarBlockItemLine(blockItem) {
+    const start = formatTime(blockItem?.startTime || "");
+    const end = formatTime(blockItem?.endTime || "");
+    const timeText = start ? (end ? `${start}-${end}` : start) : (end || "");
+    const typePrefix = blockItem?.type ? `${blockItem.type}: ` : "";
+    const text = `${typePrefix}${blockItem?.title || ""}`.trim();
+
+    if (text && timeText) {
+      return `${text} (${timeText})`;
+    }
+
+    return text || timeText;
+  }
+
+  function renderCalendarBlockItemsHtml(eventItem, blockHeight, hasNote) {
+    const blockItems = sortCalendarBlockItemsForDisplay(
+      Array.isArray(eventItem?.blockItems) ? eventItem.blockItems : []
+    );
+
+    if (!blockItems.length) return "";
+
+    let maxVisible = blockHeight >= 118 ? 3 : blockHeight >= 86 ? 2 : blockHeight >= 64 ? 1 : 0;
+    if (hasNote && maxVisible > 0) {
+      maxVisible -= 1;
+    }
+
+    const visibleItems = maxVisible > 0 ? blockItems.slice(0, maxVisible) : [];
+    const hiddenCount = Math.max(0, blockItems.length - visibleItems.length);
+
+    const linesHtml = visibleItems
+      .map(item => {
+        const lineText = formatCalendarBlockItemLine(item);
+        if (!lineText) return "";
+
+        const eventId = typeof eventItem?.id === "string" ? eventItem.id : "";
+        const blockId = typeof item?.id === "string" ? item.id : "";
+
+        return `<li class="cal-tg-event__block${item?.done ? " is-done" : ""}">
+          <label class="cal-tg-event__block-row">
+            <input type="checkbox" class="cal-block-check" data-event-id="${eventId}" data-block-id="${blockId}"${item?.done ? " checked" : ""}>
+            <span class="cal-tg-event__block-line">&bull; ${lineText}</span>
+          </label>
+        </li>`;
+      })
+      .filter(Boolean)
+      .join("");
+
+    const moreHtml = hiddenCount > 0
+      ? `<span class="cal-tg-event__blocks-more">+${hiddenCount} more</span>`
+      : "";
+
+    if (!linesHtml && !moreHtml) return "";
+
+    return `${linesHtml ? `<ul class="cal-tg-event__blocks">${linesHtml}</ul>` : ""}${moreHtml}`;
+  }
+
   function occurrenceDateTime(eventItem, occurrenceDate) {
     const [year, month, day] = occurrenceDate.split("-").map(Number);
     const timeMatch = /^([01][0-9]|2[0-3]):([0-5][0-9])$/.exec(formatTime(eventItem.time || ""));
@@ -4101,6 +4278,59 @@ function renderCalendar() {
     }
 
     return null;
+  }
+
+  function getActiveCalendarBlockReminders() {
+    const reminders = [];
+    const candidateDates = [todayStr, shiftIsoDate(todayStr, 1)];
+
+    candidateDates.forEach(dateStr => {
+      eventsForDate(dateStr).forEach(eventItem => {
+        const blockItems = sortCalendarBlockItemsForDisplay(
+          Array.isArray(eventItem?.blockItems) ? eventItem.blockItems : []
+        );
+
+        blockItems.forEach(blockItem => {
+          const startTime = formatTime(blockItem?.startTime || "");
+          const reminderOffsetMinutes = normalizeCalendarBlockReminderOffsetMinutes(blockItem?.reminderOffsetMinutes);
+
+          if (!startTime || !CALENDAR_TIME_PATTERN.test(startTime)) return;
+          if (!reminderOffsetMinutes) return;
+          if (Boolean(blockItem?.done)) return;
+
+          const startsAt = occurrenceDateTime({ time: startTime }, dateStr);
+          const reminderStartsAt = new Date(startsAt.getTime() - reminderOffsetMinutes * 60 * 1000);
+
+          if (now < reminderStartsAt || now > startsAt) {
+            return;
+          }
+
+          reminders.push({
+            id: `${eventItem.id}:${blockItem.id}:${dateStr}`,
+            eventId: eventItem.id,
+            blockId: blockItem.id,
+            eventTitle: eventItem.title,
+            blockTitle: blockItem.title,
+            displayDate: dateStr,
+            startTime,
+            startsAt,
+            minutesUntil: Math.max(0, Math.ceil((startsAt.getTime() - now.getTime()) / (60 * 1000)))
+          });
+        });
+      });
+    });
+
+    return reminders.sort((left, right) => {
+      return left.startsAt - right.startsAt || left.eventTitle.localeCompare(right.eventTitle);
+    });
+  }
+
+  function formatCalendarBlockReminderStatus(reminderItem) {
+    if (reminderItem.minutesUntil <= 0) {
+      return `${reminderItem.blockTitle} is starting now`;
+    }
+
+    return `${reminderItem.blockTitle} starts in ${reminderItem.minutesUntil} minute${reminderItem.minutesUntil === 1 ? "" : "s"}`;
   }
 
   // ── time-grid constants & helpers ─────────────────────────────────────────
@@ -4242,6 +4472,7 @@ function renderCalendar() {
       const timeRange  = formatTimeRange(e.time, e.endTime);
       const recurBadge = e.recurrence ? `<span class="cal-recur-badge">↻</span>` : "";
       const notePart   = e.note ? `<span class="cal-tg-event__note">${e.note}</span>` : "";
+      const blockItemsPart = renderCalendarBlockItemsHtml(e, pos.height, Boolean(e.note));
       const isDraggable = !e._virtual;
       const typeLabel = getCalendarColorTypeLabel(e.color);
       const displayDate = e._virtual || e.date;
@@ -4252,6 +4483,7 @@ function renderCalendar() {
           <span class="cal-tg-event__title">${e.title}${recurBadge}</span>
           ${timeRange ? `<span class="cal-tg-event__time">${timeRange}</span>` : ""}
           ${notePart}
+          ${blockItemsPart}
         </div>
         <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
         ${isDraggable ? '<div class="cal-tg-event__resize-bottom"></div>' : ""}
@@ -4266,6 +4498,7 @@ function renderCalendar() {
   const eventListTab = uiState.calendarEventListTab === "upcoming" ? "upcoming" : "current";
   const currentOccurrences = getCurrentOccurrences();
   const nextUpcoming = getNextUpcomingOccurrence();
+  const activeBlockReminders = getActiveCalendarBlockReminders();
 
   const currentHtml = !currentOccurrences.length
     ? `<li><div class="empty-state">No current events.</div></li>`
@@ -4318,6 +4551,21 @@ function renderCalendar() {
       })();
 
   const eventListHtml = eventListTab === "current" ? currentHtml : upcomingHtml;
+
+  const blockReminderListHtml = !activeBlockReminders.length
+    ? `<li><div class="empty-state">No active block reminders right now.</div></li>`
+    : activeBlockReminders.map(reminderItem => {
+        const metaParts = [
+          reminderItem.eventTitle,
+          reminderItem.displayDate,
+          reminderItem.startTime ? formatTime(reminderItem.startTime) : ""
+        ].filter(Boolean);
+
+        return `<li class="calendar-block-reminder-item" data-event-id="${reminderItem.eventId}" data-display-date="${reminderItem.displayDate}">
+          <div class="calendar-block-reminder-item__title">${formatCalendarBlockReminderStatus(reminderItem)}</div>
+          <div class="calendar-block-reminder-item__meta">${metaParts.join(" · ")}</div>
+        </li>`;
+      }).join("");
 
   const colorSwatches = COLOR_OPTIONS.map(c => {
     const typeLabel = getCalendarColorTypeLabel(c);
@@ -4428,6 +4676,14 @@ function renderCalendar() {
             <input id="cal-note" name="note" type="text" placeholder="Details…" maxlength="300">
           </div>
           <div class="field">
+            <label>Block Items (optional)</label>
+            <div class="cal-block-items-editor" id="cal-block-items-editor"></div>
+            <div class="cal-block-items-actions">
+              <button type="button" class="tiny-btn" id="cal-block-item-add">+ Add block item</button>
+            </div>
+            <div class="cal-block-items-hint">Each block item supports a title, optional times, optional reminder, and completion state.</div>
+          </div>
+          <div class="field">
             <label for="cal-recurrence">Repeat</label>
             <select id="cal-recurrence" name="recurrence" class="cal-select">
               <option value="">Does not repeat</option>
@@ -4449,7 +4705,11 @@ function renderCalendar() {
         </form>
 
         <div class="calendar-event-list-section">
-          <div class="calendar-event-list-section__heading">Events</div>
+          <div class="calendar-event-list-section__heading">Block Item Reminders</div>
+          <ul class="calendar-block-reminder-list" id="cal-block-reminder-list">
+            ${blockReminderListHtml}
+          </ul>
+          <div class="calendar-event-list-section__heading calendar-event-list-section__heading--secondary">Events</div>
           <div class="cal-view-toggle calendar-event-tabs" role="tablist" aria-label="Event list filter">
             <button type="button" class="cal-toggle-btn${eventListTab === "current" ? " is-active" : ""}" data-event-tab="current" role="tab" aria-selected="${eventListTab === "current"}">Current Events</button>
             <button type="button" class="cal-toggle-btn${eventListTab === "upcoming" ? " is-active" : ""}" data-event-tab="upcoming" role="tab" aria-selected="${eventListTab === "upcoming"}">Upcoming Events</button>
@@ -4551,6 +4811,229 @@ function renderCalendar() {
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   }
 
+  let calendarBlockItemDrafts = normalizeCalendarBlockItems(editingEvent?.blockItems || []).map(item => ({ ...item }));
+  const calBlockItemsEditor = document.getElementById("cal-block-items-editor");
+  const calBlockItemAddButton = document.getElementById("cal-block-item-add");
+
+  function createCalendarBlockItemDraft(seed = {}) {
+    return {
+      id: typeof seed?.id === "string" && seed.id ? seed.id : createId(),
+      title: typeof seed?.title === "string" ? seed.title : "",
+      startTime: typeof seed?.startTime === "string" ? seed.startTime : "",
+      endTime: typeof seed?.endTime === "string" ? seed.endTime : "",
+      type: normalizeCalendarBlockItemType(seed?.type),
+      reminderOffsetMinutes: normalizeCalendarBlockReminderOffsetMinutes(seed?.reminderOffsetMinutes),
+      done: Boolean(seed?.done)
+    };
+  }
+
+  calendarBlockItemDrafts = calendarBlockItemDrafts.map(item => createCalendarBlockItemDraft(item));
+
+  function syncCalendarBlockItemReminderState(blockItem, reminderSelect) {
+    const normalizedStartTime = normalizeTime(blockItem.startTime || "");
+    const hasStartTime = Boolean(normalizedStartTime && CALENDAR_TIME_PATTERN.test(normalizedStartTime));
+
+    if (!hasStartTime) {
+      blockItem.reminderOffsetMinutes = 0;
+      reminderSelect.value = "0";
+      reminderSelect.disabled = true;
+      return;
+    }
+
+    blockItem.startTime = normalizedStartTime;
+    blockItem.reminderOffsetMinutes = normalizeCalendarBlockReminderOffsetMinutes(blockItem.reminderOffsetMinutes);
+    reminderSelect.value = String(blockItem.reminderOffsetMinutes);
+    reminderSelect.disabled = false;
+  }
+
+  function renderCalendarBlockItemsEditor() {
+    if (!calBlockItemsEditor) return;
+
+    calBlockItemsEditor.innerHTML = "";
+
+    if (!calendarBlockItemDrafts.length) {
+      const empty = document.createElement("p");
+      empty.className = "cal-block-items-empty";
+      empty.textContent = "No block items yet.";
+      calBlockItemsEditor.appendChild(empty);
+      return;
+    }
+
+    calendarBlockItemDrafts.forEach(blockItem => {
+      const row = document.createElement("div");
+      row.className = "cal-block-item-row";
+      row.dataset.blockId = blockItem.id;
+
+      const doneLabel = document.createElement("label");
+      doneLabel.className = "cal-block-item-row__done";
+      const doneInput = document.createElement("input");
+      doneInput.type = "checkbox";
+      doneInput.checked = Boolean(blockItem.done);
+      doneInput.setAttribute("aria-label", "Mark block item as completed");
+      const doneText = document.createElement("span");
+      doneText.textContent = "Done";
+      doneLabel.append(doneInput, doneText);
+
+      const fields = document.createElement("div");
+      fields.className = "cal-block-item-row__fields";
+
+      const titleInput = document.createElement("input");
+      titleInput.type = "text";
+      titleInput.maxLength = 140;
+      titleInput.placeholder = "Block item title";
+      titleInput.className = "cal-block-item-row__title";
+      titleInput.setAttribute("aria-label", "Block item title");
+      titleInput.value = blockItem.title || "";
+
+      const startInput = document.createElement("input");
+      startInput.type = "text";
+      startInput.maxLength = 5;
+      startInput.placeholder = "Start (09:50)";
+      startInput.className = "cal-block-item-row__time";
+      startInput.setAttribute("aria-label", "Block item start time");
+      startInput.value = blockItem.startTime || "";
+
+      const endInput = document.createElement("input");
+      endInput.type = "text";
+      endInput.maxLength = 5;
+      endInput.placeholder = "End (10:30)";
+      endInput.className = "cal-block-item-row__time";
+      endInput.setAttribute("aria-label", "Block item end time");
+      endInput.value = blockItem.endTime || "";
+
+      const reminderSelect = document.createElement("select");
+      reminderSelect.className = "cal-select cal-block-item-row__reminder";
+      reminderSelect.setAttribute("aria-label", "Block item reminder");
+      [
+        { value: "0", label: "No reminder" },
+        { value: "5", label: "5 minutes before" },
+        { value: "10", label: "10 minutes before" }
+      ].forEach(optionConfig => {
+        const option = document.createElement("option");
+        option.value = optionConfig.value;
+        option.textContent = optionConfig.label;
+        reminderSelect.appendChild(option);
+      });
+
+      syncCalendarBlockItemReminderState(blockItem, reminderSelect);
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "icon-btn";
+      removeButton.textContent = "✕";
+      removeButton.title = "Remove block item";
+      removeButton.setAttribute("aria-label", "Remove block item");
+
+      doneInput.addEventListener("change", () => {
+        blockItem.done = doneInput.checked;
+      });
+
+      titleInput.addEventListener("input", () => {
+        blockItem.title = titleInput.value;
+      });
+
+      startInput.addEventListener("input", () => {
+        blockItem.startTime = startInput.value;
+        if (!startInput.value.trim()) {
+          syncCalendarBlockItemReminderState(blockItem, reminderSelect);
+        }
+      });
+
+      startInput.addEventListener("blur", () => {
+        const normalizedStartTime = normalizeTime(startInput.value || "");
+        startInput.value = normalizedStartTime;
+        blockItem.startTime = normalizedStartTime;
+        syncCalendarBlockItemReminderState(blockItem, reminderSelect);
+      });
+
+      endInput.addEventListener("input", () => {
+        blockItem.endTime = endInput.value;
+      });
+
+      endInput.addEventListener("blur", () => {
+        const normalizedEndTime = normalizeTime(endInput.value || "");
+        endInput.value = normalizedEndTime;
+        blockItem.endTime = normalizedEndTime;
+      });
+
+      reminderSelect.addEventListener("change", () => {
+        if (reminderSelect.disabled) {
+          blockItem.reminderOffsetMinutes = 0;
+          reminderSelect.value = "0";
+          return;
+        }
+
+        blockItem.reminderOffsetMinutes = normalizeCalendarBlockReminderOffsetMinutes(reminderSelect.value);
+        reminderSelect.value = String(blockItem.reminderOffsetMinutes);
+      });
+
+      removeButton.addEventListener("click", () => {
+        calendarBlockItemDrafts = calendarBlockItemDrafts.filter(entry => entry.id !== blockItem.id);
+        renderCalendarBlockItemsEditor();
+      });
+
+      fields.append(titleInput, startInput, endInput, reminderSelect);
+      row.append(doneLabel, fields, removeButton);
+      calBlockItemsEditor.appendChild(row);
+    });
+  }
+
+  function getCalendarBlockItemsFromEditor() {
+    const items = [];
+
+    for (let index = 0; index < calendarBlockItemDrafts.length; index += 1) {
+      const draftItem = calendarBlockItemDrafts[index];
+      const title = typeof draftItem?.title === "string" ? draftItem.title.trim() : "";
+      const startTime = normalizeTime(typeof draftItem?.startTime === "string" ? draftItem.startTime : "");
+      const endTime = normalizeTime(typeof draftItem?.endTime === "string" ? draftItem.endTime : "");
+      const reminderOffsetMinutes = normalizeCalendarBlockReminderOffsetMinutes(draftItem?.reminderOffsetMinutes);
+      const done = Boolean(draftItem?.done);
+
+      const hasAnyValue = Boolean(title || startTime || endTime || reminderOffsetMinutes || done);
+      if (!hasAnyValue) {
+        continue;
+      }
+
+      if (!title) {
+        return { error: `Block item ${index + 1}: title is required.` };
+      }
+
+      if (startTime && !CALENDAR_TIME_PATTERN.test(startTime)) {
+        return { error: `Block item ${index + 1}: start time must be HH:MM.` };
+      }
+
+      if (endTime && !CALENDAR_TIME_PATTERN.test(endTime)) {
+        return { error: `Block item ${index + 1}: end time must be HH:MM.` };
+      }
+
+      items.push({
+        id: typeof draftItem?.id === "string" && draftItem.id ? draftItem.id : createId(),
+        title,
+        startTime,
+        endTime,
+        type: normalizeCalendarBlockItemType(draftItem?.type),
+        reminderOffsetMinutes: startTime ? reminderOffsetMinutes : 0,
+        done
+      });
+    }
+
+    return { items: normalizeCalendarBlockItems(items) };
+  }
+
+  if (calBlockItemAddButton) {
+    calBlockItemAddButton.addEventListener("click", () => {
+      calendarBlockItemDrafts.push(createCalendarBlockItemDraft());
+      renderCalendarBlockItemsEditor();
+      const titleInputs = calBlockItemsEditor?.querySelectorAll(".cal-block-item-row__title");
+      const newestTitleInput = titleInputs && titleInputs.length ? titleInputs[titleInputs.length - 1] : null;
+      if (newestTitleInput) {
+        newestTitleInput.focus();
+      }
+    });
+  }
+
+  renderCalendarBlockItemsEditor();
+
   ["cal-start-time", "cal-end-time"].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -4640,6 +5123,10 @@ function renderCalendar() {
       note: sourceEvent.note || "",
       location: sourceEvent.location || "",
       color: sourceEvent.color || "green",
+      blockItems: normalizeCalendarBlockItems(sourceEvent.blockItems).map(item => ({
+        ...item,
+        id: createId()
+      })),
       // Duplicate/copy should create a standalone event copy by default.
       recurrence: ""
     });
@@ -4691,17 +5178,26 @@ function renderCalendar() {
     if (!title) { msg.textContent = "Please enter a title."; msg.style.display = ""; return; }
     if (!date)  { msg.textContent = "Please pick a date.";   msg.style.display = ""; return; }
 
-    const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
-    if (startTime && !timePattern.test(startTime)) {
+    if (startTime && !CALENDAR_TIME_PATTERN.test(startTime)) {
       msg.textContent = "Start time must be in HH:MM format (e.g. 09:00 or 14:30).";
       msg.style.display = "";
       return;
     }
-    if (endTime && !timePattern.test(endTime)) {
+    if (endTime && !CALENDAR_TIME_PATTERN.test(endTime)) {
       msg.textContent = "End time must be in HH:MM format (e.g. 09:00 or 14:30).";
       msg.style.display = "";
       return;
     }
+
+    const parsedBlockItems = getCalendarBlockItemsFromEditor();
+    if (parsedBlockItems.error) {
+      msg.textContent = parsedBlockItems.error;
+      msg.style.display = "";
+      return;
+    }
+
+    const blockItems = parsedBlockItems.items;
+
     msg.style.display = "none";
 
     const editingId = uiState.calendarEditingEventId;
@@ -4722,6 +5218,7 @@ function renderCalendar() {
       eventRecord.note = note;
       eventRecord.color = color;
       eventRecord.recurrence = recurrence;
+      eventRecord.blockItems = blockItems;
       uiState.calendarDraftRange = null;
       uiState.calendarEditingEventId = null;
       setCalendarSelection(eventRecord.id, date);
@@ -4731,7 +5228,7 @@ function renderCalendar() {
       return;
     }
 
-    const newEvent = createCalendarEvent({ title, date, time: startTime, endTime, note, location, color, recurrence });
+    const newEvent = createCalendarEvent({ title, date, time: startTime, endTime, note, location, color, recurrence, blockItems });
     appState.calendarEvents.push(newEvent);
     uiState.calendarDraftRange = null;
     setCalendarSelection(newEvent.id, date);
@@ -4823,8 +5320,37 @@ function renderCalendar() {
 
   // ── event click actions + delete shortcuts ───────────────────────────────
   let suppressCalendarEventSelectionUntil = 0;
+  const calWeekGrid = document.getElementById("cal-week-grid");
 
-  document.getElementById("cal-week-grid").addEventListener("click", e => {
+  calWeekGrid.addEventListener("change", e => {
+    const blockCheckbox = e.target.closest(".cal-block-check");
+    if (!blockCheckbox) return;
+
+    const eventId = blockCheckbox.dataset.eventId;
+    const blockId = blockCheckbox.dataset.blockId;
+
+    if (!eventId || !blockId) return;
+
+    const eventRecord = appState.calendarEvents.find(entry => entry.id === eventId);
+    if (!eventRecord) return;
+
+    if (!Array.isArray(eventRecord.blockItems)) {
+      eventRecord.blockItems = [];
+    }
+
+    const blockItem = eventRecord.blockItems.find(entry => entry && entry.id === blockId);
+    if (!blockItem) return;
+
+    blockItem.done = Boolean(blockCheckbox.checked);
+    saveState();
+    renderApp();
+  });
+
+  calWeekGrid.addEventListener("click", e => {
+    if (e.target.closest(".cal-tg-event__block-row")) {
+      return;
+    }
+
     const deleteButton = e.target.closest(".cal-del-btn");
     if (deleteButton) {
       const eventEl = deleteButton.closest("[data-display-date]");
@@ -4868,6 +5394,24 @@ function renderCalendar() {
     uiState.calendarEditingEventId = null;
     renderApp();
   });
+
+  const blockReminderList = document.getElementById("cal-block-reminder-list");
+  if (blockReminderList) {
+    blockReminderList.addEventListener("click", e => {
+      const row = e.target.closest(".calendar-block-reminder-item");
+      if (!row || !row.dataset.eventId) return;
+
+      const displayDate = row.dataset.displayDate || "";
+      setCalendarSelection(row.dataset.eventId, displayDate);
+      uiState.calendarEditingEventId = null;
+
+      if (displayDate) {
+        navigateCalendarToDate(displayDate);
+      }
+
+      renderApp();
+    });
+  }
 
   // ── Mini month-picker (date locator) ─────────────────────────────────────
   if (uiState.calendarPickerOpen) {
@@ -5085,6 +5629,7 @@ function renderCalendar() {
     colsEl.addEventListener("mousedown", ev => {
       if (ev.button !== 0) return;
       if (ev.target.closest(".cal-del-btn")) return;
+      if (ev.target.closest(".cal-tg-event__block-row") || ev.target.closest(".cal-block-check")) return;
       const evEl = ev.target.closest(".cal-tg-event");
       if (evEl) {
         if (evEl.dataset.virtual) return;
