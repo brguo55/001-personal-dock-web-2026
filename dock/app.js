@@ -4233,9 +4233,9 @@ function renderCalendar() {
     labels.teal = "Verabredung";
     labels.lime = "Fitness";
     labels["teal-blue"] = "Besprechung";
-    labels.slate = "Part-Time";
+    labels.slate = "Schlafen";
     labels.apricot = "Full-Time";
-    labels.gray = "Schlafen";
+    labels.gray = "Part-Time";
 
     // Backward compatibility for older events stored with "pink".
     labels.pink = labels.green || "Green";
@@ -4243,10 +4243,30 @@ function renderCalendar() {
     return labels;
   })();
 
+  function getCalendarColorNameLabel(color) {
+    if (color === "pink") {
+      return "Green";
+    }
+
+    if (typeof color !== "string" || !color) {
+      return "";
+    }
+
+    return color
+      .split("-")
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
   function getCalendarColorTypeLabel(color) {
-    if (color === "slate") return "Slate / Part-Time";
-    if (color === "apricot") return "Apricot / Full-Time";
-    return COLOR_TYPE_LABELS[color] || "General";
+    const colorName = getCalendarColorNameLabel(color);
+    const typeLabel = COLOR_TYPE_LABELS[color] || colorName || "General";
+
+    if (!colorName) {
+      return typeLabel;
+    }
+
+    return `${colorName} / ${typeLabel}`;
   }
 
   // ── compute displayed days ────────────────────────────────────────────────
@@ -4390,7 +4410,7 @@ function renderCalendar() {
         return `<li class="cal-tg-event__block${item?.done ? " is-done" : ""}">
           <label class="cal-tg-event__block-row">
             <input type="checkbox" class="cal-block-check" data-event-id="${eventId}" data-block-id="${blockId}"${item?.done ? " checked" : ""}>
-            <span class="cal-tg-event__block-line">&bull; ${lineText}</span>
+            <span class="cal-tg-event__block-line">${lineText}</span>
           </label>
         </li>`;
       })
