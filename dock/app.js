@@ -4512,10 +4512,10 @@ function renderCalendar() {
          : "var(--green)";
   }
 
-  function getCalendarSummaryMarkerColor(color) {
-    if (!color) return "var(--line-soft)";
+  function getCalendarSummaryBadgeColor(color) {
+    if (!color) return "#7a8a9a";
     if (color === "pink" || COLOR_OPTIONS.includes(color)) return dotColor(color);
-    return "var(--line-soft)";
+    return "#7a8a9a";
   }
 
   function formatTime(t) {
@@ -4796,11 +4796,10 @@ function renderCalendar() {
 
     const rowHtml = orderedActivityLabels
       .map(activityLabel => {
-        const markerColor = getCalendarSummaryMarkerColor(activityColorByLabel.get(activityLabel));
+        const badgeColor = getCalendarSummaryBadgeColor(activityColorByLabel.get(activityLabel));
         return `<li class="calendar-weekly-summary__row">
           <span class="calendar-weekly-summary__label-wrap">
-            <span class="calendar-weekly-summary__color" style="background:${markerColor}"></span>
-            <span class="calendar-weekly-summary__label">${activityLabel}</span>
+            <span class="calendar-weekly-summary__badge" style="background:${badgeColor}">${activityLabel}</span>
           </span>
           <span class="calendar-weekly-summary__value">${formatCalendarWeeklySummaryHours(minutesByActivity.get(activityLabel) || 0)}</span>
         </li>`;

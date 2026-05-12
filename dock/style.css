@@ -2450,16 +2450,21 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .calendar-weekly-summary__label-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
   min-width: 0;
   flex: 1 1 auto;
 }
-.calendar-weekly-summary__color {
-  width: 12px;
-  height: 6px;
-  border-radius: 3px;
-  flex: 0 0 auto;
-  background: var(--line-soft);
+.calendar-weekly-summary__badge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .calendar-weekly-summary__row--total {
   margin-top: 4px;
