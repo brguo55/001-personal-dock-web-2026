@@ -2570,21 +2570,7 @@ function getBudgetCategoryById(categoryId) {
   return appState.budgetCategories.find(category => category.id === categoryId);
 }
 
-function getBudgetCategoryDeleteTarget(categoryId) {
-  if (categoryId !== DEFAULT_BUDGET_CATEGORY_ID) {
-    const defaultCategory = getBudgetCategoryById(DEFAULT_BUDGET_CATEGORY_ID);
-
-    if (defaultCategory) {
-      return defaultCategory;
-    }
-  }
-
-  return appState.budgetCategories.find(category => category.id !== categoryId) || null;
-}
-
 function getBudgetCategoryDeletionCopy(category) {
-  const deleteTarget = getBudgetCategoryDeleteTarget(category.id);
-
   if (category.items.length === 0) {
     return {
       detail: "This category is empty.",
@@ -2594,16 +2580,9 @@ function getBudgetCategoryDeletionCopy(category) {
 
   const itemLabel = category.items.length === 1 ? "1 item" : `${category.items.length} items`;
 
-  if (deleteTarget) {
-    return {
-      detail: `${itemLabel} will move to ${deleteTarget.title}.`,
-      confirmMessage: `Delete \"${category.title}\"? ${itemLabel} will move to ${deleteTarget.title}.`
-    };
-  }
-
   return {
-    detail: `${itemLabel} will be permanently deleted because no other category remains.`,
-    confirmMessage: `Delete \"${category.title}\"? ${itemLabel} will be permanently deleted because no other category remains.`
+    detail: `${itemLabel} in this section will be permanently deleted.`,
+    confirmMessage: `Delete \"${category.title}\"? ${itemLabel} in this section will be permanently deleted.`
   };
 }
 
@@ -2614,12 +2593,7 @@ function deleteBudgetCategory(categoryId) {
     return null;
   }
 
-  const moveTarget = getBudgetCategoryDeleteTarget(categoryId);
   const deletedItemCount = category.items.length;
-
-  if (moveTarget && deletedItemCount > 0) {
-    moveTarget.items = [...category.items, ...moveTarget.items];
-  }
 
   if (category.items.some(item => item.id === uiState.budgetEditorId)) {
     uiState.budgetEditorId = null;
@@ -2628,14 +2602,14 @@ function deleteBudgetCategory(categoryId) {
   appState.budgetCategories = appState.budgetCategories.filter(entry => entry.id !== categoryId);
 
   if (uiState.selectedBudgetCategory === categoryId) {
-    uiState.selectedBudgetCategory = moveTarget ? moveTarget.id : "all";
+    uiState.selectedBudgetCategory = "all";
   }
 
   return {
     deletedCategoryTitle: category.title,
-    movedItemCount: moveTarget ? deletedItemCount : 0,
-    deletedItemCount: moveTarget ? 0 : deletedItemCount,
-    moveTargetTitle: moveTarget?.title || ""
+    movedItemCount: 0,
+    deletedItemCount,
+    moveTargetTitle: ""
   };
 }
 
@@ -9068,16 +9042,7 @@ function renderBudgetPlanner() {
     <section class="budget-layout">
       <aside class="budget-sidebar">
         <div class="budget-sidebar__header">
-          <span class="budget-sidebar__heading">Categories</span>
-          <button
-            type="button"
-            class="budget-manage-link"
-            id="toggleBudgetCategoryManagerBtn"
-            aria-expanded="${uiState.showBudgetCategoryManager ? "true" : "false"}"
-            aria-controls="budgetCategoryManager"
-          >
-            ${uiState.showBudgetCategoryManager ? "Done" : "Manage"}
-          </button>
+          <span class="budget-sidebar__heading">Sections</span>
         </div>
 
         <form class="budget-category-form" id="budgetCategoryForm">
@@ -9086,7 +9051,7 @@ function renderBudgetPlanner() {
               id="budgetCategoryNameInput"
               type="text"
               maxlength="60"
-              placeholder="New category name\u2026"
+              placeholder="New section name\u2026"
               required
             />
             <button type="submit" class="budget-cat-create-btn">Add</button>
@@ -9095,29 +9060,15 @@ function renderBudgetPlanner() {
         </form>
 
         <ul class="sidebar-list" id="budgetCategoryList"></ul>
-
-        ${uiState.showBudgetCategoryManager ? `
-          <section class="budget-category-manager" id="budgetCategoryManager" aria-labelledby="budgetCategoryManagerTitle">
-            <div class="budget-category-manager__header">
-              <div>
-                <h3 class="budget-category-manager__title" id="budgetCategoryManagerTitle">Manage categories</h3>
-                <p class="budget-category-manager__subtitle">Delete categories here without cluttering the main list. Budget totals, visible items, and saved data update immediately.</p>
-              </div>
-              <button type="button" class="tiny-btn" id="closeBudgetCategoryManagerBtn">Done</button>
-            </div>
-
-            <ul class="budget-category-manager__list" id="budgetCategoryManagerList"></ul>
-          </section>
-        ` : ""}
       </aside>
 
       <div class="budget-main">
         <div class="budget-main__top">
           <div>
-            <h2 class="panel-title">${selectedCategory === "all" ? "All Budgets" : selectedCategoryData.title}</h2>
+            <h2 class="panel-title">${selectedCategory === "all" ? "All Spending" : selectedCategoryData.title}</h2>
             <p class="panel-subtitle">
               ${selectedCategory === "all"
-                ? "Review every budget item in one list."
+                ? "Review every spending item in one list."
                 : `Manage the items inside ${selectedCategoryData.title}.`}
             </p>
           </div>
@@ -9166,7 +9117,6 @@ function renderBudgetPlanner() {
   `;
 
   renderBudgetSidebar();
-  renderBudgetCategoryManager();
   populateBudgetForm(editorTarget);
   renderBudgetList(visibleEntries);
 
@@ -9185,19 +9135,6 @@ function renderBudgetPlanner() {
   const budgetCategoryForm = document.getElementById("budgetCategoryForm");
   const budgetCategoryNameInput = document.getElementById("budgetCategoryNameInput");
   const budgetCategoryFormMessage = document.getElementById("budgetCategoryFormMessage");
-  const toggleBudgetCategoryManagerButton = document.getElementById("toggleBudgetCategoryManagerBtn");
-
-  toggleBudgetCategoryManagerButton.addEventListener("click", () => {
-    uiState.showBudgetCategoryManager = !uiState.showBudgetCategoryManager;
-    renderApp();
-  });
-
-  if (uiState.showBudgetCategoryManager) {
-    document.getElementById("closeBudgetCategoryManagerBtn").addEventListener("click", () => {
-      uiState.showBudgetCategoryManager = false;
-      renderApp();
-    });
-  }
 
   budgetCategoryForm.addEventListener("submit", event => {
     event.preventDefault();
@@ -9229,7 +9166,7 @@ function renderBudgetPlanner() {
   });
 
   budgetCategoryNameInput.addEventListener("input", () => {
-    budgetCategoryFormMessage.textContent = "Categories are saved with your backup. If you delete one later, its items move to another remaining category when possible.";
+    budgetCategoryFormMessage.textContent = "Sections are saved with your backup. Deleting a section removes only that section and its items.";
     budgetCategoryFormMessage.dataset.tone = "info";
   });
 
@@ -11553,37 +11490,66 @@ function renderSettings() {
 function renderBudgetSidebar() {
   const list = document.getElementById("budgetCategoryList");
   const allEntries = getBudgetEntries("all");
-  const items = [
-    {
-      id: "all",
-      title: "All Budgets",
-      count: allEntries.length,
-      total: getSplitCurrencyTotalsFromBudgetItems(allEntries.map(entry => entry.item))
-    },
-    ...appState.budgetCategories.map(category => ({
-      id: category.id,
-      title: category.title,
-      count: category.items.length,
-      total: getSplitCurrencyTotalsFromBudgetItems(category.items)
-    }))
-  ];
 
-  items.forEach(category => {
+  const allItem = document.createElement("li");
+  allItem.className = "sidebar-list__item";
+
+  const allButton = document.createElement("button");
+  allButton.type = "button";
+  allButton.className = `sidebar-btn ${uiState.selectedBudgetCategory === "all" ? "is-active" : ""}`;
+  allButton.innerHTML = `<strong>All Spending</strong><span>${allEntries.length} items</span>`;
+  allButton.addEventListener("click", () => {
+    setBudgetCategory("all");
+  });
+
+  allItem.appendChild(allButton);
+  list.appendChild(allItem);
+
+  appState.budgetCategories.forEach(category => {
     const item = document.createElement("li");
-    const button = document.createElement("button");
-
     item.className = "sidebar-list__item";
+
+    const row = document.createElement("div");
+    row.className = "planner-sidebar-row";
+
+    const button = document.createElement("button");
     button.type = "button";
     button.className = `sidebar-btn ${category.id === uiState.selectedBudgetCategory ? "is-active" : ""}`;
-    button.innerHTML = `
-      <strong>${category.title}</strong>
-      <span>${category.count} items · ${formatBudgetSplitTotalDisplay(category.total)}</span>
-    `;
+    button.innerHTML = `<strong>${category.title}</strong><span>${category.items.length} items · ${formatBudgetSplitTotalDisplay(getSplitCurrencyTotalsFromBudgetItems(category.items))}</span>`;
     button.addEventListener("click", () => {
       setBudgetCategory(category.id);
     });
-    item.appendChild(button);
 
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "icon-btn";
+    deleteButton.textContent = "\u00d7";
+    deleteButton.setAttribute("title", `Delete \"${category.title}\"`);
+    deleteButton.setAttribute("aria-label", `Delete section ${category.title}`);
+    deleteButton.addEventListener("click", () => {
+      const itemCount = category.items.length;
+      const itemLabel = itemCount === 1 ? "1 item" : `${itemCount} items`;
+      const confirmation = itemCount > 0
+        ? `Delete "${category.title}" and permanently delete its ${itemLabel}?`
+        : `Delete "${category.title}"?`;
+
+      if (!confirm(confirmation)) {
+        return;
+      }
+
+      const deletionResult = deleteBudgetCategory(category.id);
+
+      if (!deletionResult) {
+        return;
+      }
+
+      saveState();
+      renderApp();
+    });
+
+    row.appendChild(button);
+    row.appendChild(deleteButton);
+    item.appendChild(row);
     list.appendChild(item);
   });
 }
