@@ -2060,6 +2060,8 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-tg-event--teal-blue { background: rgba(27,143,168,.10);  border-left-color: #1b8fa8; }
 .cal-tg-event--brown     { background: rgba(139,94,60,.09);   border-left-color: #8b5e3c; }
 .cal-tg-event--slate     { background: rgba(74,110,170,.09);  border-left-color: #4a6eaa; }
+.cal-tg-event--mist      { background: rgba(156,174,190,.13); border-left-color: #9caebe; }
+.cal-tg-event--sand      { background: rgba(199,165,123,.14); border-left-color: #c7a57b; }
 .cal-tg-event--apricot   { background: rgba(242,183,132,.17); border-left-color: #eba66d; }
 .cal-tg-event--gray      { background: rgba(122,138,154,.09); border-left-color: #7a8a9a; }
 
@@ -2088,6 +2090,8 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-week-event--teal-blue { background: rgba(27,143,168,.09);  border-left-color: #1b8fa8; }
 .cal-week-event--brown     { background: rgba(139,94,60,.08);   border-left-color: #8b5e3c; }
 .cal-week-event--slate     { background: rgba(74,110,170,.08);  border-left-color: #4a6eaa; }
+.cal-week-event--mist      { background: rgba(156,174,190,.11); border-left-color: #9caebe; }
+.cal-week-event--sand      { background: rgba(199,165,123,.12); border-left-color: #c7a57b; }
 .cal-week-event--apricot   { background: rgba(242,183,132,.14); border-left-color: #eba66d; }
 .cal-week-event--gray      { background: rgba(122,138,154,.08); border-left-color: #7a8a9a; }
 
@@ -2339,6 +2343,8 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .color-swatch--teal-blue  { background: #1b8fa8; }
 .color-swatch--brown      { background: #8b5e3c; }
 .color-swatch--slate      { background: #4a6eaa; }
+.color-swatch--mist       { background: #9caebe; }
+.color-swatch--sand       { background: #c7a57b; }
 .color-swatch--apricot    { background: #f2b784; }
 .color-swatch--gray       { background: #7a8a9a; }
 .color-swatch--pink       { background: var(--green); } /* backward compat alias */
@@ -2396,6 +2402,45 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 }
 
 .calendar-event-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+
+.calendar-weekly-summary {
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-md);
+  background: #fff;
+  padding: 8px 10px;
+}
+.calendar-weekly-summary__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.calendar-weekly-summary__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: .78rem;
+  color: var(--muted-bright);
+}
+.calendar-weekly-summary__row--total {
+  margin-top: 4px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line-faint);
+  font-weight: 700;
+  color: var(--text-bright);
+}
+.calendar-weekly-summary__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calendar-weekly-summary__value {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
 
 .calendar-event-item {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;

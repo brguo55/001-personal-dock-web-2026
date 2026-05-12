@@ -4364,8 +4364,8 @@ function renderCalendar() {
   const DAY_FULL    = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const COLOR_OPTIONS = [
-    "green", "rose", "purple", "blue", "teal",
-    "lime", "teal-blue", "brown", "slate", "apricot", "gray"
+    "mist", "slate", "lime", "sand", "teal",
+    "green", "rose", "purple", "blue", "teal-blue", "brown", "apricot", "gray"
   ];
 
   const COLOR_TYPE_LABELS = (() => {
@@ -4376,10 +4376,12 @@ function renderCalendar() {
       ])
     );
 
-    labels.teal = "Verabredung";
-    labels.lime = "Fitness";
-    labels["teal-blue"] = "Besprechung";
+    labels.mist = "Schlafen";
     labels.slate = "Part-Time";
+    labels.lime = "Nikutaikaizō";
+    labels.sand = "Hitorimeshi";
+    labels.teal = "Verabredung";
+    labels["teal-blue"] = "Besprechung";
     labels.apricot = "Full-Time";
     labels.gray = "Schlafen";
 
@@ -4491,7 +4493,7 @@ function renderCalendar() {
   }
 
   function dotColor(color) {
-    return color === "green" || color === "pink" ? "var(--green)"
+     return color === "green" || color === "pink" ? "var(--green)"
          : color === "rose"      ? "var(--danger)"
          : color === "purple"    ? "#7840b4"
          : color === "blue"      ? "#1e64dc"
@@ -4500,6 +4502,8 @@ function renderCalendar() {
          : color === "teal-blue" ? "#1b8fa8"
          : color === "brown"     ? "#8b5e3c"
          : color === "slate"     ? "#4a6eaa"
+        : color === "mist"      ? "#9caebe"
+        : color === "sand"      ? "#c7a57b"
       : color === "apricot"   ? "#f2b784"
          : color === "gray"      ? "#7a8a9a"
          : "var(--green)";
@@ -4709,6 +4713,81 @@ function renderCalendar() {
     }
 
     return `${reminderItem.blockTitle} starts in ${reminderItem.minutesUntil} minute${reminderItem.minutesUntil === 1 ? "" : "s"}`;
+  }
+
+  function formatCalendarWeeklySummaryHours(minutes) {
+    const hours = minutes / 60;
+    const hourText = Number.isInteger(hours)
+      ? String(hours)
+      : hours.toFixed(2).replace(/\.?0+$/, "");
+    return `${hourText}h`;
+  }
+
+  function buildCalendarWeeklySummaryData() {
+    const weekStartIso = mondayOfWeek(new Date(uiState.calendarWeekStart + "T12:00:00"));
+    const weekStart = new Date(`${weekStartIso}T00:00:00`);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    const weekDates = Array.from({ length: 7 }, (_, index) => shiftIsoDate(weekStartIso, index));
+    const occurrenceDates = [shiftIsoDate(weekStartIso, -1), ...weekDates];
+    const minutesByActivity = new Map();
+
+    occurrenceDates.forEach(dateStr => {
+      eventsForDate(dateStr).forEach(eventItem => {
+        if (!parseTimeParts(eventItem.time || "")) return;
+
+        const startsAt = occurrenceDateTime(eventItem, dateStr);
+        const endsAt = occurrenceEndDateTime(eventItem, dateStr, startsAt);
+        const overlapStart = startsAt > weekStart ? startsAt : weekStart;
+        const overlapEnd = endsAt < weekEnd ? endsAt : weekEnd;
+        const overlapMinutes = Math.max(0, Math.round((overlapEnd - overlapStart) / 60000));
+
+        if (!overlapMinutes) return;
+
+        const activityLabel = COLOR_TYPE_LABELS[eventItem.color] || getCalendarColorNameLabel(eventItem.color) || "General";
+        minutesByActivity.set(activityLabel, (minutesByActivity.get(activityLabel) || 0) + overlapMinutes);
+      });
+    });
+
+    if (!minutesByActivity.size) {
+      return {
+        rowHtml: "",
+        totalMinutes: 0
+      };
+    }
+
+    const orderedActivityLabels = [];
+
+    COLOR_OPTIONS.forEach(color => {
+      const activityLabel = COLOR_TYPE_LABELS[color] || getCalendarColorNameLabel(color) || "General";
+      if (minutesByActivity.has(activityLabel) && !orderedActivityLabels.includes(activityLabel)) {
+        orderedActivityLabels.push(activityLabel);
+      }
+    });
+
+    Array.from(minutesByActivity.keys())
+      .sort((left, right) => left.localeCompare(right))
+      .forEach(activityLabel => {
+        if (!orderedActivityLabels.includes(activityLabel)) {
+          orderedActivityLabels.push(activityLabel);
+        }
+      });
+
+    const rowHtml = orderedActivityLabels
+      .map(activityLabel => `<li class="calendar-weekly-summary__row">
+          <span class="calendar-weekly-summary__label">${activityLabel}</span>
+          <span class="calendar-weekly-summary__value">${formatCalendarWeeklySummaryHours(minutesByActivity.get(activityLabel) || 0)}</span>
+        </li>`)
+      .join("");
+
+    const totalMinutes = Array.from(minutesByActivity.values())
+      .reduce((sum, minutes) => sum + minutes, 0);
+
+    return {
+      rowHtml,
+      totalMinutes
+    };
   }
 
   // ── time-grid constants & helpers ─────────────────────────────────────────
@@ -5018,6 +5097,7 @@ function renderCalendar() {
   const currentOccurrences = getCurrentOccurrences();
   const nextUpcoming = getNextUpcomingOccurrence();
   const activeBlockReminders = getActiveCalendarBlockReminders();
+  const weeklySummaryData = buildCalendarWeeklySummaryData();
 
   const currentHtml = !currentOccurrences.length
     ? `<li><div class="empty-state">No current events.</div></li>`
@@ -5070,6 +5150,16 @@ function renderCalendar() {
       })();
 
   const eventListHtml = eventListTab === "current" ? currentHtml : upcomingHtml;
+
+  const weeklySummaryHtml = weeklySummaryData.totalMinutes <= 0
+    ? `<div class="empty-state">No time tracked this week.</div>`
+    : `<ul class="calendar-weekly-summary__list">
+        ${weeklySummaryData.rowHtml}
+        <li class="calendar-weekly-summary__row calendar-weekly-summary__row--total">
+          <span class="calendar-weekly-summary__label">Total scheduled</span>
+          <span class="calendar-weekly-summary__value">${formatCalendarWeeklySummaryHours(weeklySummaryData.totalMinutes)}</span>
+        </li>
+      </ul>`;
 
   const blockReminderListHtml = !activeBlockReminders.length
     ? `<li><div class="empty-state">No active block reminders right now.</div></li>`
@@ -5236,6 +5326,10 @@ function renderCalendar() {
           <ul class="calendar-event-list" id="cal-event-list">
             ${eventListHtml}
           </ul>
+          <div class="calendar-event-list-section__heading calendar-event-list-section__heading--secondary">Weekly Time Summary</div>
+          <div class="calendar-weekly-summary" id="cal-weekly-summary">
+            ${weeklySummaryHtml}
+          </div>
         </div>
       </div>
     </div>
