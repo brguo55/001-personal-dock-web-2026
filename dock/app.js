@@ -4367,8 +4367,8 @@ function renderCalendar() {
   const DAY_FULL    = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const COLOR_OPTIONS = [
-    "mist", "slate", "lime", "cocoa", "teal",
-    "green", "rose", "purple", "blue", "teal-blue", "brown", "apricot", "gray"
+    "cloud", "mocha", "slate", "lime", "vanilla", "teal",
+    "green", "rose", "purple", "blue", "teal-blue", "brown", "gray"
   ];
 
   const COLOR_TYPE_LABELS = (() => {
@@ -4379,45 +4379,51 @@ function renderCalendar() {
       ])
     );
 
-    labels.mist = "Schlafen";
+    labels.cloud = "Schlafen";
+    labels.mocha = "Full-Time";
     labels.slate = "Part-Time";
     labels.lime = "Nikutaikaizō";
-    labels.cocoa = "Hitorimeshi";
+    labels.vanilla = "Hitorimeshi";
     labels.teal = "Verabredung";
     labels["teal-blue"] = "Besprechung";
-    labels.apricot = "Full-Time";
     labels.gray = "Schlafen";
 
     // Backward compatibility for older events stored with "pink".
     labels.pink = labels.green || "Green";
-    // Backward compatibility for older events stored with "sand".
-    labels.sand = labels.cocoa;
+    // Backward compatibility for older event color keys.
+    labels.mist = labels.cloud;
+    labels.apricot = labels.mocha;
+    labels.cocoa = labels.vanilla;
+    labels.sand = labels.vanilla;
 
     return labels;
   })();
 
+  function normalizeCalendarColorKey(color) {
+    if (color === "pink") return "green";
+    if (color === "mist") return "cloud";
+    if (color === "apricot") return "mocha";
+    if (color === "cocoa" || color === "sand") return "vanilla";
+    return color;
+  }
+
   function getCalendarColorNameLabel(color) {
-    if (color === "pink") {
-      return "Green";
-    }
+    const normalizedColor = normalizeCalendarColorKey(color);
 
-    if (color === "sand") {
-      return "Cocoa";
-    }
-
-    if (typeof color !== "string" || !color) {
+    if (typeof normalizedColor !== "string" || !normalizedColor) {
       return "";
     }
 
-    return color
+    return normalizedColor
       .split("-")
       .map(part => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ");
   }
 
   function getCalendarColorTypeLabel(color) {
-    const colorName = getCalendarColorNameLabel(color);
-    const typeLabel = COLOR_TYPE_LABELS[color] || colorName || "General";
+    const normalizedColor = normalizeCalendarColorKey(color);
+    const colorName = getCalendarColorNameLabel(normalizedColor);
+    const typeLabel = COLOR_TYPE_LABELS[normalizedColor] || colorName || "General";
 
     if (!colorName) {
       return typeLabel;
@@ -4502,26 +4508,28 @@ function renderCalendar() {
   }
 
   function dotColor(color) {
-     return color === "green" || color === "pink" ? "var(--green)"
-         : color === "rose"      ? "var(--danger)"
-         : color === "purple"    ? "#7840b4"
-         : color === "blue"      ? "#1e64dc"
-         : color === "teal"      ? "#009898"
-         : color === "lime"      ? "#7abf20"
-         : color === "teal-blue" ? "#1b8fa8"
-         : color === "brown"     ? "#8b5e3c"
-         : color === "slate"     ? "#4a6eaa"
-        : color === "mist"      ? "#9caebe"
-        : color === "cocoa" || color === "sand" ? "#a87355"
-      : color === "apricot"   ? "#f2b784"
-         : color === "gray"      ? "#7a8a9a"
+    const normalizedColor = normalizeCalendarColorKey(color);
+
+     return normalizedColor === "green"     ? "var(--green)"
+         : normalizedColor === "rose"      ? "var(--danger)"
+         : normalizedColor === "purple"    ? "#7840b4"
+         : normalizedColor === "blue"      ? "#1e64dc"
+         : normalizedColor === "teal"      ? "#009898"
+         : normalizedColor === "lime"      ? "#7abf20"
+         : normalizedColor === "teal-blue" ? "#1b8fa8"
+         : normalizedColor === "brown"     ? "#8b5e3c"
+         : normalizedColor === "slate"     ? "#4a6eaa"
+         : normalizedColor === "cloud"     ? "#9fb2c6"
+         : normalizedColor === "mocha"     ? "#8f705a"
+         : normalizedColor === "vanilla"   ? "#b89366"
+         : normalizedColor === "gray"      ? "#7a8a9a"
          : "var(--green)";
   }
 
   function getCalendarSummaryBadgeColor(color) {
     if (!color) return "#7a8a9a";
-    if (color === "sand") return dotColor("cocoa");
-    if (color === "pink" || COLOR_OPTIONS.includes(color)) return dotColor(color);
+    const normalizedColor = normalizeCalendarColorKey(color);
+    if (COLOR_OPTIONS.includes(normalizedColor)) return dotColor(normalizedColor);
     return "#7a8a9a";
   }
 
@@ -4784,21 +4792,28 @@ function renderCalendar() {
       };
     }
 
-    const orderedActivityLabels = [];
-
-    COLOR_OPTIONS.forEach(color => {
+    const preferredActivityOrder = new Map();
+    COLOR_OPTIONS.forEach((color, index) => {
       const activityLabel = COLOR_TYPE_LABELS[color] || getCalendarColorNameLabel(color) || "General";
-      if (minutesByActivity.has(activityLabel) && !orderedActivityLabels.includes(activityLabel)) {
-        orderedActivityLabels.push(activityLabel);
+      if (!preferredActivityOrder.has(activityLabel)) {
+        preferredActivityOrder.set(activityLabel, index);
       }
     });
 
-    Array.from(minutesByActivity.keys())
-      .sort((left, right) => left.localeCompare(right))
-      .forEach(activityLabel => {
-        if (!orderedActivityLabels.includes(activityLabel)) {
-          orderedActivityLabels.push(activityLabel);
-        }
+    const orderedActivityLabels = Array.from(minutesByActivity.keys())
+      .sort((left, right) => {
+        const minuteDelta = (minutesByActivity.get(right) || 0) - (minutesByActivity.get(left) || 0);
+        if (minuteDelta !== 0) return minuteDelta;
+
+        const leftOrder = preferredActivityOrder.has(left)
+          ? preferredActivityOrder.get(left)
+          : Number.MAX_SAFE_INTEGER;
+        const rightOrder = preferredActivityOrder.has(right)
+          ? preferredActivityOrder.get(right)
+          : Number.MAX_SAFE_INTEGER;
+
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return left.localeCompare(right);
       });
 
     const rowHtml = orderedActivityLabels
@@ -5716,8 +5731,9 @@ function renderCalendar() {
     });
   });
 
-  const initialFormColor = editingEvent && COLOR_OPTIONS.includes(editingEvent.color)
-    ? editingEvent.color
+  const normalizedEditingColor = editingEvent ? normalizeCalendarColorKey(editingEvent.color) : "";
+  const initialFormColor = editingEvent && COLOR_OPTIONS.includes(normalizedEditingColor)
+    ? normalizedEditingColor
     : "green";
   calColorInput.value = initialFormColor;
 

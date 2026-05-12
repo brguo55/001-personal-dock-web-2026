@@ -2083,10 +2083,13 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-tg-event--teal-blue { background: rgba(27,143,168,.10);  border-left-color: #1b8fa8; }
 .cal-tg-event--brown     { background: rgba(139,94,60,.09);   border-left-color: #8b5e3c; }
 .cal-tg-event--slate     { background: rgba(74,110,170,.09);  border-left-color: #4a6eaa; }
-.cal-tg-event--mist      { background: rgba(156,174,190,.13); border-left-color: #9caebe; }
+.cal-tg-event--cloud,
+.cal-tg-event--mist      { background: rgba(159,178,198,.13); border-left-color: #9fb2c6; }
+.cal-tg-event--mocha,
+.cal-tg-event--apricot   { background: rgba(143,112,90,.14);  border-left-color: #8f705a; }
+.cal-tg-event--vanilla,
 .cal-tg-event--cocoa,
-.cal-tg-event--sand      { background: rgba(168,115,85,.15);  border-left-color: #a87355; }
-.cal-tg-event--apricot   { background: rgba(242,183,132,.17); border-left-color: #eba66d; }
+.cal-tg-event--sand      { background: rgba(184,147,102,.16); border-left-color: #b89366; }
 .cal-tg-event--gray      { background: rgba(122,138,154,.09); border-left-color: #7a8a9a; }
 
 /* event cards inside week/day columns */
@@ -2114,10 +2117,13 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-week-event--teal-blue { background: rgba(27,143,168,.09);  border-left-color: #1b8fa8; }
 .cal-week-event--brown     { background: rgba(139,94,60,.08);   border-left-color: #8b5e3c; }
 .cal-week-event--slate     { background: rgba(74,110,170,.08);  border-left-color: #4a6eaa; }
-.cal-week-event--mist      { background: rgba(156,174,190,.11); border-left-color: #9caebe; }
+.cal-week-event--cloud,
+.cal-week-event--mist      { background: rgba(159,178,198,.11); border-left-color: #9fb2c6; }
+.cal-week-event--mocha,
+.cal-week-event--apricot   { background: rgba(143,112,90,.12);  border-left-color: #8f705a; }
+.cal-week-event--vanilla,
 .cal-week-event--cocoa,
-.cal-week-event--sand      { background: rgba(168,115,85,.13);  border-left-color: #a87355; }
-.cal-week-event--apricot   { background: rgba(242,183,132,.14); border-left-color: #eba66d; }
+.cal-week-event--sand      { background: rgba(184,147,102,.14); border-left-color: #b89366; }
 .cal-week-event--gray      { background: rgba(122,138,154,.08); border-left-color: #7a8a9a; }
 
 .cal-week-event__top {
@@ -2368,10 +2374,13 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .color-swatch--teal-blue  { background: #1b8fa8; }
 .color-swatch--brown      { background: #8b5e3c; }
 .color-swatch--slate      { background: #4a6eaa; }
-.color-swatch--mist       { background: #9caebe; }
+.color-swatch--cloud,
+.color-swatch--mist       { background: #9fb2c6; }
+.color-swatch--mocha,
+.color-swatch--apricot    { background: #8f705a; }
+.color-swatch--vanilla,
 .color-swatch--cocoa,
-.color-swatch--sand       { background: #a87355; }
-.color-swatch--apricot    { background: #f2b784; }
+.color-swatch--sand       { background: #b89366; }
 .color-swatch--gray       { background: #7a8a9a; }
 .color-swatch--pink       { background: var(--green); } /* backward compat alias */
 
