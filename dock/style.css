@@ -2087,6 +2087,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-tg-event--mist      { background: rgba(159,178,198,.13); border-left-color: #9fb2c6; }
 .cal-tg-event--mocha,
 .cal-tg-event--apricot   { background: rgba(143,112,90,.14);  border-left-color: #8f705a; }
+.cal-tg-event--cream,
 .cal-tg-event--vanilla,
 .cal-tg-event--cocoa,
 .cal-tg-event--sand      { background: rgba(184,147,102,.16); border-left-color: #b89366; }
@@ -2121,6 +2122,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-week-event--mist      { background: rgba(159,178,198,.11); border-left-color: #9fb2c6; }
 .cal-week-event--mocha,
 .cal-week-event--apricot   { background: rgba(143,112,90,.12);  border-left-color: #8f705a; }
+.cal-week-event--cream,
 .cal-week-event--vanilla,
 .cal-week-event--cocoa,
 .cal-week-event--sand      { background: rgba(184,147,102,.14); border-left-color: #b89366; }
@@ -2378,6 +2380,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .color-swatch--mist       { background: #9fb2c6; }
 .color-swatch--mocha,
 .color-swatch--apricot    { background: #8f705a; }
+.color-swatch--cream,
 .color-swatch--vanilla,
 .color-swatch--cocoa,
 .color-swatch--sand       { background: #b89366; }

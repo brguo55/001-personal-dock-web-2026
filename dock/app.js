@@ -4367,7 +4367,7 @@ function renderCalendar() {
   const DAY_FULL    = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const COLOR_OPTIONS = [
-    "cloud", "mocha", "slate", "lime", "vanilla", "teal",
+    "cloud", "mocha", "slate", "lime", "cream", "teal",
     "green", "rose", "purple", "blue", "teal-blue", "brown", "gray"
   ];
 
@@ -4383,7 +4383,7 @@ function renderCalendar() {
     labels.mocha = "Full-Time";
     labels.slate = "Part-Time";
     labels.lime = "Nikutaikaizō";
-    labels.vanilla = "Hitorimeshi";
+    labels.cream = "Hitorimeshi";
     labels.teal = "Verabredung";
     labels["teal-blue"] = "Besprechung";
     labels.gray = "Schlafen";
@@ -4393,8 +4393,9 @@ function renderCalendar() {
     // Backward compatibility for older event color keys.
     labels.mist = labels.cloud;
     labels.apricot = labels.mocha;
-    labels.cocoa = labels.vanilla;
-    labels.sand = labels.vanilla;
+    labels.vanilla = labels.cream;
+    labels.cocoa = labels.cream;
+    labels.sand = labels.cream;
 
     return labels;
   })();
@@ -4403,7 +4404,7 @@ function renderCalendar() {
     if (color === "pink") return "green";
     if (color === "mist") return "cloud";
     if (color === "apricot") return "mocha";
-    if (color === "cocoa" || color === "sand") return "vanilla";
+    if (color === "vanilla" || color === "cocoa" || color === "sand") return "cream";
     return color;
   }
 
@@ -4521,7 +4522,7 @@ function renderCalendar() {
          : normalizedColor === "slate"     ? "#4a6eaa"
          : normalizedColor === "cloud"     ? "#9fb2c6"
          : normalizedColor === "mocha"     ? "#8f705a"
-         : normalizedColor === "vanilla"   ? "#b89366"
+          : normalizedColor === "cream"     ? "#b89366"
          : normalizedColor === "gray"      ? "#7a8a9a"
          : "var(--green)";
   }
