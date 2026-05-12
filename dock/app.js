@@ -4367,7 +4367,7 @@ function renderCalendar() {
   const DAY_FULL    = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const COLOR_OPTIONS = [
-    "mist", "slate", "lime", "sand", "teal",
+    "mist", "slate", "lime", "cocoa", "teal",
     "green", "rose", "purple", "blue", "teal-blue", "brown", "apricot", "gray"
   ];
 
@@ -4382,7 +4382,7 @@ function renderCalendar() {
     labels.mist = "Schlafen";
     labels.slate = "Part-Time";
     labels.lime = "Nikutaikaizō";
-    labels.sand = "Hitorimeshi";
+    labels.cocoa = "Hitorimeshi";
     labels.teal = "Verabredung";
     labels["teal-blue"] = "Besprechung";
     labels.apricot = "Full-Time";
@@ -4390,6 +4390,8 @@ function renderCalendar() {
 
     // Backward compatibility for older events stored with "pink".
     labels.pink = labels.green || "Green";
+    // Backward compatibility for older events stored with "sand".
+    labels.sand = labels.cocoa;
 
     return labels;
   })();
@@ -4397,6 +4399,10 @@ function renderCalendar() {
   function getCalendarColorNameLabel(color) {
     if (color === "pink") {
       return "Green";
+    }
+
+    if (color === "sand") {
+      return "Cocoa";
     }
 
     if (typeof color !== "string" || !color) {
@@ -4506,7 +4512,7 @@ function renderCalendar() {
          : color === "brown"     ? "#8b5e3c"
          : color === "slate"     ? "#4a6eaa"
         : color === "mist"      ? "#9caebe"
-        : color === "sand"      ? "#c7a57b"
+        : color === "cocoa" || color === "sand" ? "#a87355"
       : color === "apricot"   ? "#f2b784"
          : color === "gray"      ? "#7a8a9a"
          : "var(--green)";
@@ -4514,6 +4520,7 @@ function renderCalendar() {
 
   function getCalendarSummaryBadgeColor(color) {
     if (!color) return "#7a8a9a";
+    if (color === "sand") return dotColor("cocoa");
     if (color === "pink" || COLOR_OPTIONS.includes(color)) return dotColor(color);
     return "#7a8a9a";
   }
