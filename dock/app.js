@@ -11507,10 +11507,18 @@ function renderBudgetSidebar() {
 
   appState.budgetCategories.forEach(category => {
     const item = document.createElement("li");
-    item.className = "sidebar-list__item";
+    item.className = "sidebar-list__item planner-section-item budget-sidebar-section-item";
+    item.dataset.categoryId = category.id;
+    item.draggable = true;
 
     const row = document.createElement("div");
     row.className = "planner-sidebar-row";
+
+    const dragHandle = document.createElement("span");
+    dragHandle.className = "planner-section__drag-handle";
+    dragHandle.setAttribute("aria-hidden", "true");
+    dragHandle.setAttribute("title", "Drag to reorder section");
+    dragHandle.textContent = "\u2807";
 
     const button = document.createElement("button");
     button.type = "button";
@@ -11547,11 +11555,75 @@ function renderBudgetSidebar() {
       renderApp();
     });
 
+    row.appendChild(dragHandle);
     row.appendChild(button);
     row.appendChild(deleteButton);
     item.appendChild(row);
     list.appendChild(item);
   });
+
+  {
+    let dragCategoryId = null;
+
+    function getBudgetCategoryLi(el) {
+      while (el && (!el.classList || !el.classList.contains("budget-sidebar-section-item"))) el = el.parentElement;
+      return el;
+    }
+
+    list.addEventListener("dragstart", event => {
+      const li = getBudgetCategoryLi(event.target);
+      if (!li) return;
+      dragCategoryId = li.dataset.categoryId;
+      li.classList.add("planner-section-item--dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", dragCategoryId);
+    });
+
+    list.addEventListener("dragend", event => {
+      const li = getBudgetCategoryLi(event.target);
+      if (li) li.classList.remove("planner-section-item--dragging");
+      list.querySelectorAll(".planner-section-item--drag-over").forEach(el =>
+        el.classList.remove("planner-section-item--drag-over")
+      );
+      dragCategoryId = null;
+    });
+
+    list.addEventListener("dragover", event => {
+      const li = getBudgetCategoryLi(event.target);
+      if (!li || li.dataset.categoryId === dragCategoryId) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      list.querySelectorAll(".planner-section-item--drag-over").forEach(el =>
+        el.classList.remove("planner-section-item--drag-over")
+      );
+      li.classList.add("planner-section-item--drag-over");
+    });
+
+    list.addEventListener("dragleave", event => {
+      const li = getBudgetCategoryLi(event.target);
+      if (li) li.classList.remove("planner-section-item--drag-over");
+    });
+
+    list.addEventListener("drop", event => {
+      event.preventDefault();
+      const targetLi = getBudgetCategoryLi(event.target);
+      if (!targetLi || !dragCategoryId) return;
+
+      const targetCategoryId = targetLi.dataset.categoryId;
+      if (targetCategoryId === dragCategoryId) return;
+
+      const reordered = [...appState.budgetCategories];
+      const fromIndex = reordered.findIndex(category => category.id === dragCategoryId);
+      const toIndex = reordered.findIndex(category => category.id === targetCategoryId);
+      if (fromIndex === -1 || toIndex === -1) return;
+
+      reordered.splice(toIndex, 0, reordered.splice(fromIndex, 1)[0]);
+      appState.budgetCategories = reordered;
+
+      saveState();
+      renderApp();
+    });
+  }
 }
 
 function renderBudgetCategoryManager() {
