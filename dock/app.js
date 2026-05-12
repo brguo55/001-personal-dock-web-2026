@@ -1291,6 +1291,78 @@ function clearAuxiliaryStorageKeys() {
   });
 }
 
+function getScopedCleanupUnrelatedDataSnapshot() {
+  return JSON.stringify({
+    activeView: uiState.activeView,
+    selectedBudgetCategory: uiState.selectedBudgetCategory,
+    actionSections: appState.actionSections,
+    budgetPlanner: appState.budgetPlanner,
+    notes: appState.notes,
+    waitingItems: appState.waitingItems,
+    inboxItems: appState.inboxItems,
+    projects: appState.projects,
+    somedayItems: appState.somedayItems,
+    referenceItems: appState.referenceItems,
+    trashItems: appState.trashItems,
+    promises: appState.promises,
+    calendarEvents: appState.calendarEvents
+  });
+}
+
+function getScopedCleanupStructureSnapshot() {
+  return JSON.stringify({
+    budgetCategories: appState.budgetCategories.map(category => ({
+      id: typeof category?.id === "string" ? category.id : null,
+      title: typeof category?.title === "string" ? category.title : null
+    })),
+    plannerSections: appState.plannerSections.map(section => ({
+      id: typeof section?.id === "string" ? section.id : null,
+      title: typeof section?.title === "string" ? section.title : null
+    }))
+  });
+}
+
+function clearBudgetAndPlannerContentOnly() {
+  const unrelatedBefore = getScopedCleanupUnrelatedDataSnapshot();
+  const structureBefore = getScopedCleanupStructureSnapshot();
+  const budgetItemsBackup = appState.budgetCategories.map(category =>
+    Array.isArray(category?.items) ? [...category.items] : []
+  );
+  const plannerItemsBackup = appState.plannerSections.map(section =>
+    Array.isArray(section?.items) ? [...section.items] : []
+  );
+
+  appState.budgetCategories.forEach(category => {
+    if (Array.isArray(category?.items)) {
+      category.items.length = 0;
+      return;
+    }
+    category.items = [];
+  });
+
+  appState.plannerSections.forEach(section => {
+    if (Array.isArray(section?.items)) {
+      section.items.length = 0;
+      return;
+    }
+    section.items = [];
+  });
+
+  const unrelatedAfter = getScopedCleanupUnrelatedDataSnapshot();
+  const structureAfter = getScopedCleanupStructureSnapshot();
+
+  if (unrelatedBefore !== unrelatedAfter || structureBefore !== structureAfter) {
+    appState.budgetCategories.forEach((category, index) => {
+      category.items = budgetItemsBackup[index];
+    });
+    appState.plannerSections.forEach((section, index) => {
+      section.items = plannerItemsBackup[index];
+    });
+
+    throw new Error("Scoped cleanup safety check failed.");
+  }
+}
+
 // Copies all section tasks (deep) from source date to target date, merging with existing structure.
 function copyDailyBoard(srcDateStr, destDateStr) {
   const src  = getDailyBoard(srcDateStr);
@@ -11329,11 +11401,11 @@ function renderSettings() {
       <div class="settings-section settings-section--danger">
         <div class="settings-section__header">
           <p class="eyebrow">Danger Zone</p>
-          <h2 class="panel-title">Clear All Data</h2>
-          <p class="panel-subtitle">Permanently delete all PersonalDock data — tasks, budget items, categories, calendar events, promises, notes, checklists, diary entries, bits, dates board items, lessons learned entries, and expense tracker records. The app will return to a completely empty state. This cannot be undone unless you have exported a backup.</p>
+          <h2 class="panel-title">Clear Budget + Planner Content</h2>
+          <p class="panel-subtitle">Remove user-entered items from Budget Categories and Planner while keeping category/section structure and all other PersonalDock data unchanged.</p>
         </div>
         <div class="settings-actions">
-          <button type="button" id="settingsResetBtn" class="ghost-btn">Clear all data</button>
+          <button type="button" id="settingsResetBtn" class="ghost-btn">Clear budget + planner content</button>
         </div>
       </div>
     </section>
@@ -11359,54 +11431,20 @@ function renderSettings() {
   });
 
   document.getElementById("settingsResetBtn").addEventListener("click", () => {
-    const confirmed = confirm("Clear all PersonalDock data?\n\nThis will permanently delete tasks, budget items, categories, calendar events, promises, notes, checklists, diary entries, bits, dates board items, lessons learned entries, and expense tracker records. This cannot be undone unless you have exported a backup.\n\nAre you sure?");
+    const confirmed = confirm("Clear all Budget Category items and Planner entries?\n\nThis keeps your categories, planner sections, and all other PersonalDock data unchanged.\n\nAre you sure?");
 
     if (!confirmed) {
       return;
     }
 
-    clearActiveDailyBoard();
-    clearAuxiliaryStorageKeys();
+    try {
+      clearBudgetAndPlannerContentOnly();
+    } catch (error) {
+      console.error(error);
+      alert("Unable to clear budget and planner content safely. No changes were saved.");
+      return;
+    }
 
-    appState = {
-      activeView: DEFAULT_VIEW,
-      selectedBudgetCategory: "all",
-      lastSavedAt: null,
-      actionSections: ACTION_SECTION_DEFINITIONS.map(section => ({
-        id: section.id,
-        title: section.title,
-        emoji: section.emoji,
-        accent: section.accent,
-        size: section.size,
-        tasks: []
-      })),
-      budgetCategories: [],
-      budgetPlanner: buildDefaultBudgetPlannerState(),
-      plannerSections: [],
-      notes: [],
-      waitingItems: [],
-      inboxItems: [],
-      projects: [],
-      somedayItems: [],
-      referenceItems: [],
-      trashItems: [],
-      promises: [],
-      calendarEvents: []
-    };
-    uiState = {
-      activeView: DEFAULT_VIEW,
-      selectedBudgetCategory: "all",
-      budgetEditorId: null,
-      showBudgetCategoryManager: false,
-      calendarYear: new Date().getFullYear(),
-      calendarMonth: new Date().getMonth(),
-      calendarWeekStart: null,
-      calendarViewMode: "week",
-      justCompletedTaskId: null,
-      expandedTaskIds: new Set(),
-      selectedPlannerSection: "all",
-      selectedBudgetPlanningPeriod: DEFAULT_BUDGET_PLANNING_PERIOD
-    };
     saveState();
     renderApp();
   });
