@@ -4379,9 +4379,9 @@ function renderCalendar() {
     labels.teal = "Verabredung";
     labels.lime = "Fitness";
     labels["teal-blue"] = "Besprechung";
-    labels.slate = "Schlafen";
+    labels.slate = "Part-Time";
     labels.apricot = "Full-Time";
-    labels.gray = "Part-Time";
+    labels.gray = "Schlafen";
 
     // Backward compatibility for older events stored with "pink".
     labels.pink = labels.green || "Green";
@@ -4712,7 +4712,7 @@ function renderCalendar() {
   }
 
   // ── time-grid constants & helpers ─────────────────────────────────────────
-  const HOUR_PX  = 38;
+  const HOUR_PX  = 56;
   const TG_HOURS = [23, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
 
   function timeToOffset(t) {

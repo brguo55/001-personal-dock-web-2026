@@ -1931,8 +1931,8 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 
 /* time gutter */
 .cal-tg-gutter { width: 52px; flex-shrink: 0; border-right: 1px solid var(--line-faint); user-select: none; }
-.cal-tg-hour-spacer { height: 19px; box-sizing: border-box; }
-.cal-tg-hour-label { height: 38px; box-sizing: border-box; display: flex; align-items: flex-start; }
+.cal-tg-hour-spacer { height: 28px; box-sizing: border-box; }
+.cal-tg-hour-label { height: 56px; box-sizing: border-box; display: flex; align-items: flex-start; }
 .cal-tg-hour-label span {
   font-size: .65rem; font-weight: 700; color: var(--muted);
   display: block; width: 100%;
@@ -1947,7 +1947,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-tg-col.is-today   { background: rgba(10,191,83,.035); }
 
 /* slot rows — 48 per column (24 hours × 2 half-hour slots) */
-.cal-tg-slot        { height: 19px; box-sizing: border-box; border-bottom: 1px dashed rgba(0,0,0,.08); pointer-events: none; }
+.cal-tg-slot        { height: 28px; box-sizing: border-box; border-bottom: 1px dashed rgba(0,0,0,.08); pointer-events: none; }
 .cal-tg-slot--hour  { border-bottom-style: solid; border-bottom-color: var(--line-faint); }
 
 .cal-tg-selection {
@@ -1966,7 +1966,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   position: absolute; left: 2px; right: 2px;
   border-radius: 4px; border-left: 3px solid;
   overflow: hidden; box-sizing: border-box;
-  padding: 2px 4px 2px 5px;
+  padding: 1px 4px 1px 5px;
   display: flex; align-items: flex-start; justify-content: space-between; gap: 2px;
   cursor: grab; z-index: 1;
 }
@@ -1976,21 +1976,20 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 }
 .cal-tg-event__inner { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .cal-tg-event__title {
-  font-size: .72rem;
+  font-size: .7rem;
   font-weight: 700;
   color: var(--text-bright);
-  line-height: 1.2;
-  max-height: calc(1.2em * 2);
+  line-height: 1.15;
+  max-height: calc(1.15em * 1);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
-  line-clamp: 2;
+  line-clamp: 1;
 }
-.cal-tg-event__time  { font-size: .62rem; color: var(--muted); font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-tg-event__time  { font-size: .62rem; line-height: 1.1; color: var(--muted); font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal-tg-event__note  { font-size: .62rem; color: var(--muted); display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .cal-tg-event__blocks {
   margin: 1px 0 0;
