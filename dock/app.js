@@ -9081,7 +9081,7 @@ function renderBudgetPlanner() {
 
         <div id="budgetCatInfoBlock"></div>
 
-        <form class="budget-form" id="budgetForm">
+        <form class="budget-form budget-form--spending-entry" id="budgetForm">
           <div class="field">
             <label for="budgetTitleInput">Title</label>
             <input id="budgetTitleInput" type="text" maxlength="120" placeholder="For example: rent, groceries, transportation" required />

@@ -1249,6 +1249,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 }
 
 .budget-form { display: grid; grid-template-columns: 1.3fr .8fr .9fr auto; gap: 10px; margin-top: 18px; align-items: end; }
+.budget-form--spending-entry { grid-template-columns: 1.3fr .8fr .9fr .9fr auto; }
 .field { display: grid; gap: 5px; }
 .field label { color: var(--muted); font-size: .76rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .budget-form__actions { display: flex; gap: 10px; align-items: center; }
