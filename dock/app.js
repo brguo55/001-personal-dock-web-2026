@@ -6333,19 +6333,6 @@ function renderPlanner() {
     syncPlannerSectionPlanCostFields(selectedSectionData);
   }
 
-  const selectedSectionTracksPlanCost = selectedSectionData
-    ? getPlannerSectionTrackPlanCost(selectedSectionData)
-    : false;
-  const selectedSectionPlanCostAmount = selectedSectionData
-    ? getPlannerSectionPlanCostAmount(selectedSectionData)
-    : "";
-  const selectedSectionPlanCostCurrency = selectedSectionData
-    ? getPlannerSectionPlanCostCurrency(selectedSectionData)
-    : "USD";
-  const selectedSectionPlanCostDisplay = selectedSectionData
-    ? formatPlannerPlanCostDisplay(selectedSectionPlanCostAmount, selectedSectionPlanCostCurrency)
-    : "";
-
   viewRoot.innerHTML = `
     <section class="budget-layout">
       <aside class="budget-sidebar">
@@ -6391,42 +6378,6 @@ function renderPlanner() {
             </div>
           </div>
         </div>
-
-        ${selectedSectionData ? `
-        <section class="planner-section-money-card">
-          <div class="planner-section-money-card__top">
-            <label class="planner-money-toggle" for="plannerSectionMoneyToggle">
-              <input id="plannerSectionMoneyToggle" type="checkbox" ${selectedSectionTracksPlanCost ? "checked" : ""} />
-              <span>Track plan cost</span>
-            </label>
-            ${selectedSectionTracksPlanCost ? `
-            <div class="planner-money-display">
-              <span>Plan cost</span>
-              <strong>${selectedSectionPlanCostDisplay}</strong>
-            </div>
-            ` : ""}
-          </div>
-          <p class="planner-section-money-card__hint">Use this when the selected plan or activity itself has a cost.</p>
-          ${selectedSectionTracksPlanCost ? `
-          <form class="planner-money-form" id="plannerSectionMoneyForm">
-            <div class="field">
-              <label for="plannerSectionAmountInput">Plan cost</label>
-              <input id="plannerSectionAmountInput" type="number" min="0" step="0.01" value="${selectedSectionPlanCostAmount}" placeholder="0" />
-            </div>
-            <div class="field">
-              <label for="plannerSectionCurrencySelect">Currency</label>
-              <select id="plannerSectionCurrencySelect">
-                <option value="USD"${normalizePlannerMoneyCurrency(selectedSectionPlanCostCurrency) === "USD" ? " selected" : ""}>$</option>
-                <option value="RMB"${normalizePlannerMoneyCurrency(selectedSectionPlanCostCurrency) === "RMB" ? " selected" : ""}>R</option>
-              </select>
-            </div>
-            <div class="budget-form__actions">
-              <button type="submit" class="tiny-btn">Save cost</button>
-            </div>
-          </form>
-          ` : ""}
-        </section>
-        ` : ""}
 
         <form class="planner-form" id="plannerItemForm">
           <div class="field">
@@ -6601,46 +6552,6 @@ function renderPlanner() {
     });
   }
 
-  if (selectedSectionData) {
-    const moneyToggle = document.getElementById("plannerSectionMoneyToggle");
-
-    moneyToggle?.addEventListener("change", () => {
-      selectedSectionData.trackPlanCost = moneyToggle.checked;
-      syncPlannerSectionPlanCostFields(selectedSectionData);
-      saveState();
-      renderApp();
-    });
-
-    if (selectedSectionTracksPlanCost) {
-      const moneyForm = document.getElementById("plannerSectionMoneyForm");
-      const sectionAmountInput = document.getElementById("plannerSectionAmountInput");
-      const sectionCurrencySelect = document.getElementById("plannerSectionCurrencySelect");
-
-      if (sectionCurrencySelect) {
-        sectionCurrencySelect.value = normalizePlannerMoneyCurrency(selectedSectionPlanCostCurrency);
-        buildGtdCustomSelect(sectionCurrencySelect);
-      }
-
-      moneyForm?.addEventListener("submit", event => {
-        event.preventDefault();
-
-        const rawAmount = sectionAmountInput?.value.trim() || "";
-        const parsedAmount = Number(rawAmount);
-
-        if (rawAmount && (Number.isNaN(parsedAmount) || parsedAmount < 0)) {
-          return;
-        }
-
-        selectedSectionData.planCostAmount = rawAmount ? String(parsedAmount) : "";
-        selectedSectionData.planCostCurrency = normalizePlannerMoneyCurrency(sectionCurrencySelect?.value);
-        syncPlannerSectionPlanCostFields(selectedSectionData);
-
-        saveState();
-        renderApp();
-      });
-    }
-  }
-
   // ── Section select when "all" is active ───────────────────────────────────
   if (selectedSection === "all" && !hasNoSections) {
     const sectionSelect = document.getElementById("plannerItemSectionSelect");
@@ -6721,20 +6632,33 @@ function renderPlanner() {
 
       copy.appendChild(titleRow);
 
-      // Meta line: section name (all-view) + note snippet — no timestamp
-      const metaParts = [];
-      if (selectedSection === "all") metaParts.push(section.title);
-      if (item.note) metaParts.push(item.note.length > 60 ? item.note.slice(0, 60) + "\u2026" : item.note);
-      if (checklist.length > 0) {
-        const done = checklist.filter(c => c.done).length;
-        metaParts.push(`${done}/${checklist.length} done`);
-      }
-      if (metaParts.length > 0) {
-        const meta = document.createElement("span");
-        meta.className = "promise-item__meta";
+      const notePreview = document.createElement("span");
+      notePreview.className = "planner-item__note";
+      copy.appendChild(notePreview);
+
+      const meta = document.createElement("span");
+      meta.className = "promise-item__meta";
+      copy.appendChild(meta);
+
+      function refreshPlannerItemSecondaryText() {
+        const noteText = typeof item.note === "string" ? item.note.trim() : "";
+        notePreview.textContent = noteText;
+        notePreview.hidden = !noteText;
+
+        const metaParts = [];
+        if (selectedSection === "all") {
+          metaParts.push(section.title);
+        }
+        if (checklist.length > 0) {
+          const done = checklist.filter(c => c.done).length;
+          metaParts.push(`${done}/${checklist.length} done`);
+        }
+
         meta.textContent = metaParts.join(" \u00b7 ");
-        copy.appendChild(meta);
+        meta.hidden = metaParts.length === 0;
       }
+
+      refreshPlannerItemSecondaryText();
 
       main.appendChild(checkbox);
       main.appendChild(copy);
@@ -6949,28 +6873,8 @@ function renderPlanner() {
       saveNoteBtn.textContent = "Save note";
       saveNoteBtn.addEventListener("click", () => {
         item.note = noteArea.value;
+        refreshPlannerItemSecondaryText();
         saveState();
-        // Refresh the meta line without full re-render
-        const metaEl = copy.querySelector(".promise-item__meta");
-        const newParts = [];
-        if (selectedSection === "all") newParts.push(section.title);
-        if (item.note) newParts.push(item.note.length > 60 ? item.note.slice(0, 60) + "\u2026" : item.note);
-        if (checklist.length > 0) {
-          const done = checklist.filter(c => c.done).length;
-          newParts.push(`${done}/${checklist.length} done`);
-        }
-        if (newParts.length > 0) {
-          if (metaEl) {
-            metaEl.textContent = newParts.join(" \u00b7 ");
-          } else {
-            const newMeta = document.createElement("span");
-            newMeta.className = "promise-item__meta";
-            newMeta.textContent = newParts.join(" \u00b7 ");
-            copy.appendChild(newMeta);
-          }
-        } else if (metaEl) {
-          metaEl.remove();
-        }
       });
 
       noteSection.appendChild(noteLabelRow);
@@ -7001,25 +6905,8 @@ function renderPlanner() {
           clCheck.addEventListener("change", () => {
             ci.done = clCheck.checked;
             clLi.classList.toggle("is-done", ci.done);
+            refreshPlannerItemSecondaryText();
             saveState();
-            // Update meta line
-            const metaEl2 = copy.querySelector(".promise-item__meta");
-            const newParts2 = [];
-            if (selectedSection === "all") newParts2.push(section.title);
-            if (item.note) newParts2.push(item.note.length > 60 ? item.note.slice(0, 60) + "\u2026" : item.note);
-            if (checklist.length > 0) {
-              const done2 = checklist.filter(c => c.done).length;
-              newParts2.push(`${done2}/${checklist.length} done`);
-            }
-            if (newParts2.length > 0) {
-              if (metaEl2) metaEl2.textContent = newParts2.join(" \u00b7 ");
-              else {
-                const m = document.createElement("span");
-                m.className = "promise-item__meta";
-                m.textContent = newParts2.join(" \u00b7 ");
-                copy.appendChild(m);
-              }
-            } else if (metaEl2) metaEl2.remove();
           });
 
           const clTextWrap = document.createElement("div");
@@ -7092,18 +6979,9 @@ function renderPlanner() {
           clDelBtn.addEventListener("click", () => {
             checklist.splice(idx, 1);
             item.checklist = checklist;
+            refreshPlannerItemSecondaryText();
             saveState();
             renderChecklistItems();
-            // Update meta
-            const metaElD = copy.querySelector(".promise-item__meta");
-            const pD = [];
-            if (selectedSection === "all") pD.push(section.title);
-            if (item.note) pD.push(item.note.length > 60 ? item.note.slice(0, 60) + "\u2026" : item.note);
-            if (checklist.length > 0) pD.push(`${checklist.filter(c => c.done).length}/${checklist.length} done`);
-            if (pD.length > 0) {
-              if (metaElD) metaElD.textContent = pD.join(" \u00b7 ");
-              else { const m = document.createElement("span"); m.className = "promise-item__meta"; m.textContent = pD.join(" \u00b7 "); copy.appendChild(m); }
-            } else if (metaElD) metaElD.remove();
           });
 
           clActions.appendChild(clEditBtn);
@@ -7140,18 +7018,9 @@ function renderPlanner() {
         checklist.push(newCi);
         item.checklist = checklist;
         clInput.value = "";
+        refreshPlannerItemSecondaryText();
         saveState();
         renderChecklistItems();
-        // Update meta
-        const metaElA = copy.querySelector(".promise-item__meta");
-        const pA = [];
-        if (selectedSection === "all") pA.push(section.title);
-        if (item.note) pA.push(item.note.length > 60 ? item.note.slice(0, 60) + "\u2026" : item.note);
-        if (checklist.length > 0) pA.push(`${checklist.filter(c => c.done).length}/${checklist.length} done`);
-        if (pA.length > 0) {
-          if (metaElA) metaElA.textContent = pA.join(" \u00b7 ");
-          else { const m = document.createElement("span"); m.className = "promise-item__meta"; m.textContent = pA.join(" \u00b7 "); copy.appendChild(m); }
-        } else if (metaElA) metaElA.remove();
       });
 
       clSection.appendChild(clHeader);
@@ -7318,7 +7187,7 @@ function renderPlanner() {
     const targetSection = getPlannerSectionById(targetSectionId);
     if (!targetSection) return;
 
-    targetSection.items.unshift(createPlannerItem(title));
+    targetSection.items.push(createPlannerItem(title));
     titleInput.value = "";
     saveState();
     renderApp();
@@ -9198,12 +9067,24 @@ function renderBudgetPlanner() {
 
       if (editorTarget.category.id !== targetCategory.id) {
         editorTarget.category.items = editorTarget.category.items.filter(item => item.id !== editorTarget.item.id);
-        targetCategory.items.unshift(editorTarget.item);
+        targetCategory.items.push(editorTarget.item);
       }
 
       uiState.budgetEditorId = null;
     } else {
-      targetCategory.items.unshift(createBudgetItem(title, amount, false, currency));
+      const newItem = createBudgetItem(title, amount, false, currency);
+      targetCategory.items.push(newItem);
+
+      if (uiState.selectedBudgetCategory === "all") {
+        const orderedItems = getBudgetEntries("all")
+          .map(entry => entry.item)
+          .filter(existingItem => existingItem.id !== newItem.id);
+
+        orderedItems.push(newItem);
+        orderedItems.forEach((existingItem, index) => {
+          existingItem.sortOrder = index;
+        });
+      }
     }
 
     saveState();
@@ -11861,11 +11742,16 @@ function renderBudgetList(entries) {
     const checkbox = row.querySelector(".budget-item__check");
     const title = row.querySelector(".budget-item__title");
     const meta = row.querySelector(".budget-item__meta");
+    const copy = row.querySelector(".budget-item__copy");
     const amount = row.querySelector(".budget-item__amount");
     const editButton = row.querySelector(".edit-item-btn");
     const deleteButton = row.querySelector(".delete-item-btn");
     const expandButton = row.querySelector(".budget-item__expand-btn");
     const detailsPanel = row.querySelector(".budget-item__details-panel");
+
+    const notePreview = document.createElement("span");
+    notePreview.className = "budget-item__note";
+    copy.insertBefore(notePreview, meta);
 
     budgetItem.draggable = true;
     budgetItem.dataset.itemId = item.id;
@@ -11876,6 +11762,12 @@ function renderBudgetList(entries) {
     meta.hidden = !meta.textContent;
     amount.textContent = formatBudgetAmount(item.amount, item.currency || "USD");
 
+    function refreshNotePreview() {
+      const noteText = typeof item.itemNote === "string" ? item.itemNote.trim() : "";
+      notePreview.textContent = noteText;
+      notePreview.hidden = !noteText;
+    }
+
     function itemHasDetails() {
       return Boolean(item.itemNote) || (item.reminders || []).length > 0 || (item.checklist || []).length > 0;
     }
@@ -11884,7 +11776,12 @@ function renderBudgetList(entries) {
       expandButton.classList.toggle("has-details", itemHasDetails());
     }
 
-    refreshExpandIndicator();
+    function refreshBudgetItemRowState() {
+      refreshExpandIndicator();
+      refreshNotePreview();
+    }
+
+    refreshBudgetItemRowState();
 
     checkbox.addEventListener("change", () => {
       item.checked = checkbox.checked;
@@ -11912,7 +11809,7 @@ function renderBudgetList(entries) {
     expandButton.addEventListener("click", () => {
       const opening = !detailsPanel.classList.contains("is-visible");
       if (opening && !detailsPanel.dataset.built) {
-        buildBudgetItemDetails(detailsPanel, item, refreshExpandIndicator);
+        buildBudgetItemDetails(detailsPanel, item, refreshBudgetItemRowState);
         detailsPanel.dataset.built = "1";
       }
       detailsPanel.classList.toggle("is-visible", opening);
