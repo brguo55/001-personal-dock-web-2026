@@ -1,4 +1,5 @@
 const STORAGE_KEY = "northstar-planner-v1";
+const BUDGET_PLANNER_CLEANUP_MIGRATION_KEY = "personalDockBudgetPlannerCleanupDone";
 const LEGACY_ACTION_STORAGE_KEY = "actionboard-v1";
 const ACTION_DAILY_STORAGE_KEY = "dockActionDailyBoards";
 const DEFAULT_VIEW = "actionBoard";
@@ -446,6 +447,8 @@ let sidebarShowTimer = null;
 let sidebarHideTimer = null;
 let isSidebarHovered = false;
 let isSidebarZoneHovered = false;
+
+runBudgetPlannerCleanupMigration();
 
 let appState = loadState();
 let uiState = {
@@ -1141,6 +1144,103 @@ function buildDefaultState() {
     promises: [],
     calendarEvents: []
   };
+}
+
+function clearPersistedPlannerArrayField(section, fieldName) {
+  if (!Object.prototype.hasOwnProperty.call(section, fieldName)) {
+    return false;
+  }
+
+  if (Array.isArray(section[fieldName])) {
+    if (section[fieldName].length === 0) {
+      return false;
+    }
+
+    section[fieldName] = [];
+    return true;
+  }
+
+  section[fieldName] = [];
+  return true;
+}
+
+function applyBudgetPlannerCleanupToPersistedState(rawState) {
+  if (!rawState || typeof rawState !== "object" || Array.isArray(rawState)) {
+    return false;
+  }
+
+  let changed = false;
+
+  if (Array.isArray(rawState.budgetCategories)) {
+    rawState.budgetCategories.forEach(category => {
+      if (!category || typeof category !== "object" || Array.isArray(category)) {
+        return;
+      }
+
+      if (Array.isArray(category.items)) {
+        if (category.items.length > 0) {
+          category.items = [];
+          changed = true;
+        }
+
+        return;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(category, "items")) {
+        category.items = [];
+        changed = true;
+      }
+    });
+  }
+
+  if (Array.isArray(rawState.plannerSections)) {
+    rawState.plannerSections.forEach(section => {
+      if (!section || typeof section !== "object" || Array.isArray(section)) {
+        return;
+      }
+
+      if (clearPersistedPlannerArrayField(section, "items")) {
+        changed = true;
+      }
+
+      // Support older/newer planner shapes that may store user-entered content in alternate arrays.
+      if (clearPersistedPlannerArrayField(section, "entries")) {
+        changed = true;
+      }
+
+      if (clearPersistedPlannerArrayField(section, "content")) {
+        changed = true;
+      }
+    });
+  }
+
+  return changed;
+}
+
+function runBudgetPlannerCleanupMigration() {
+  if (localStorage.getItem(BUDGET_PLANNER_CLEANUP_MIGRATION_KEY) === "1") {
+    return;
+  }
+
+  const saved = localStorage.getItem(STORAGE_KEY);
+
+  if (!saved) {
+    localStorage.setItem(BUDGET_PLANNER_CLEANUP_MIGRATION_KEY, "1");
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(saved);
+    const changed = applyBudgetPlannerCleanupToPersistedState(parsed);
+
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+
+    localStorage.setItem(BUDGET_PLANNER_CLEANUP_MIGRATION_KEY, "1");
+  } catch {
+    // Keep the flag unset when storage payload is invalid so loadState() can handle cleanup.
+  }
 }
 
 function loadState() {
