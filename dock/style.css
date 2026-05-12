@@ -1950,6 +1950,29 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-tg-slot        { height: 28px; box-sizing: border-box; border-bottom: 1px dashed rgba(0,0,0,.08); pointer-events: none; }
 .cal-tg-slot--hour  { border-bottom-style: solid; border-bottom-color: var(--line-faint); }
 
+.cal-tg-now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: none;
+  border-top: 2px solid rgba(10,191,83,.7);
+  pointer-events: none;
+  z-index: 0;
+}
+.cal-tg-now-line.is-visible {
+  display: block;
+}
+.cal-tg-now-line__dot {
+  position: absolute;
+  left: -4px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 2px rgba(10,191,83,.18);
+}
+
 .cal-tg-selection {
   position: absolute;
   left: 2px;
@@ -2418,11 +2441,25 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 }
 .calendar-weekly-summary__row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   font-size: .78rem;
   color: var(--muted-bright);
+}
+.calendar-weekly-summary__label-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.calendar-weekly-summary__color {
+  width: 12px;
+  height: 6px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+  background: var(--line-soft);
 }
 .calendar-weekly-summary__row--total {
   margin-top: 4px;
@@ -2432,6 +2469,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   color: var(--text-bright);
 }
 .calendar-weekly-summary__label {
+  display: block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

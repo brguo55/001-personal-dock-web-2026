@@ -478,6 +478,7 @@ let backupUiState = {
 };
 let _calendarDragAbort = null;
 let _calendarPickerAbort = null;
+let _calendarNowLineTimer = null;
 let _abCopySelectAbort = null;
 
 // Active Action Board daily sections — set when the action board is rendered,
@@ -3307,6 +3308,7 @@ function renderApp() {
   }
   if (uiState.activeView !== "calendar") {
     if (_calendarPickerAbort) { _calendarPickerAbort.abort(); _calendarPickerAbort = null; }
+    if (_calendarNowLineTimer) { window.clearInterval(_calendarNowLineTimer); _calendarNowLineTimer = null; }
     uiState.calendarPickerOpen = false;
   }
   if (_abCopySelectAbort) { _abCopySelectAbort.abort(); _abCopySelectAbort = null; }
@@ -4323,6 +4325,7 @@ function renderPromise() {
 function renderCalendar() {
   const now = new Date();
   if (_calendarDragAbort) { _calendarDragAbort.abort(); _calendarDragAbort = null; }
+  if (_calendarNowLineTimer) { window.clearInterval(_calendarNowLineTimer); _calendarNowLineTimer = null; }
   // Abort picker outside-click listener when picker is being closed
   if (!uiState.calendarPickerOpen && _calendarPickerAbort) {
     _calendarPickerAbort.abort();
@@ -4507,6 +4510,12 @@ function renderCalendar() {
       : color === "apricot"   ? "#f2b784"
          : color === "gray"      ? "#7a8a9a"
          : "var(--green)";
+  }
+
+  function getCalendarSummaryMarkerColor(color) {
+    if (!color) return "var(--line-soft)";
+    if (color === "pink" || COLOR_OPTIONS.includes(color)) return dotColor(color);
+    return "var(--line-soft)";
   }
 
   function formatTime(t) {
@@ -4732,6 +4741,14 @@ function renderCalendar() {
     const weekDates = Array.from({ length: 7 }, (_, index) => shiftIsoDate(weekStartIso, index));
     const occurrenceDates = [shiftIsoDate(weekStartIso, -1), ...weekDates];
     const minutesByActivity = new Map();
+    const activityColorByLabel = new Map();
+
+    COLOR_OPTIONS.forEach(color => {
+      const activityLabel = COLOR_TYPE_LABELS[color] || getCalendarColorNameLabel(color) || "General";
+      if (!activityColorByLabel.has(activityLabel)) {
+        activityColorByLabel.set(activityLabel, color);
+      }
+    });
 
     occurrenceDates.forEach(dateStr => {
       eventsForDate(dateStr).forEach(eventItem => {
@@ -4746,6 +4763,9 @@ function renderCalendar() {
         if (!overlapMinutes) return;
 
         const activityLabel = COLOR_TYPE_LABELS[eventItem.color] || getCalendarColorNameLabel(eventItem.color) || "General";
+        if (!activityColorByLabel.has(activityLabel) && typeof eventItem.color === "string" && eventItem.color) {
+          activityColorByLabel.set(activityLabel, eventItem.color);
+        }
         minutesByActivity.set(activityLabel, (minutesByActivity.get(activityLabel) || 0) + overlapMinutes);
       });
     });
@@ -4775,10 +4795,16 @@ function renderCalendar() {
       });
 
     const rowHtml = orderedActivityLabels
-      .map(activityLabel => `<li class="calendar-weekly-summary__row">
-          <span class="calendar-weekly-summary__label">${activityLabel}</span>
+      .map(activityLabel => {
+        const markerColor = getCalendarSummaryMarkerColor(activityColorByLabel.get(activityLabel));
+        return `<li class="calendar-weekly-summary__row">
+          <span class="calendar-weekly-summary__label-wrap">
+            <span class="calendar-weekly-summary__color" style="background:${markerColor}"></span>
+            <span class="calendar-weekly-summary__label">${activityLabel}</span>
+          </span>
           <span class="calendar-weekly-summary__value">${formatCalendarWeeklySummaryHours(minutesByActivity.get(activityLabel) || 0)}</span>
-        </li>`)
+        </li>`;
+      })
       .join("");
 
     const totalMinutes = Array.from(minutesByActivity.values())
@@ -5057,6 +5083,7 @@ function renderCalendar() {
     const isToday   = dateStr === todayStr;
     const timedEvts = eventsForDate(dateStr).filter(e => e.time);
     const timedEventLayout = getCalendarTimedEventLayoutByIndex(timedEvts);
+    const nowLineHtml = `<div class="cal-tg-now-line" data-date="${dateStr}" aria-hidden="true"><span class="cal-tg-now-line__dot"></span></div>`;
 
     const eventsHtml = timedEvts.map((e, index) => {
       const pos = eventTopHeight(e);
@@ -5088,7 +5115,7 @@ function renderCalendar() {
       </div>`;
     }).join("");
     return `<div class="cal-tg-col${isToday ? " is-today" : ""}" data-date="${dateStr}">
-      ${slotRowsHtml}${eventsHtml}
+      ${slotRowsHtml}${nowLineHtml}${eventsHtml}
     </div>`;
   }).join("");
 
@@ -5343,6 +5370,34 @@ function renderCalendar() {
     const timeInHours = h + m / 60;
     const nowOff = timeInHours >= 22.5 ? (timeInHours - 22.5) : (timeInHours + 24 - 22.5);
     scrollEl.scrollTop = Math.max(0, Math.round(nowOff * HOUR_PX) - 120);
+  })();
+
+  // ── live current-time line ───────────────────────────────────────────────
+  (function () {
+    const nowLineEls = Array.from(document.querySelectorAll(".cal-tg-now-line"));
+    if (!nowLineEls.length) return;
+
+    function updateCalendarNowLine() {
+      const liveNow = new Date();
+      const liveToday = toISODateString(liveNow);
+      const timeInHours = liveNow.getHours() + liveNow.getMinutes() / 60 + liveNow.getSeconds() / 3600;
+      const nowOff = timeInHours >= 22.5 ? (timeInHours - 22.5) : (timeInHours + 24 - 22.5);
+      const isInRange = Number.isFinite(nowOff) && nowOff >= 0 && nowOff <= 24;
+
+      nowLineEls.forEach(lineEl => {
+        const lineDate = lineEl.dataset.date || "";
+        const shouldShow = lineDate === liveToday && isInRange;
+
+        lineEl.classList.toggle("is-visible", shouldShow);
+
+        if (shouldShow) {
+          lineEl.style.top = `${Math.round(nowOff * HOUR_PX)}px`;
+        }
+      });
+    }
+
+    updateCalendarNowLine();
+    _calendarNowLineTimer = window.setInterval(updateCalendarNowLine, 30000);
   })();
 
   // ── navigation ────────────────────────────────────────────────────────────
