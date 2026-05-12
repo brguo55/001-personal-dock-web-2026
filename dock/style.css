@@ -2082,11 +2082,13 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-tg-event--lime      { background: rgba(122,191,32,.11);  border-left-color: #7abf20; }
 .cal-tg-event--teal-blue { background: rgba(27,143,168,.10);  border-left-color: #1b8fa8; }
 .cal-tg-event--brown     { background: rgba(139,94,60,.09);   border-left-color: #8b5e3c; }
-.cal-tg-event--slate     { background: rgba(74,110,170,.09);  border-left-color: #4a6eaa; }
+.cal-tg-event--latte,
+.cal-tg-event--slate     { background: rgba(166,129,106,.15); border-left-color: #a6816a; }
 .cal-tg-event--cloud,
 .cal-tg-event--mist      { background: rgba(159,178,198,.13); border-left-color: #9fb2c6; }
 .cal-tg-event--mocha,
 .cal-tg-event--apricot   { background: rgba(143,112,90,.14);  border-left-color: #8f705a; }
+.cal-tg-event--slate-neutral { background: rgba(74,110,170,.09); border-left-color: #4a6eaa; }
 .cal-tg-event--cream,
 .cal-tg-event--vanilla,
 .cal-tg-event--cocoa,
@@ -2117,11 +2119,13 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-week-event--lime      { background: rgba(122,191,32,.10);  border-left-color: #7abf20; }
 .cal-week-event--teal-blue { background: rgba(27,143,168,.09);  border-left-color: #1b8fa8; }
 .cal-week-event--brown     { background: rgba(139,94,60,.08);   border-left-color: #8b5e3c; }
-.cal-week-event--slate     { background: rgba(74,110,170,.08);  border-left-color: #4a6eaa; }
+.cal-week-event--latte,
+.cal-week-event--slate     { background: rgba(166,129,106,.13);  border-left-color: #a6816a; }
 .cal-week-event--cloud,
 .cal-week-event--mist      { background: rgba(159,178,198,.11); border-left-color: #9fb2c6; }
 .cal-week-event--mocha,
 .cal-week-event--apricot   { background: rgba(143,112,90,.12);  border-left-color: #8f705a; }
+.cal-week-event--slate-neutral { background: rgba(74,110,170,.08); border-left-color: #4a6eaa; }
 .cal-week-event--cream,
 .cal-week-event--vanilla,
 .cal-week-event--cocoa,
@@ -2375,11 +2379,13 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .color-swatch--lime       { background: #7abf20; }
 .color-swatch--teal-blue  { background: #1b8fa8; }
 .color-swatch--brown      { background: #8b5e3c; }
-.color-swatch--slate      { background: #4a6eaa; }
+.color-swatch--latte,
+.color-swatch--slate      { background: #a6816a; }
 .color-swatch--cloud,
 .color-swatch--mist       { background: #9fb2c6; }
 .color-swatch--mocha,
 .color-swatch--apricot    { background: #8f705a; }
+.color-swatch--slate-neutral { background: #4a6eaa; }
 .color-swatch--cream,
 .color-swatch--vanilla,
 .color-swatch--cocoa,
