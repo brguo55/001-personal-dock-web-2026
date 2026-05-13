@@ -2003,14 +2003,15 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   font-weight: 700;
   color: var(--text-bright);
   line-height: 1.15;
-  max-height: calc(1.15em * 1);
+  max-height: calc(1.15em * 2);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   display: -webkit-box;
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  line-clamp: 1;
+  line-clamp: 2;
 }
 .cal-tg-event__time  { font-size: .62rem; line-height: 1.1; color: var(--muted); font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal-tg-event__note  { font-size: .62rem; color: var(--muted); display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -2139,7 +2140,16 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 }
 .cal-week-event__title {
   font-size: .76rem; font-weight: 700; color: var(--text-bright);
-  line-height: 1.3; word-break: break-word; flex: 1;
+  line-height: 1.3;
+  flex: 1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
 }
 .cal-week-grid--day .cal-week-event__title { font-size: .95rem; }
 
