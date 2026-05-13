@@ -4368,8 +4368,8 @@ function renderCalendar() {
   const DAY_FULL    = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const COLOR_OPTIONS = [
-    "gray", "mocha", "indigo", "lime", "rose", "teal",
-    "cloud", "latte", "cream", "slate-neutral", "green", "purple", "blue", "teal-blue", "brown"
+    "gray", "mocha", "indigo", "lime", "amber", "teal",
+    "cloud", "latte", "cream", "slate-neutral", "green", "rose", "purple", "blue", "teal-blue", "brown"
   ];
 
   const COLOR_TYPE_LABELS = (() => {
@@ -4384,7 +4384,7 @@ function renderCalendar() {
     labels.mocha = "Full-Time";
     labels.indigo = "Part-Time";
     labels.lime = "Nikutaikaizō";
-    labels.rose = "Hitorimeshi";
+    labels.amber = "Hitorimeshi";
     labels.teal = "Verabredung";
     labels["slate-neutral"] = "Slate";
     labels["teal-blue"] = "Besprechung";
@@ -4395,9 +4395,9 @@ function renderCalendar() {
     labels.mist = labels.gray;
     labels.apricot = labels.mocha;
     labels.slate = labels.indigo;
-    labels.vanilla = labels.rose;
-    labels.cocoa = labels.rose;
-    labels.sand = labels.rose;
+    labels.vanilla = labels.amber;
+    labels.cocoa = labels.amber;
+    labels.sand = labels.amber;
 
     return labels;
   })();
@@ -4407,7 +4407,7 @@ function renderCalendar() {
     if (color === "mist") return "gray";
     if (color === "apricot") return "mocha";
     if (color === "slate") return "indigo";
-    if (color === "vanilla" || color === "cocoa" || color === "sand") return "rose";
+    if (color === "vanilla" || color === "cocoa" || color === "sand") return "amber";
     return color;
   }
 
@@ -4415,7 +4415,7 @@ function renderCalendar() {
     const rawColor = typeof eventItem?.color === "string" ? eventItem.color : "";
     const normalizedColor = normalizeCalendarColorKey(rawColor);
 
-    if (!["cloud", "latte", "cream"].includes(rawColor)) {
+    if (!["cloud", "latte", "cream", "rose"].includes(rawColor)) {
       return normalizedColor;
     }
 
@@ -4431,7 +4431,7 @@ function renderCalendar() {
 
     if (rawColor === "cloud") return "gray";
     if (rawColor === "latte") return "indigo";
-    if (rawColor === "cream") return "rose";
+    if (rawColor === "cream" || rawColor === "rose") return "amber";
 
     return normalizedColor;
   }
@@ -4553,6 +4553,7 @@ function renderCalendar() {
          : normalizedColor === "purple"    ? "#7840b4"
          : normalizedColor === "blue"      ? "#1e64dc"
          : normalizedColor === "indigo"    ? "#4f61d9"
+       : normalizedColor === "amber"     ? "#d59a2f"
          : normalizedColor === "teal"      ? "#009898"
          : normalizedColor === "lime"      ? "#7abf20"
          : normalizedColor === "teal-blue" ? "#1b8fa8"
