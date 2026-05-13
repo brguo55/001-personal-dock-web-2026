@@ -2075,27 +2075,27 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-tg-col--drop-target { background: rgba(10,191,83,.09) !important; }
 
 .cal-tg-event--green,
-.cal-tg-event--pink      { background: rgba(10,191,83,.13);   border-left-color: var(--green); }
-.cal-tg-event--rose      { background: rgba(224,53,53,.10);   border-left-color: var(--danger); }
-.cal-tg-event--amber     { background: rgba(213,154,47,.14);   border-left-color: #d59a2f; }
-.cal-tg-event--purple    { background: rgba(120,60,180,.10);  border-left-color: #7840b4; }
-.cal-tg-event--blue      { background: rgba(30,100,220,.09);  border-left-color: #1e64dc; }
-.cal-tg-event--indigo    { background: rgba(79,97,217,.10);   border-left-color: #4f61d9; }
-.cal-tg-event--teal      { background: rgba(0,152,152,.09);   border-left-color: #009898; }
-.cal-tg-event--lime      { background: rgba(122,191,32,.11);  border-left-color: #7abf20; }
-.cal-tg-event--teal-blue { background: rgba(27,143,168,.10);  border-left-color: #1b8fa8; }
-.cal-tg-event--brown     { background: rgba(139,94,60,.09);   border-left-color: #8b5e3c; }
-.cal-tg-event--latte,
-.cal-tg-event--slate     { background: rgba(166,129,106,.15); border-left-color: #a6816a; }
-.cal-tg-event--cloud,
-.cal-tg-event--mist      { background: rgba(159,178,198,.13); border-left-color: #9fb2c6; }
-.cal-tg-event--mocha,
-.cal-tg-event--apricot   { background: rgba(143,112,90,.14);  border-left-color: #8f705a; }
-.cal-tg-event--slate-neutral { background: rgba(74,110,170,.09); border-left-color: #4a6eaa; }
-.cal-tg-event--cream,
-.cal-tg-event--vanilla,
-.cal-tg-event--cocoa,
-.cal-tg-event--sand      { background: rgba(184,147,102,.16); border-left-color: #b89366; }
+.cal-tg-event--pink      { background: rgba(63,156,104,.13);  border-left-color: #3f9c68; }
+.cal-tg-event--rose      { background: rgba(174,111,122,.13); border-left-color: #ae6f7a; }
+.cal-tg-event--amber     { background: rgba(201,146,57,.15);  border-left-color: #c99239; }
+.cal-tg-event--purple    { background: rgba(124,106,162,.12); border-left-color: #7c6aa2; }
+.cal-tg-event--blue      { background: rgba(95,130,177,.11);  border-left-color: #5f82b1; }
+.cal-tg-event--indigo    { background: rgba(91,103,190,.12);  border-left-color: #5b67be; }
+.cal-tg-event--teal      { background: rgba(47,138,135,.11);  border-left-color: #2f8a87; }
+.cal-tg-event--lime      { background: rgba(132,179,74,.13);  border-left-color: #84b34a; }
+.cal-tg-event--teal-blue { background: rgba(79,142,161,.11);  border-left-color: #4f8ea1; }
+.cal-tg-event--brown     { background: rgba(118,99,84,.12);   border-left-color: #766354; }
+.cal-tg-event--latte     { background: rgba(173,146,124,.15); border-left-color: #ad927c; }
+.cal-tg-event--slate,
+.cal-tg-event--slate-neutral { background: rgba(96,118,147,.12); border-left-color: #607693; }
+.cal-tg-event--cloud     { background: rgba(127,149,169,.13); border-left-color: #7f95a9; }
+.cal-tg-event--mist      { background: rgba(144,163,181,.13); border-left-color: #90a3b5; }
+.cal-tg-event--mocha     { background: rgba(139,110,89,.14);  border-left-color: #8b6e59; }
+.cal-tg-event--apricot   { background: rgba(191,132,102,.14); border-left-color: #bf8466; }
+.cal-tg-event--cream     { background: rgba(169,138,99,.15);  border-left-color: #a98a63; }
+.cal-tg-event--vanilla   { background: rgba(183,156,104,.15); border-left-color: #b79c68; }
+.cal-tg-event--cocoa     { background: rgba(142,115,89,.14);  border-left-color: #8e7359; }
+.cal-tg-event--sand      { background: rgba(151,125,93,.15);  border-left-color: #977d5d; }
 .cal-tg-event--gray      { background: rgba(111,128,145,.13); border-left-color: #6f8091; }
 
 /* event cards inside week/day columns */
@@ -2114,27 +2114,27 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 }
 
 .cal-week-event--green,
-.cal-week-event--pink      { background: rgba(10,191,83,.11);   border-left-color: var(--green); }
-.cal-week-event--rose      { background: rgba(224,53,53,.09);   border-left-color: var(--danger); }
-.cal-week-event--amber     { background: rgba(213,154,47,.12);  border-left-color: #d59a2f; }
-.cal-week-event--purple    { background: rgba(120,60,180,.09);  border-left-color: #7840b4; }
-.cal-week-event--blue      { background: rgba(30,100,220,.08);  border-left-color: #1e64dc; }
-.cal-week-event--indigo    { background: rgba(79,97,217,.09);   border-left-color: #4f61d9; }
-.cal-week-event--teal      { background: rgba(0,152,152,.08);   border-left-color: #009898; }
-.cal-week-event--lime      { background: rgba(122,191,32,.10);  border-left-color: #7abf20; }
-.cal-week-event--teal-blue { background: rgba(27,143,168,.09);  border-left-color: #1b8fa8; }
-.cal-week-event--brown     { background: rgba(139,94,60,.08);   border-left-color: #8b5e3c; }
-.cal-week-event--latte,
-.cal-week-event--slate     { background: rgba(166,129,106,.13);  border-left-color: #a6816a; }
-.cal-week-event--cloud,
-.cal-week-event--mist      { background: rgba(159,178,198,.11); border-left-color: #9fb2c6; }
-.cal-week-event--mocha,
-.cal-week-event--apricot   { background: rgba(143,112,90,.12);  border-left-color: #8f705a; }
-.cal-week-event--slate-neutral { background: rgba(74,110,170,.08); border-left-color: #4a6eaa; }
-.cal-week-event--cream,
-.cal-week-event--vanilla,
-.cal-week-event--cocoa,
-.cal-week-event--sand      { background: rgba(184,147,102,.14); border-left-color: #b89366; }
+.cal-week-event--pink      { background: rgba(63,156,104,.11);  border-left-color: #3f9c68; }
+.cal-week-event--rose      { background: rgba(174,111,122,.11); border-left-color: #ae6f7a; }
+.cal-week-event--amber     { background: rgba(201,146,57,.13);  border-left-color: #c99239; }
+.cal-week-event--purple    { background: rgba(124,106,162,.10); border-left-color: #7c6aa2; }
+.cal-week-event--blue      { background: rgba(95,130,177,.09);  border-left-color: #5f82b1; }
+.cal-week-event--indigo    { background: rgba(91,103,190,.10);  border-left-color: #5b67be; }
+.cal-week-event--teal      { background: rgba(47,138,135,.09);  border-left-color: #2f8a87; }
+.cal-week-event--lime      { background: rgba(132,179,74,.11);  border-left-color: #84b34a; }
+.cal-week-event--teal-blue { background: rgba(79,142,161,.09);  border-left-color: #4f8ea1; }
+.cal-week-event--brown     { background: rgba(118,99,84,.10);   border-left-color: #766354; }
+.cal-week-event--latte     { background: rgba(173,146,124,.13); border-left-color: #ad927c; }
+.cal-week-event--slate,
+.cal-week-event--slate-neutral { background: rgba(96,118,147,.10); border-left-color: #607693; }
+.cal-week-event--cloud     { background: rgba(127,149,169,.11); border-left-color: #7f95a9; }
+.cal-week-event--mist      { background: rgba(144,163,181,.11); border-left-color: #90a3b5; }
+.cal-week-event--mocha     { background: rgba(139,110,89,.12);  border-left-color: #8b6e59; }
+.cal-week-event--apricot   { background: rgba(191,132,102,.12); border-left-color: #bf8466; }
+.cal-week-event--cream     { background: rgba(169,138,99,.13);  border-left-color: #a98a63; }
+.cal-week-event--vanilla   { background: rgba(183,156,104,.13); border-left-color: #b79c68; }
+.cal-week-event--cocoa     { background: rgba(142,115,89,.12);  border-left-color: #8e7359; }
+.cal-week-event--sand      { background: rgba(151,125,93,.13);  border-left-color: #977d5d; }
 .cal-week-event--gray      { background: rgba(111,128,145,.11); border-left-color: #6f8091; }
 
 .cal-week-event__top {
@@ -2408,29 +2408,29 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .color-swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: transform .12s ease, border-color .12s ease; }
 .color-swatch:hover { transform: scale(1.15); }
 .color-swatch.is-selected { border-color: var(--text-bright); transform: scale(1.1); }
-.color-swatch--green      { background: var(--green); }
-.color-swatch--rose       { background: var(--danger); }
-.color-swatch--amber      { background: #d59a2f; }
-.color-swatch--purple     { background: #7840b4; }
-.color-swatch--blue       { background: #1e64dc; }
-.color-swatch--indigo     { background: #4f61d9; }
-.color-swatch--teal       { background: #009898; }
-.color-swatch--lime       { background: #7abf20; }
-.color-swatch--teal-blue  { background: #1b8fa8; }
-.color-swatch--brown      { background: #8b5e3c; }
-.color-swatch--latte,
-.color-swatch--slate      { background: #a6816a; }
-.color-swatch--cloud,
-.color-swatch--mist       { background: #9fb2c6; }
-.color-swatch--mocha,
-.color-swatch--apricot    { background: #8f705a; }
-.color-swatch--slate-neutral { background: #4a6eaa; }
-.color-swatch--cream,
-.color-swatch--vanilla,
-.color-swatch--cocoa,
-.color-swatch--sand       { background: #b89366; }
+.color-swatch--green      { background: #3f9c68; }
+.color-swatch--rose       { background: #ae6f7a; }
+.color-swatch--amber      { background: #c99239; }
+.color-swatch--purple     { background: #7c6aa2; }
+.color-swatch--blue       { background: #5f82b1; }
+.color-swatch--indigo     { background: #5b67be; }
+.color-swatch--teal       { background: #2f8a87; }
+.color-swatch--lime       { background: #84b34a; }
+.color-swatch--teal-blue  { background: #4f8ea1; }
+.color-swatch--brown      { background: #766354; }
+.color-swatch--latte      { background: #ad927c; }
+.color-swatch--slate,
+.color-swatch--slate-neutral { background: #607693; }
+.color-swatch--cloud      { background: #7f95a9; }
+.color-swatch--mist       { background: #90a3b5; }
+.color-swatch--mocha      { background: #8b6e59; }
+.color-swatch--apricot    { background: #bf8466; }
+.color-swatch--cream      { background: #a98a63; }
+.color-swatch--vanilla    { background: #b79c68; }
+.color-swatch--cocoa      { background: #8e7359; }
+.color-swatch--sand       { background: #977d5d; }
 .color-swatch--gray       { background: #6f8091; }
-.color-swatch--pink       { background: var(--green); } /* backward compat alias */
+.color-swatch--pink       { background: #3f9c68; } /* backward compat alias */
 
 .calendar-event-list-section { padding: 16px 18px; }
 .calendar-event-list-section__heading {
