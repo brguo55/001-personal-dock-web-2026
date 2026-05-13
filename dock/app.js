@@ -4361,14 +4361,15 @@ function renderCalendar() {
   const viewMode = uiState.calendarViewMode;  // "week" | "day"
   const todayStr = toISODateString(now);
   const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+  const CALENDAR_ACTIVITY_COLOR_MIGRATION_ISO = "2026-05-12T00:00:00.000Z";
 
   // ── constants ─────────────────────────────────────────────────────────────
   const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   const DAY_FULL    = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const COLOR_OPTIONS = [
-    "cloud", "mocha", "latte", "lime", "cream", "teal",
-    "slate-neutral", "green", "rose", "purple", "blue", "teal-blue", "brown", "gray"
+    "gray", "mocha", "indigo", "lime", "rose", "teal",
+    "cloud", "latte", "cream", "slate-neutral", "green", "purple", "blue", "teal-blue", "brown"
   ];
 
   const COLOR_TYPE_LABELS = (() => {
@@ -4379,36 +4380,60 @@ function renderCalendar() {
       ])
     );
 
-    labels.cloud = "Schlafen";
+    labels.gray = "Schlafen";
     labels.mocha = "Full-Time";
-    labels.latte = "Part-Time";
+    labels.indigo = "Part-Time";
     labels.lime = "Nikutaikaizō";
-    labels.cream = "Hitorimeshi";
+    labels.rose = "Hitorimeshi";
     labels.teal = "Verabredung";
     labels["slate-neutral"] = "Slate";
     labels["teal-blue"] = "Besprechung";
-    labels.gray = "Schlafen";
 
     // Backward compatibility for older events stored with "pink".
     labels.pink = labels.green || "Green";
     // Backward compatibility for older event color keys.
-    labels.mist = labels.cloud;
+    labels.mist = labels.gray;
     labels.apricot = labels.mocha;
-    labels.slate = labels.latte;
-    labels.vanilla = labels.cream;
-    labels.cocoa = labels.cream;
-    labels.sand = labels.cream;
+    labels.slate = labels.indigo;
+    labels.vanilla = labels.rose;
+    labels.cocoa = labels.rose;
+    labels.sand = labels.rose;
 
     return labels;
   })();
 
   function normalizeCalendarColorKey(color) {
     if (color === "pink") return "green";
-    if (color === "mist") return "cloud";
+    if (color === "mist") return "gray";
     if (color === "apricot") return "mocha";
-    if (color === "slate") return "latte";
-    if (color === "vanilla" || color === "cocoa" || color === "sand") return "cream";
+    if (color === "slate") return "indigo";
+    if (color === "vanilla" || color === "cocoa" || color === "sand") return "rose";
     return color;
+  }
+
+  function normalizeCalendarEventDisplayColor(eventItem) {
+    const rawColor = typeof eventItem?.color === "string" ? eventItem.color : "";
+    const normalizedColor = normalizeCalendarColorKey(rawColor);
+
+    if (!["cloud", "latte", "cream"].includes(rawColor)) {
+      return normalizedColor;
+    }
+
+    const createdAt = normalizeTimestamp(eventItem?.createdAt);
+    const shouldUseLegacySpecialMapping = Boolean(
+      createdAt &&
+      createdAt < CALENDAR_ACTIVITY_COLOR_MIGRATION_ISO
+    );
+
+    if (!shouldUseLegacySpecialMapping) {
+      return normalizedColor;
+    }
+
+    if (rawColor === "cloud") return "gray";
+    if (rawColor === "latte") return "indigo";
+    if (rawColor === "cream") return "rose";
+
+    return normalizedColor;
   }
 
   function getCalendarColorNameLabel(color) {
@@ -4428,10 +4453,15 @@ function renderCalendar() {
       .join(" ");
   }
 
+  function getCalendarActivityLabel(color) {
+    const normalizedColor = normalizeCalendarColorKey(color);
+    return COLOR_TYPE_LABELS[normalizedColor] || getCalendarColorNameLabel(normalizedColor) || "General";
+  }
+
   function getCalendarColorTypeLabel(color) {
     const normalizedColor = normalizeCalendarColorKey(color);
     const colorName = getCalendarColorNameLabel(normalizedColor);
-    const typeLabel = COLOR_TYPE_LABELS[normalizedColor] || colorName || "General";
+    const typeLabel = getCalendarActivityLabel(normalizedColor);
 
     if (!colorName) {
       return typeLabel;
@@ -4522,6 +4552,7 @@ function renderCalendar() {
          : normalizedColor === "rose"      ? "var(--danger)"
          : normalizedColor === "purple"    ? "#7840b4"
          : normalizedColor === "blue"      ? "#1e64dc"
+         : normalizedColor === "indigo"    ? "#4f61d9"
          : normalizedColor === "teal"      ? "#009898"
          : normalizedColor === "lime"      ? "#7abf20"
          : normalizedColor === "teal-blue" ? "#1b8fa8"
@@ -4531,7 +4562,7 @@ function renderCalendar() {
          : normalizedColor === "cloud"     ? "#9fb2c6"
          : normalizedColor === "mocha"     ? "#8f705a"
        : normalizedColor === "cream"     ? "#b89366"
-         : normalizedColor === "gray"      ? "#7a8a9a"
+         : normalizedColor === "gray"      ? "#6f8091"
          : "var(--green)";
   }
 
@@ -4768,7 +4799,7 @@ function renderCalendar() {
     const activityColorByLabel = new Map();
 
     COLOR_OPTIONS.forEach(color => {
-      const activityLabel = COLOR_TYPE_LABELS[color] || getCalendarColorNameLabel(color) || "General";
+      const activityLabel = getCalendarActivityLabel(color);
       if (!activityColorByLabel.has(activityLabel)) {
         activityColorByLabel.set(activityLabel, color);
       }
@@ -4786,9 +4817,10 @@ function renderCalendar() {
 
         if (!overlapMinutes) return;
 
-        const activityLabel = COLOR_TYPE_LABELS[eventItem.color] || getCalendarColorNameLabel(eventItem.color) || "General";
-        if (!activityColorByLabel.has(activityLabel) && typeof eventItem.color === "string" && eventItem.color) {
-          activityColorByLabel.set(activityLabel, eventItem.color);
+        const normalizedEventColor = normalizeCalendarEventDisplayColor(eventItem);
+        const activityLabel = getCalendarActivityLabel(normalizedEventColor);
+        if (!activityColorByLabel.has(activityLabel) && typeof normalizedEventColor === "string" && normalizedEventColor) {
+          activityColorByLabel.set(activityLabel, normalizedEventColor);
         }
         minutesByActivity.set(activityLabel, (minutesByActivity.get(activityLabel) || 0) + overlapMinutes);
       });
@@ -4803,7 +4835,7 @@ function renderCalendar() {
 
     const preferredActivityOrder = new Map();
     COLOR_OPTIONS.forEach((color, index) => {
-      const activityLabel = COLOR_TYPE_LABELS[color] || getCalendarColorNameLabel(color) || "General";
+      const activityLabel = getCalendarActivityLabel(color);
       if (!preferredActivityOrder.has(activityLabel)) {
         preferredActivityOrder.set(activityLabel, index);
       }
@@ -5038,6 +5070,7 @@ function renderCalendar() {
   const selectedEventDate = selectedEvent && ISO_DATE_PATTERN.test(uiState.calendarSelectedEventDate)
     ? uiState.calendarSelectedEventDate
     : (selectedEvent ? selectedEvent.date : "");
+  const selectedEventDisplayColor = selectedEvent ? normalizeCalendarEventDisplayColor(selectedEvent) : "";
 
   if (selectedEvent && uiState.calendarSelectedEventDate !== selectedEventDate) {
     uiState.calendarSelectedEventDate = selectedEventDate;
@@ -5081,10 +5114,11 @@ function renderCalendar() {
           return `<div class="cal-tg-allday__cell">
             ${evts.map(e => {
               const recurBadge = e.recurrence ? `<span class="cal-recur-badge">↻</span>` : "";
-              const typeLabel = getCalendarColorTypeLabel(e.color);
+              const renderColor = normalizeCalendarEventDisplayColor(e);
+              const typeLabel = getCalendarColorTypeLabel(renderColor);
               const displayDate = e._virtual || e.date;
               const isSelected = selectedEvent && selectedEvent.id === e.id && selectedEventDate === displayDate;
-              return `<div class="cal-week-event cal-week-event--${e.color}${isSelected ? " is-selected" : ""}" data-id="${e.id}" data-display-date="${displayDate}" title="${typeLabel}"${e._virtual ? ' data-virtual="1"' : ""}>
+              return `<div class="cal-week-event cal-week-event--${renderColor}${isSelected ? " is-selected" : ""}" data-id="${e.id}" data-display-date="${displayDate}" title="${typeLabel}"${e._virtual ? ' data-virtual="1"' : ""}>
                 <div class="cal-week-event__top">
                   <span class="cal-week-event__title">${e.title}${recurBadge}</span>
                   <button class="icon-btn cal-del-btn" data-id="${e.id}" title="Delete">✕</button>
@@ -5129,10 +5163,11 @@ function renderCalendar() {
       const notePart   = e.note ? `<span class="cal-tg-event__note">${e.note}</span>` : "";
       const blockItemsPart = renderCalendarBlockItemsHtml(e, pos.height, Boolean(e.note));
       const isDraggable = !e._virtual;
-      const typeLabel = getCalendarColorTypeLabel(e.color);
+      const renderColor = normalizeCalendarEventDisplayColor(e);
+      const typeLabel = getCalendarColorTypeLabel(renderColor);
       const displayDate = e._virtual || e.date;
       const isSelected = selectedEvent && selectedEvent.id === e.id && selectedEventDate === displayDate;
-      return `<div class="cal-tg-event cal-tg-event--${e.color}${isSelected ? " is-selected" : ""}" style="top:${pos.top}px;height:${pos.height}px${layoutStyle}" data-id="${e.id}" data-display-date="${displayDate}" title="${typeLabel}"${isDraggable ? "" : ' data-virtual="1"'}>
+      return `<div class="cal-tg-event cal-tg-event--${renderColor}${isSelected ? " is-selected" : ""}" style="top:${pos.top}px;height:${pos.height}px${layoutStyle}" data-id="${e.id}" data-display-date="${displayDate}" title="${typeLabel}"${isDraggable ? "" : ' data-virtual="1"'}>
         ${isDraggable ? '<div class="cal-tg-event__resize-top"></div>' : ""}
         <div class="cal-tg-event__inner">
           <span class="cal-tg-event__title">${e.title}${recurBadge}</span>
@@ -5162,13 +5197,14 @@ function renderCalendar() {
       .map(currentOccurrence => {
         const e = currentOccurrence.eventItem;
         const displayDate = currentOccurrence.displayDate;
-        const typeLabel = getCalendarColorTypeLabel(e.color);
+        const displayColor = normalizeCalendarEventDisplayColor(e);
+        const typeLabel = getCalendarColorTypeLabel(displayColor);
         const timeRange = e.time ? formatTimeRange(e.time, e.endTime) : "All day";
         const locationMeta = e.location ? `📍 ${e.location}` : "";
         const isSelected = selectedEvent && selectedEvent.id === e.id && selectedEventDate === displayDate;
         const meta = [typeLabel, displayDate, timeRange, locationMeta].filter(Boolean).join(" · ");
         return `<li class="calendar-event-item${isSelected ? " is-selected" : ""}" data-id="${e.id}" data-display-date="${displayDate}">
-          <span class="calendar-event-item__dot" style="background:${dotColor(e.color)}" title="${typeLabel}" aria-label="${typeLabel}"></span>
+          <span class="calendar-event-item__dot" style="background:${dotColor(displayColor)}" title="${typeLabel}" aria-label="${typeLabel}"></span>
           <div class="calendar-event-item__copy">
             <span class="calendar-event-item__title">${e.title}</span>
             ${meta ? `<span class="calendar-event-item__meta">${meta}</span>` : ""}
@@ -5185,7 +5221,8 @@ function renderCalendar() {
     : (() => {
         const e = nextUpcoming.eventItem;
         const displayDate = nextUpcoming.displayDate;
-        const typeLabel = getCalendarColorTypeLabel(e.color);
+      const displayColor = normalizeCalendarEventDisplayColor(e);
+      const typeLabel = getCalendarColorTypeLabel(displayColor);
         const timeRange = formatTimeRange(e.time, e.endTime);
         const locationMeta = e.location ? `📍 ${e.location}` : "";
         const isSelected = selectedEvent && selectedEvent.id === e.id && selectedEventDate === displayDate;
@@ -5195,7 +5232,7 @@ function renderCalendar() {
                          : "";
         const meta = [typeLabel, displayDate, timeRange, locationMeta].filter(Boolean).join(" · ") + recurLabel;
         return `<li class="calendar-event-item${isSelected ? " is-selected" : ""}" data-id="${e.id}" data-display-date="${displayDate}">
-          <span class="calendar-event-item__dot" style="background:${dotColor(e.color)}" title="${typeLabel}" aria-label="${typeLabel}"></span>
+          <span class="calendar-event-item__dot" style="background:${dotColor(displayColor)}" title="${typeLabel}" aria-label="${typeLabel}"></span>
           <div class="calendar-event-item__copy">
             <span class="calendar-event-item__title">${e.title}</span>
             ${meta ? `<span class="calendar-event-item__meta">${meta}</span>` : ""}
@@ -5257,7 +5294,7 @@ function renderCalendar() {
           <div>
             <div class="calendar-event-actions__eyebrow">Selected Event</div>
             <div class="calendar-event-actions__title">${selectedEvent.title}</div>
-            <div class="calendar-event-actions__meta">${[getCalendarColorTypeLabel(selectedEvent.color), selectedEventDate, formatTimeRange(selectedEvent.time, selectedEvent.endTime)].filter(Boolean).join(" · ")}</div>
+            <div class="calendar-event-actions__meta">${[getCalendarColorTypeLabel(selectedEventDisplayColor), selectedEventDate, formatTimeRange(selectedEvent.time, selectedEvent.endTime)].filter(Boolean).join(" · ")}</div>
           </div>
           <button type="button" class="icon-btn calendar-event-actions__close" id="cal-action-close" title="Clear selection">✕</button>
         </div>
@@ -5740,9 +5777,9 @@ function renderCalendar() {
     });
   });
 
-  const normalizedEditingColor = editingEvent ? normalizeCalendarColorKey(editingEvent.color) : "";
-  const initialFormColor = editingEvent && COLOR_OPTIONS.includes(normalizedEditingColor)
-    ? normalizedEditingColor
+  const normalizedEditingDisplayColor = editingEvent ? normalizeCalendarEventDisplayColor(editingEvent) : "";
+  const initialFormColor = editingEvent && COLOR_OPTIONS.includes(normalizedEditingDisplayColor)
+    ? normalizedEditingDisplayColor
     : "green";
   calColorInput.value = initialFormColor;
 
@@ -5814,6 +5851,7 @@ function renderCalendar() {
   }
 
   function cloneCalendarEvent(sourceEvent, targetDate) {
+    const sourceColor = normalizeCalendarEventDisplayColor(sourceEvent) || "green";
     return createCalendarEvent({
       title: sourceEvent.title,
       date: targetDate,
@@ -5821,7 +5859,7 @@ function renderCalendar() {
       endTime: sourceEvent.endTime || "",
       note: sourceEvent.note || "",
       location: sourceEvent.location || "",
-      color: sourceEvent.color || "green",
+      color: sourceColor,
       blockItems: normalizeCalendarBlockItems(sourceEvent.blockItems).map(item => ({
         ...item,
         id: createId()

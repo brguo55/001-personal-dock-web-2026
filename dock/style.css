@@ -2078,6 +2078,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-tg-event--rose      { background: rgba(224,53,53,.10);   border-left-color: var(--danger); }
 .cal-tg-event--purple    { background: rgba(120,60,180,.10);  border-left-color: #7840b4; }
 .cal-tg-event--blue      { background: rgba(30,100,220,.09);  border-left-color: #1e64dc; }
+.cal-tg-event--indigo    { background: rgba(79,97,217,.10);   border-left-color: #4f61d9; }
 .cal-tg-event--teal      { background: rgba(0,152,152,.09);   border-left-color: #009898; }
 .cal-tg-event--lime      { background: rgba(122,191,32,.11);  border-left-color: #7abf20; }
 .cal-tg-event--teal-blue { background: rgba(27,143,168,.10);  border-left-color: #1b8fa8; }
@@ -2093,7 +2094,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-tg-event--vanilla,
 .cal-tg-event--cocoa,
 .cal-tg-event--sand      { background: rgba(184,147,102,.16); border-left-color: #b89366; }
-.cal-tg-event--gray      { background: rgba(122,138,154,.09); border-left-color: #7a8a9a; }
+.cal-tg-event--gray      { background: rgba(111,128,145,.13); border-left-color: #6f8091; }
 
 /* event cards inside week/day columns */
 .cal-week-event {
@@ -2115,6 +2116,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-week-event--rose      { background: rgba(224,53,53,.09);   border-left-color: var(--danger); }
 .cal-week-event--purple    { background: rgba(120,60,180,.09);  border-left-color: #7840b4; }
 .cal-week-event--blue      { background: rgba(30,100,220,.08);  border-left-color: #1e64dc; }
+.cal-week-event--indigo    { background: rgba(79,97,217,.09);   border-left-color: #4f61d9; }
 .cal-week-event--teal      { background: rgba(0,152,152,.08);   border-left-color: #009898; }
 .cal-week-event--lime      { background: rgba(122,191,32,.10);  border-left-color: #7abf20; }
 .cal-week-event--teal-blue { background: rgba(27,143,168,.09);  border-left-color: #1b8fa8; }
@@ -2130,7 +2132,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-week-event--vanilla,
 .cal-week-event--cocoa,
 .cal-week-event--sand      { background: rgba(184,147,102,.14); border-left-color: #b89366; }
-.cal-week-event--gray      { background: rgba(122,138,154,.08); border-left-color: #7a8a9a; }
+.cal-week-event--gray      { background: rgba(111,128,145,.11); border-left-color: #6f8091; }
 
 .cal-week-event__top {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 4px;
@@ -2375,6 +2377,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .color-swatch--rose       { background: var(--danger); }
 .color-swatch--purple     { background: #7840b4; }
 .color-swatch--blue       { background: #1e64dc; }
+.color-swatch--indigo     { background: #4f61d9; }
 .color-swatch--teal       { background: #009898; }
 .color-swatch--lime       { background: #7abf20; }
 .color-swatch--teal-blue  { background: #1b8fa8; }
@@ -2390,7 +2393,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .color-swatch--vanilla,
 .color-swatch--cocoa,
 .color-swatch--sand       { background: #b89366; }
-.color-swatch--gray       { background: #7a8a9a; }
+.color-swatch--gray       { background: #6f8091; }
 .color-swatch--pink       { background: var(--green); } /* backward compat alias */
 
 .calendar-event-list-section { padding: 16px 18px; }
