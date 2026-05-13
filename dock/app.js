@@ -4587,15 +4587,29 @@ function renderCalendar() {
   function formatCalendarBlockItemLine(blockItem) {
     const start = formatTime(blockItem?.startTime || "");
     const end = formatTime(blockItem?.endTime || "");
-    const timeText = start ? (end ? `${start}-${end}` : start) : (end || "");
-    const typePrefix = blockItem?.type ? `${blockItem.type}: ` : "";
-    const text = `${typePrefix}${blockItem?.title || ""}`.trim();
+    const title = typeof blockItem?.title === "string" ? blockItem.title.trim() : "";
 
-    if (text && timeText) {
-      return `${text} (${timeText})`;
+    if (title && start && end) {
+      return `${title} · ${start}–${end}`;
     }
 
-    return text || timeText;
+    if (title && start) {
+      return `${title} · starts ${start}`;
+    }
+
+    if (title && end) {
+      return `${title} · until ${end}`;
+    }
+
+    if (title) {
+      return title;
+    }
+
+    if (start && end) {
+      return `${start}–${end}`;
+    }
+
+    return start || end || "";
   }
 
   function renderCalendarBlockItemsHtml(eventItem, blockHeight, hasNote) {
@@ -5594,6 +5608,20 @@ function renderCalendar() {
       return;
     }
 
+    const labelsRow = document.createElement("div");
+    labelsRow.className = "cal-block-item-row-labels";
+    labelsRow.innerHTML = `
+      <span class="cal-block-item-row-labels__done">Done</span>
+      <div class="cal-block-item-row-labels__fields">
+        <span>Block</span>
+        <span>Start</span>
+        <span>End optional</span>
+        <span>Reminder</span>
+      </div>
+      <span class="cal-block-item-row-labels__remove" aria-hidden="true"></span>
+    `;
+    calBlockItemsEditor.appendChild(labelsRow);
+
     calendarBlockItemDrafts.forEach(blockItem => {
       const row = document.createElement("div");
       row.className = "cal-block-item-row";
@@ -5615,23 +5643,23 @@ function renderCalendar() {
       const titleInput = document.createElement("input");
       titleInput.type = "text";
       titleInput.maxLength = 140;
-      titleInput.placeholder = "Block item title";
+      titleInput.placeholder = "Block";
       titleInput.className = "cal-block-item-row__title";
       titleInput.setAttribute("aria-label", "Block item title");
       titleInput.value = blockItem.title || "";
 
       const startInput = document.createElement("input");
-      startInput.type = "text";
-      startInput.maxLength = 5;
-      startInput.placeholder = "Start (09:50)";
+      startInput.type = "time";
+      startInput.step = "60";
+      startInput.placeholder = "Start";
       startInput.className = "cal-block-item-row__time";
       startInput.setAttribute("aria-label", "Block item start time");
       startInput.value = blockItem.startTime || "";
 
       const endInput = document.createElement("input");
-      endInput.type = "text";
-      endInput.maxLength = 5;
-      endInput.placeholder = "End (10:30)";
+      endInput.type = "time";
+      endInput.step = "60";
+      endInput.placeholder = "End optional";
       endInput.className = "cal-block-item-row__time";
       endInput.setAttribute("aria-label", "Block item end time");
       endInput.value = blockItem.endTime || "";

@@ -2282,6 +2282,29 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   display: grid;
   gap: 8px;
 }
+.cal-block-item-row-labels {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+}
+.cal-block-item-row-labels__done,
+.cal-block-item-row-labels__fields > span {
+  font-size: .62rem;
+  color: var(--muted);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.cal-block-item-row-labels__done {
+  white-space: nowrap;
+}
+.cal-block-item-row-labels__fields {
+  display: grid;
+  grid-template-columns: minmax(0,2fr) repeat(3, minmax(0,1fr));
+  gap: 6px;
+}
 .cal-block-items-empty {
   margin: 0;
   font-size: .78rem;
@@ -3331,6 +3354,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   .calendar-add-form__actions .tiny-btn { width: 100%; }
   .calendar-event-actions__buttons .tiny-btn { flex: 1 1 100%; }
   .calendar-event-actions__copy-row { grid-template-columns: 1fr; }
+  .cal-block-item-row-labels { display: none; }
   .cal-block-item-row { grid-template-columns: 1fr; }
   .cal-block-item-row__done { margin-top: 0; }
   .cal-block-item-row__fields { grid-template-columns: 1fr; }
