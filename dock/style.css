@@ -1903,8 +1903,15 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   border-right: 1px solid var(--line-faint);
 }
 .cal-tg-head__day:last-child { border-right: 0; }
+.cal-tg-head__day.is-today   { background: rgba(10,191,83,.05); }
 .cal-tg-day-name { font-size: .65rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .cal-tg-day-num  { font-size: 1.1rem; font-weight: 700; color: var(--text-bright); line-height: 1; }
+.cal-tg-day-num.is-today-num {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  background: var(--green); color: #fff;
+  border-radius: 50%; font-size: .9rem;
+}
 
 /* all-day row */
 .cal-tg-allday { display: flex; flex-shrink: 0; min-height: 28px; border-bottom: 1px solid var(--line-soft); background: #fbfbfb; }
