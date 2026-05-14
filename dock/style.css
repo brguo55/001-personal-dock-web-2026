@@ -1580,15 +1580,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   -webkit-box-orient: vertical;
 }
 .budget-item__checklist-preview {
-  color: var(--muted);
-  font-size: .76rem;
-  line-height: 1.35;
-  white-space: pre-line;
-  word-break: break-word;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+  margin: 8px 0 2px 44px;
 }
 .budget-item__meta { color: var(--muted); font-size: .78rem; letter-spacing: .04em; }
 .budget-item__side { display: flex; align-items: center; gap: 14px; }
@@ -1653,14 +1645,57 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   background: var(--surface); border: 1px solid var(--line-faint); border-radius: var(--radius-sm, 4px);
   font-size: .84rem;
 }
-.bid-sublist__text { flex: 1; color: var(--text-bright); line-height: 1.4; }
-.bid-sublist__item.is-done .bid-sublist__text { color: var(--muted); text-decoration: line-through; }
-.bid-sublist__del {
-  background: none; border: none; cursor: pointer;
-  color: var(--muted); font-size: 1rem; line-height: 1;
-  padding: 0 3px; border-radius: 3px; flex-shrink: 0;
+.bid-sublist--preview { gap: 5px; }
+.bid-sublist__item--compact {
+  padding: 3px 7px;
+  font-size: .8rem;
 }
-.bid-sublist__del:hover { color: var(--danger); background: var(--danger-dim, #fef2f2); }
+.bid-sublist__text {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-bright);
+  line-height: 1.4;
+  word-break: break-word;
+}
+.bid-sublist__item.is-done .bid-sublist__text { color: var(--muted); text-decoration: line-through; }
+.bid-sublist__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.bid-sublist__btn {
+  border: 1px solid var(--line-faint);
+  background: transparent;
+  color: var(--muted-bright);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: .68rem;
+  line-height: 1;
+  padding: 3px 7px;
+}
+.bid-sublist__item--compact .bid-sublist__btn {
+  padding: 2px 6px;
+}
+.bid-sublist__btn:hover {
+  background: var(--green-dim);
+  border-color: var(--line-soft);
+  color: var(--dark-green);
+}
+.bid-sublist__btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.bid-sublist__btn--danger {
+  color: var(--danger);
+  border-color: rgba(224,53,53,.18);
+}
+.bid-sublist__btn--danger:hover {
+  color: var(--danger);
+  background: var(--danger-dim);
+  border-color: rgba(224,53,53,.35);
+}
 .bid-check { width: 14px; height: 14px; accent-color: var(--green); flex-shrink: 0; }
 .bid-addrow { display: flex; gap: 6px; }
 .bid-addrow__input {
@@ -3357,6 +3392,7 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   .budget-item__row,.budget-item__side,.section-form,.gtd-task-row__main { grid-template-columns: 1fr; flex-direction: column; }
   .budget-item__side,.budget-item__actions,.gtd-item__controls,.waiting-item__side,.view-actions,.view-nav,.shortcut-row,.inline-stats,.storage-panel__actions { width: 100%; }
   .budget-item__amount,.today-stamp { text-align: left; }
+  .budget-item__checklist-preview { margin-left: 0; }
   .nav-btn,.ghost-btn,.shortcut-btn,.primary-btn,.secondary-btn,.gtd-item__controls select,.gtd-item__controls button,.gtd-item__controls .gtd-cselect { width: 100%; justify-content: center; }
   .expense-period-selector { width: 100%; }
   .expense-period-selector .expense-period-btn { width: auto; flex: 1; }

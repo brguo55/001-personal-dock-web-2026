@@ -12005,9 +12005,15 @@ function renderBudgetList(entries) {
     notePreview.className = "budget-item__note";
     copy.insertBefore(notePreview, meta);
 
-    const checklistPreview = document.createElement("span");
+    const checklistPreview = document.createElement("div");
     checklistPreview.className = "budget-item__checklist-preview";
-    copy.insertBefore(checklistPreview, meta);
+
+    const checklistPreviewList = document.createElement("ul");
+    checklistPreviewList.className = "bid-sublist bid-sublist--preview";
+    checklistPreview.appendChild(checklistPreviewList);
+    budgetItem.insertBefore(checklistPreview, detailsPanel);
+
+    let rerenderDetailsChecklist = null;
 
     budgetItem.draggable = true;
     budgetItem.dataset.itemId = item.id;
@@ -12025,18 +12031,20 @@ function renderBudgetList(entries) {
     }
 
     function refreshChecklistPreview() {
-      const checklistLines = Array.isArray(item.checklist)
-        ? item.checklist
-            .map(todo => {
-              const title = typeof todo?.title === "string" ? todo.title.trim() : "";
-              if (!title) return "";
-              return `${todo?.done ? "[x]" : "[ ]"} ${title}`;
-            })
-            .filter(Boolean)
-        : [];
+      const checklist = Array.isArray(item.checklist) ? item.checklist : [];
+      const shouldHide = checklist.length === 0 || detailsPanel.classList.contains("is-visible");
+      checklistPreview.hidden = shouldHide;
 
-      checklistPreview.textContent = checklistLines.join("\n");
-      checklistPreview.hidden = checklistLines.length === 0;
+      if (checklist.length === 0) {
+        checklistPreviewList.innerHTML = "";
+        return;
+      }
+
+      renderBudgetChecklistList(checklistPreviewList, item, {
+        compact: true,
+        includeDelete: false,
+        onChanged: refreshChecklistUiState
+      });
     }
 
     function itemHasDetails() {
@@ -12051,6 +12059,14 @@ function renderBudgetList(entries) {
       refreshExpandIndicator();
       refreshNotePreview();
       refreshChecklistPreview();
+    }
+
+    function refreshChecklistUiState() {
+      refreshExpandIndicator();
+      refreshChecklistPreview();
+      if (typeof rerenderDetailsChecklist === "function") {
+        rerenderDetailsChecklist();
+      }
     }
 
     refreshBudgetItemRowState();
@@ -12081,19 +12097,180 @@ function renderBudgetList(entries) {
     expandButton.addEventListener("click", () => {
       const opening = !detailsPanel.classList.contains("is-visible");
       if (opening && !detailsPanel.dataset.built) {
-        buildBudgetItemDetails(detailsPanel, item, refreshBudgetItemRowState);
+        rerenderDetailsChecklist = buildBudgetItemDetails(detailsPanel, item, {
+          onChanged: refreshBudgetItemRowState,
+          onChecklistChanged: refreshChecklistUiState
+        });
         detailsPanel.dataset.built = "1";
       }
       detailsPanel.classList.toggle("is-visible", opening);
       expandButton.setAttribute("aria-expanded", String(opening));
       expandButton.classList.toggle("is-open", opening);
+      refreshChecklistPreview();
     });
 
     budgetList.appendChild(row);
   });
 }
 
-function buildBudgetItemDetails(panel, item, onChanged) {
+function ensureBudgetChecklist(item) {
+  if (!Array.isArray(item.checklist)) {
+    item.checklist = [];
+  }
+
+  return item.checklist;
+}
+
+function moveBudgetChecklistItem(checklist, fromIndex, toIndex) {
+  if (!Array.isArray(checklist)) {
+    return false;
+  }
+
+  if (
+    fromIndex < 0
+    || toIndex < 0
+    || fromIndex >= checklist.length
+    || toIndex >= checklist.length
+    || fromIndex === toIndex
+  ) {
+    return false;
+  }
+
+  checklist.splice(toIndex, 0, checklist.splice(fromIndex, 1)[0]);
+  return true;
+}
+
+function editBudgetChecklistTitle(todo) {
+  const currentTitle = typeof todo?.title === "string" ? todo.title : "";
+  const nextTitle = prompt("Edit checklist item", currentTitle);
+
+  if (nextTitle === null) {
+    return false;
+  }
+
+  const normalizedTitle = nextTitle.trim();
+  const normalizedCurrent = currentTitle.trim();
+
+  if (!normalizedTitle || normalizedTitle === normalizedCurrent) {
+    return false;
+  }
+
+  todo.title = normalizedTitle;
+  return true;
+}
+
+function renderBudgetChecklistList(listElement, item, options = {}) {
+  const {
+    compact = false,
+    includeDelete = true,
+    onChanged = () => {}
+  } = options;
+  const checklist = ensureBudgetChecklist(item);
+
+  listElement.innerHTML = "";
+
+  checklist.forEach((todo, idx) => {
+    const li = document.createElement("li");
+    li.className = "bid-sublist__item" + (compact ? " bid-sublist__item--compact" : "");
+    li.classList.toggle("is-done", Boolean(todo?.done));
+
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.checked = Boolean(todo?.done);
+    check.className = "bid-check";
+    check.addEventListener("change", () => {
+      todo.done = check.checked;
+      li.classList.toggle("is-done", todo.done);
+      saveState();
+      onChanged();
+    });
+
+    const span = document.createElement("span");
+    span.className = "bid-sublist__text";
+    const todoTitle = typeof todo?.title === "string" ? todo.title.trim() : "";
+    span.textContent = todoTitle || "(empty checklist item)";
+
+    const actions = document.createElement("div");
+    actions.className = "bid-sublist__actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "bid-sublist__btn";
+    editBtn.textContent = "Edit";
+    editBtn.setAttribute("aria-label", `Edit checklist item ${todoTitle || idx + 1}`);
+    editBtn.addEventListener("click", () => {
+      if (!editBudgetChecklistTitle(todo)) {
+        return;
+      }
+
+      saveState();
+      onChanged();
+    });
+
+    const upBtn = document.createElement("button");
+    upBtn.type = "button";
+    upBtn.className = "bid-sublist__btn";
+    upBtn.textContent = "\u2191";
+    upBtn.setAttribute("aria-label", `Move up ${todoTitle || "checklist item"}`);
+    upBtn.title = "Move up";
+    upBtn.disabled = idx === 0;
+    upBtn.addEventListener("click", () => {
+      if (!moveBudgetChecklistItem(checklist, idx, idx - 1)) {
+        return;
+      }
+
+      saveState();
+      onChanged();
+    });
+
+    const downBtn = document.createElement("button");
+    downBtn.type = "button";
+    downBtn.className = "bid-sublist__btn";
+    downBtn.textContent = "\u2193";
+    downBtn.setAttribute("aria-label", `Move down ${todoTitle || "checklist item"}`);
+    downBtn.title = "Move down";
+    downBtn.disabled = idx === checklist.length - 1;
+    downBtn.addEventListener("click", () => {
+      if (!moveBudgetChecklistItem(checklist, idx, idx + 1)) {
+        return;
+      }
+
+      saveState();
+      onChanged();
+    });
+
+    actions.appendChild(editBtn);
+    actions.appendChild(upBtn);
+    actions.appendChild(downBtn);
+
+    if (includeDelete) {
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "bid-sublist__btn bid-sublist__btn--danger";
+      delBtn.textContent = "\u00d7";
+      delBtn.setAttribute("aria-label", `Remove ${todoTitle || "checklist item"}`);
+      delBtn.title = "Delete";
+      delBtn.addEventListener("click", () => {
+        checklist.splice(idx, 1);
+        saveState();
+        onChanged();
+      });
+      actions.appendChild(delBtn);
+    }
+
+    li.appendChild(check);
+    li.appendChild(span);
+    li.appendChild(actions);
+    listElement.appendChild(li);
+  });
+}
+
+function buildBudgetItemDetails(panel, item, callbacks = {}) {
+  const onChanged = typeof callbacks.onChanged === "function" ? callbacks.onChanged : () => {};
+  const onChecklistChanged = typeof callbacks.onChecklistChanged === "function"
+    ? callbacks.onChecklistChanged
+    : onChanged;
+
   panel.innerHTML = "";
 
   // ── Note ─────────────────────────────────────────────
@@ -12135,44 +12312,9 @@ function buildBudgetItemDetails(panel, item, onChanged) {
   clList.className = "bid-sublist";
 
   function renderChecklist() {
-    clList.innerHTML = "";
-    if (!Array.isArray(item.checklist)) item.checklist = [];
-    item.checklist.forEach((todo, idx) => {
-      const li = document.createElement("li");
-      li.className = "bid-sublist__item";
-      li.classList.toggle("is-done", todo.done);
-
-      const check = document.createElement("input");
-      check.type = "checkbox";
-      check.checked = todo.done;
-      check.className = "bid-check";
-      check.addEventListener("change", () => {
-        todo.done = check.checked;
-        li.classList.toggle("is-done", todo.done);
-        saveState();
-        onChanged();
-      });
-
-      const span = document.createElement("span");
-      span.className = "bid-sublist__text";
-      span.textContent = todo.title;
-
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "bid-sublist__del";
-      del.textContent = "\u00d7";
-      del.setAttribute("aria-label", `Remove "${todo.title}"`);
-      del.addEventListener("click", () => {
-        item.checklist = item.checklist.filter((_, i) => i !== idx);
-        saveState();
-        renderChecklist();
-        onChanged();
-      });
-
-      li.appendChild(check);
-      li.appendChild(span);
-      li.appendChild(del);
-      clList.appendChild(li);
+    renderBudgetChecklistList(clList, item, {
+      includeDelete: true,
+      onChanged: onChecklistChanged
     });
   }
 
@@ -12195,12 +12337,11 @@ function buildBudgetItemDetails(panel, item, onChanged) {
   function addChecklistItem() {
     const val = clInput.value.trim();
     if (!val) return;
-    if (!Array.isArray(item.checklist)) item.checklist = [];
-    item.checklist.push({ id: createId(), title: val, done: false });
+    const checklist = ensureBudgetChecklist(item);
+    checklist.push({ id: createId(), title: val, done: false });
     clInput.value = "";
     saveState();
-    renderChecklist();
-    onChanged();
+    onChecklistChanged();
     clInput.focus();
   }
 
@@ -12215,6 +12356,8 @@ function buildBudgetItemDetails(panel, item, onChanged) {
   clGroup.appendChild(clList);
   clGroup.appendChild(clAddRow);
   panel.appendChild(clGroup);
+
+  return renderChecklist;
 }
 
 function createEmptyState(message) {
