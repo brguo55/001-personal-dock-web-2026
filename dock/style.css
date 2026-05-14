@@ -2084,7 +2084,9 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .cal-tg-event--teal      { background: rgba(47,138,135,.11);  border-left-color: #2f8a87; }
 .cal-tg-event--lime      { background: rgba(132,179,74,.13);  border-left-color: #84b34a; }
 .cal-tg-event--teal-blue { background: rgba(79,142,161,.11);  border-left-color: #4f8ea1; }
-.cal-tg-event--brown     { background: rgba(118,99,84,.12);   border-left-color: #766354; }
+.cal-tg-event--brown      { background: rgba(118,99,84,.12);   border-left-color: #766354; }
+.cal-tg-event--light-olive { background: rgba(154,174,95,.13);  border-left-color: #9aae5f; }
+.cal-tg-event--sage        { background: rgba(125,161,122,.12); border-left-color: #7da17a; }
 .cal-tg-event--latte     { background: rgba(173,146,124,.15); border-left-color: #ad927c; }
 .cal-tg-event--slate,
 .cal-tg-event--slate-neutral { background: rgba(96,118,147,.12); border-left-color: #607693; }
@@ -2418,6 +2420,8 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
 .color-swatch--lime       { background: #84b34a; }
 .color-swatch--teal-blue  { background: #4f8ea1; }
 .color-swatch--brown      { background: #766354; }
+.color-swatch--light-olive { background: #9aae5f; }
+.color-swatch--sage        { background: #7da17a; }
 .color-swatch--latte      { background: #ad927c; }
 .color-swatch--slate,
 .color-swatch--slate-neutral { background: #607693; }

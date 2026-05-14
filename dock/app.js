@@ -4369,7 +4369,8 @@ function renderCalendar() {
   const DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const COLOR_OPTIONS = [
     "gray", "mocha", "indigo", "lime", "amber", "teal",
-    "cloud", "latte", "cream", "slate-neutral", "green", "rose", "purple", "blue", "teal-blue", "brown"
+    "cloud", "latte", "cream", "slate-neutral", "green", "rose", "purple", "blue", "teal-blue",
+    "light-olive", "sage"
   ];
 
   const COLOR_TYPE_LABELS = (() => {
@@ -4388,6 +4389,8 @@ function renderCalendar() {
     labels.teal = "Verabredung";
     labels["slate-neutral"] = "Slate";
     labels["teal-blue"] = "Besprechung";
+    labels.rose = "Kaji";
+    labels.purple = "Kyūkei o Torimasu";
 
     // Backward compatibility for older events stored with "pink".
     labels.pink = labels.green || "Green";
@@ -4557,7 +4560,9 @@ function renderCalendar() {
          : normalizedColor === "teal"      ? "#2f8a87"
          : normalizedColor === "lime"      ? "#84b34a"
          : normalizedColor === "teal-blue" ? "#4f8ea1"
-         : normalizedColor === "brown"     ? "#766354"
+         : normalizedColor === "brown"        ? "#766354"
+         : normalizedColor === "light-olive"  ? "#9aae5f"
+         : normalizedColor === "sage"         ? "#7da17a"
        : normalizedColor === "latte"     ? "#ad927c"
        : normalizedColor === "slate-neutral" ? "#607693"
          : normalizedColor === "cloud"     ? "#7f95a9"
