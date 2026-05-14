@@ -12005,6 +12005,10 @@ function renderBudgetList(entries) {
     notePreview.className = "budget-item__note";
     copy.insertBefore(notePreview, meta);
 
+    const checklistPreview = document.createElement("span");
+    checklistPreview.className = "budget-item__checklist-preview";
+    copy.insertBefore(checklistPreview, meta);
+
     budgetItem.draggable = true;
     budgetItem.dataset.itemId = item.id;
     budgetItem.classList.toggle("is-checked", item.checked);
@@ -12020,6 +12024,21 @@ function renderBudgetList(entries) {
       notePreview.hidden = !noteText;
     }
 
+    function refreshChecklistPreview() {
+      const checklistLines = Array.isArray(item.checklist)
+        ? item.checklist
+            .map(todo => {
+              const title = typeof todo?.title === "string" ? todo.title.trim() : "";
+              if (!title) return "";
+              return `${todo?.done ? "[x]" : "[ ]"} ${title}`;
+            })
+            .filter(Boolean)
+        : [];
+
+      checklistPreview.textContent = checklistLines.join("\n");
+      checklistPreview.hidden = checklistLines.length === 0;
+    }
+
     function itemHasDetails() {
       return Boolean(item.itemNote) || (item.checklist || []).length > 0;
     }
@@ -12031,6 +12050,7 @@ function renderBudgetList(entries) {
     function refreshBudgetItemRowState() {
       refreshExpandIndicator();
       refreshNotePreview();
+      refreshChecklistPreview();
     }
 
     refreshBudgetItemRowState();
@@ -12130,6 +12150,7 @@ function buildBudgetItemDetails(panel, item, onChanged) {
         todo.done = check.checked;
         li.classList.toggle("is-done", todo.done);
         saveState();
+        onChanged();
       });
 
       const span = document.createElement("span");
