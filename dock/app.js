@@ -12016,7 +12016,7 @@ function renderBudgetList(entries) {
     }
 
     function itemHasDetails() {
-      return Boolean(item.itemNote) || (item.reminders || []).length > 0 || (item.checklist || []).length > 0;
+      return Boolean(item.itemNote) || (item.checklist || []).length > 0;
     }
 
     function refreshExpandIndicator() {
@@ -12097,86 +12097,6 @@ function buildBudgetItemDetails(panel, item, onChanged) {
   noteGroup.appendChild(noteLabel);
   noteGroup.appendChild(noteTextarea);
   panel.appendChild(noteGroup);
-
-  // ── Reminders ─────────────────────────────────────────
-  const remGroup = document.createElement("div");
-  remGroup.className = "bid-group";
-
-  const remLabel = document.createElement("span");
-  remLabel.className = "bid-label";
-  remLabel.textContent = "Reminders";
-
-  const remList = document.createElement("ul");
-  remList.className = "bid-sublist";
-
-  function renderReminders() {
-    remList.innerHTML = "";
-    if (!Array.isArray(item.reminders)) item.reminders = [];
-    item.reminders.forEach((reminder, idx) => {
-      const li = document.createElement("li");
-      li.className = "bid-sublist__item";
-
-      const span = document.createElement("span");
-      span.className = "bid-sublist__text";
-      span.textContent = reminder.text;
-
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "bid-sublist__del";
-      del.textContent = "\u00d7";
-      del.setAttribute("aria-label", `Remove "${reminder.text}"`);
-      del.addEventListener("click", () => {
-        item.reminders = item.reminders.filter((_, i) => i !== idx);
-        saveState();
-        renderReminders();
-        onChanged();
-      });
-
-      li.appendChild(span);
-      li.appendChild(del);
-      remList.appendChild(li);
-    });
-  }
-
-  renderReminders();
-
-  const remAddRow = document.createElement("div");
-  remAddRow.className = "bid-addrow";
-
-  const remInput = document.createElement("input");
-  remInput.type = "text";
-  remInput.className = "bid-addrow__input";
-  remInput.placeholder = "Add reminder\u2026";
-  remInput.maxLength = 200;
-
-  const remAddBtn = document.createElement("button");
-  remAddBtn.type = "button";
-  remAddBtn.className = "bid-addrow__btn";
-  remAddBtn.textContent = "Add";
-
-  function addReminder() {
-    const val = remInput.value.trim();
-    if (!val) return;
-    if (!Array.isArray(item.reminders)) item.reminders = [];
-    item.reminders.push({ id: createId(), text: val });
-    remInput.value = "";
-    saveState();
-    renderReminders();
-    onChanged();
-    remInput.focus();
-  }
-
-  remAddBtn.addEventListener("click", addReminder);
-  remInput.addEventListener("keydown", e => {
-    if (e.key === "Enter") { e.preventDefault(); addReminder(); }
-  });
-
-  remAddRow.appendChild(remInput);
-  remAddRow.appendChild(remAddBtn);
-  remGroup.appendChild(remLabel);
-  remGroup.appendChild(remList);
-  remGroup.appendChild(remAddRow);
-  panel.appendChild(remGroup);
 
   // ── Checklist ─────────────────────────────────────────
   const clGroup = document.createElement("div");

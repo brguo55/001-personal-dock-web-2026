@@ -1572,11 +1572,11 @@ body.sidebar-auto.sidebar-visible .app-sidebar {
   font-size: .78rem;
   line-height: 1.35;
   max-width: min(100%, 72ch);
-  white-space: normal;
+  white-space: pre-line;
   word-break: break-word;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
 }
 .budget-item__meta { color: var(--muted); font-size: .78rem; letter-spacing: .04em; }
